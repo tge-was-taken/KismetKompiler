@@ -7,5 +7,6 @@ public enum DeclarationType
     Variable,
     Enum,
     EnumLabel,
-    Label
+    Label,
+    Class
 }

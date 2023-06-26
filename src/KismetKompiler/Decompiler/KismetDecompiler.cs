@@ -216,6 +216,26 @@ public class KismetDecompiler
             .Except(classFunctions)
             .Except(classProperties);
 
+        _writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
+        _writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
+
+        //_writer.WriteLine("// Imports");
+        //foreach (var import in _asset.Imports)
+        //{
+        //    var name = GetFullName(import);
+        //    var parentName = GetFullName(import.OuterIndex);
+        //    var parentNameEscaped = parentName;
+        //    if (parentNameEscaped == "<null>")
+        //        parentNameEscaped = "";
+        //    else
+        //        parentNameEscaped = $"{parentNameEscaped}";
+
+        //    var importText = $"[Import(\"{parentNameEscaped}\", \"{import.ObjectName}\", \"{import.ClassName}\")]";
+ 
+        //    _writer.WriteLine($"{importText}");
+        //}
+        //_writer.WriteLine();
+
         _writer.WriteLine($"class {classExport.ObjectName} : {classBaseClass} {{");
 
         foreach (var prop in classProperties)
@@ -284,12 +304,12 @@ public class KismetDecompiler
             case "InterfaceProperty":
                 {
                     var interfaceName = GetName(((UInterfaceProperty)prop.Property).InterfaceClass);
-                    return interfaceName;
+                    return $"Interface<{interfaceName}>";
                 }
             case "StructProperty":
                 {
                     var structName = GetName(((UStructProperty)prop.Property).Struct);
-                    return structName;
+                    return $"Struct<{structName}>";
                 }
             case "BoolProperty":
                 return "bool";
@@ -337,15 +357,20 @@ public class KismetDecompiler
             .Select(GetModifierForPropertyFlag)
             .ToList();
 
-        if (prop.Property is UArrayProperty)
-        {
-            modifiers.Remove("ref");
-        }
-
         var attributes = flags
                 .Except(modifierFlags)
-                .Select(x => x.ToString().Replace("CPF_", "").Replace("Param", ""))
+                .Select(x => x.ToString().Replace("CPF_", "").Replace("Param", "").Trim())
                 .ToList();
+
+
+        if (!prop.Property.PropertyFlags.HasFlag(EPropertyFlags.CPF_Parm))
+        {
+            if (modifiers.Contains("ref"))
+            {
+                modifiers.Remove("ref");
+                attributes.Add("Ref");
+            }    
+        }
 
         var modifierText = string.Join(" ", modifiers).Trim();
         var attributeText = string.Join(", ", attributes).Trim();
@@ -354,7 +379,7 @@ public class KismetDecompiler
         if (!string.IsNullOrWhiteSpace(attributeText))
             attributeText = $"[{attributeText}]";
 
-        var result = string.Join(" ", attributeText, modifierText, nameText).Trim();
+        var result = string.Join(" ", new[] { attributeText, modifierText, nameText }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
         return result;
     }
 

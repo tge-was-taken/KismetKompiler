@@ -390,10 +390,94 @@ public class KismetScriptASTParser
 
             declaration = labelDeclaration;
         }
+        else if (TryGet(context, context.classDeclarationStatement, out var classDeclarationContext))
+        {
+            ClassDeclaration classDeclaration = null;
+            if (!TryFunc(classDeclarationContext, "Failed to parse class declaration", () => TryParseClassDeclaration(classDeclarationContext, out classDeclaration)))
+                return false;
+
+            declaration = classDeclaration;
+        }
         else
         {
             LogError(context, "Expected function, procedure or variable declaration");
             return false;
+        }
+
+        return true;
+    }
+
+    private bool TryParseClassDeclaration(KismetScriptParser.ClassDeclarationStatementContext context, out ClassDeclaration classDeclaration)
+    {
+        classDeclaration = CreateAstNode<ClassDeclaration>(context);
+
+        if (context.attributeList() != null)
+        {
+            if (!TryParseAttributeList(context.attributeList(), out var attributes))
+            {
+                LogError(context.attributeList(), "Failed to parse class attribute list");
+                return false;
+            }
+
+            classDeclaration.Attributes.AddRange(attributes);
+        }
+
+        if (context.classModifier()?.Length > 0)
+        {
+            foreach (var modifierSymbol in context.classModifier())
+            {
+                switch (modifierSymbol.GetText())
+                {
+                    case "private":
+                        classDeclaration.Modifiers |= ClassModifiers.Private;
+                        break;
+
+                    case "public":
+                        classDeclaration.Modifiers |= ClassModifiers.Public;
+                        break;
+
+                    default:
+                        LogError(modifierSymbol, "Unknown class modifier");
+                        break;
+                }
+            }
+        }
+
+        if (context.Identifier()?.Length < 1 || !TryParseIdentifier(context.Identifier(0), out var identifier))
+        {
+            LogError(context, "Missing class name");
+            return false;
+        }
+
+        classDeclaration.Identifier = identifier;
+
+
+        if (context.Identifier()?.Length > 1)
+        {
+            for (int i = 1; i < context.Identifier().Length; i++)
+            {
+                if (!TryParseIdentifier(context.Identifier(1), out var baseIdentifier))
+                {
+                    LogError(context, "Failed to parse base class identifier");
+                    return false;
+                }
+
+                classDeclaration.InheritedTypeIdentifiers.Add(baseIdentifier);
+            }
+        }
+
+        if (context.declarationStatement()?.Length > 0)
+        {
+            foreach (var declarationContext in context.declarationStatement())
+            {
+                if (!TryParseDeclaration(declarationContext, out var declaration))
+                {
+                    LogError(declarationContext, "Failed to parse class declaration");
+                    return false;
+                }
+
+                classDeclaration.Declarations.Add(declaration);
+            }
         }
 
         return true;
@@ -648,12 +732,7 @@ public class KismetScriptASTParser
 
     private bool TryParseVariableModifier(KismetScriptParser.VariableModifierContext context, out VariableModifier modifier)
     {
-        if (TryGet(context, context.Global, out var staticNode))
-        {
-            modifier = CreateAstNode<VariableModifier>(staticNode);
-            modifier.Kind = VariableModifierKind.Global;
-        }
-        else if (TryGet(context, context.Const, out var constNode))
+        if (TryGet(context, context.Const, out var constNode))
         {
             modifier = CreateAstNode<VariableModifier>(constNode);
             modifier.Kind = VariableModifierKind.Constant;
@@ -674,17 +753,6 @@ public class KismetScriptASTParser
 
     private bool TryParseVariableModifierIndex(KismetScriptParser.VariableModifierContext context, VariableModifier modifier)
     {
-        if (TryGet(context, context.IntLiteral, out var indexNode))
-        {
-            if (!TryParseIntLiteral(indexNode, out var index))
-            {
-                LogError(indexNode.Symbol, "Invalid variable index");
-                return false;
-            }
-
-            modifier.Index = index;
-        }
-
         return true;
     }
 

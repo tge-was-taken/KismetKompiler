@@ -47,6 +47,11 @@ declarationStatement
 	| variableDeclarationStatement
 	| enumTypeDeclarationStatement
 	| labelDeclarationStatement
+	| classDeclarationStatement
+	;
+
+classDeclarationStatement
+	: attributeList? classModifier* Class Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
 	;
 
 functionDeclarationStatement
@@ -85,6 +90,11 @@ labelDeclarationStatement
 	: Identifier ':'
 	;
 
+classModifier
+	: Public
+	| Private
+	;
+
 procedureModifier
 	: Public
 	| Private
@@ -95,13 +105,8 @@ procedureModifier
 	;
 
 variableModifier
-	: Global ('('IntLiteral')')?
-	| Const
-	| AiLocal ('('IntLiteral')')?
-	| AiGlobal ('('IntLiteral')')?
-	| Bit ('('IntLiteral')')
-	| Count ('('IntLiteral')')?
-	| Local ('('IntLiteral')')?
+	: Const
+	| Local
 	;
 
 //
@@ -219,6 +224,7 @@ switchLabel
 typeIdentifier
 	: BuiltinTypeIdentifier arraySignifier?
 	| Identifier arraySignifier?
+	| typeIdentifier '<' typeIdentifier '>' arraySignifier?
 	;
 
 ////////////////////
@@ -235,13 +241,12 @@ Import:		'import';
 Function:	'function';
 Global:		'global';
 Const:		'const';
-AiLocal:	'ai_local';
-AiGlobal:	'ai_global';
-Bit:		'bit';
 Enum:		'enum';
 Out:		'out';
 Local:		'local';
-Count:		'count';
+Class:		'class';
+Struct:		'struct';
+Ref:		'ref';
 
 // Modifiers
 Public:		'public';
@@ -264,6 +269,7 @@ Goto:		'goto';
 Switch:		'switch';
 Case:		'case';
 Default:	'default';
+
 
 // Literals
 

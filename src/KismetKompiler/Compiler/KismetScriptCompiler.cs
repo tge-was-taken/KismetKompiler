@@ -64,9 +64,9 @@ public class KismetScriptCompiler
         }
     }
 
-    class UnexpectedSyntaxError : CompilationError
+    class SemanticError : CompilationError
     {
-        public UnexpectedSyntaxError(SyntaxNode syntaxNode)
+        public SemanticError(SyntaxNode syntaxNode)
             : base(syntaxNode, $"{syntaxNode.SourceInfo?.Line}:{syntaxNode.SourceInfo?.Column}: {syntaxNode} was unexpected at this time.")
         {
         }
@@ -80,8 +80,8 @@ public class KismetScriptCompiler
     private KismetPropertyPointer _rvalue;
     private CompilationUnit _compilationUnit;
     private Stack<Scope> _scopeStack = new();
-
-    private Scope Scope => _scopeStack.Peek();
+    private Scope _rootScope;
+    private Scope _scope => _scopeStack.Peek();
 
     public KismetScriptCompiler()
     {
@@ -97,7 +97,15 @@ public class KismetScriptCompiler
 
     private void PushScope()
     {
-        _scopeStack.Push(new(_scopeStack.Count == 0 ? null : _scopeStack.Peek()));
+        if (_scopeStack.Count == 0)
+        {
+            _rootScope = new(null);
+            _scopeStack.Push(_rootScope);
+        }
+        else
+        {
+            _scopeStack.Push(new(_scopeStack.Peek()));
+        }
     }
 
     private Scope PopScope()
@@ -121,9 +129,17 @@ public class KismetScriptCompiler
             {
                 script.Functions.Add(CompileFunction(procedureDeclaration));
             }
+            else if (declaration is VariableDeclaration variableDeclaration)
+            {
+                script.Properties.Add(CompileProperty(variableDeclaration));
+            }
+            else if (declaration is ClassDeclaration classDeclaration)
+            {
+                script.Classes.Add(CompileClass(classDeclaration));
+            }
             else
             {
-                throw new UnexpectedSyntaxError(declaration);
+                throw new SemanticError(declaration);
             }
         }
 
@@ -134,13 +150,115 @@ public class KismetScriptCompiler
 
     private void ScanCompilationUnit()
     {
+        void ScanClass(ClassDeclaration classDeclaration)
+        {
+            foreach (var declaration in classDeclaration.Declarations)
+            {
+                ScanStatement(declaration);
+            }
+        }
+
+        void ScanCompoundStatement(CompoundStatement compoundStatement)
+        {
+            foreach (var statement in compoundStatement)
+            {
+                ScanStatement(statement);
+            }
+        }
+
+        void ScanStatement(Statement statement)
+        {
+            if (statement is IBlockStatement blockStatement)
+            {
+                foreach (var block in blockStatement.Blocks)
+                    ScanCompoundStatement(block);
+            }
+            else if (statement is Declaration declaration)
+            {
+                if (declaration is LabelDeclaration labelDeclaration)
+                {
+                    if (!_scope.TryDeclareLabel(labelDeclaration))
+                    {
+                        throw new CompilationError(labelDeclaration, $"Label {labelDeclaration.Identifier.Text} declared more than once");
+                    }
+                }
+                else
+                {
+                    //
+                }
+            }
+        }
+
+        void ScanFunction(ProcedureDeclaration procedureDeclaration)
+        {
+            ScanCompoundStatement(procedureDeclaration.Body);
+        }
+
         foreach (var declaration in _compilationUnit.Declarations)
         {
             if (declaration is ProcedureDeclaration procedureDeclaration)
             {
                 ScanFunction(procedureDeclaration);
             }
+            else if (declaration is ClassDeclaration classDeclaration)
+            {
+                ScanClass(classDeclaration);
+            }
         }
+    }
+
+    public KismetScriptClass CompileClass(ClassDeclaration classDeclaration)
+    {
+        EClassFlags flags = 0;
+        foreach (var attribute in classDeclaration.Attributes)
+        {
+            var classFlagText = $"CLASS_{attribute.Identifier.Text}";
+            if (System.Enum.TryParse<EClassFlags>(classFlagText, true, out var flag))
+                throw new CompilationError(attribute, "Invalid class attribute");
+            flags |= flag;
+        }
+
+        var functions = new List<KismetScriptFunction>();
+        var properties = new List<KismetScriptProperty>();
+
+        PushScope();
+
+
+        foreach (var declaration in classDeclaration.Declarations)
+        {
+            if (declaration is ProcedureDeclaration procedureDeclaration)
+            {
+                functions.Add(CompileFunction(procedureDeclaration));
+            }
+            else if (declaration is VariableDeclaration variableDeclaration)
+            {
+                properties.Add(CompileProperty(variableDeclaration));
+            }
+            else
+            {
+                throw new SemanticError(declaration);
+            }
+        }
+
+        PopScope();
+
+        return new KismetScriptClass()
+        {
+            Name = classDeclaration.Identifier.Text,
+            BaseClass = classDeclaration.BaseClassIdentifier?.Text,
+            Flags = flags,
+            Functions = functions,
+            Properties = properties
+        };
+    }
+
+    private KismetScriptProperty CompileProperty(VariableDeclaration variableDeclaration)
+    {
+        return new KismetScriptProperty()
+        {
+            Name = variableDeclaration.Identifier.Text,
+            Type = variableDeclaration.Type.Text
+        };
     }
 
     public KismetScriptFunction CompileFunction(ProcedureDeclaration procedureDeclaration)
@@ -154,7 +272,7 @@ public class KismetScriptCompiler
 
         foreach (var param in procedureDeclaration.Parameters)
         {
-            if (!Scope.TryDeclareVariable(new VariableInfo()
+            if (!_scope.TryDeclareVariable(new VariableInfo()
             {
                 Declaration = new VariableDeclaration()
                 {
@@ -179,13 +297,13 @@ public class KismetScriptCompiler
         var function = new KismetScriptFunction()
         {
             Name = procedureDeclaration.Identifier.Text,
-            Instructions = _functionState.PrimaryExpressions.Select(x => x.CompiledExpression).ToList(),
+            Expressions = _functionState.PrimaryExpressions.Select(x => x.CompiledExpression).ToList(),
         };
 
         return function;
     }
 
-    public void CompileCompoundStatement(CompoundStatement compoundStatement)
+    private void CompileCompoundStatement(CompoundStatement compoundStatement)
     {
         PushScope();
 
@@ -242,7 +360,7 @@ public class KismetScriptCompiler
                     }
                     else
                     {
-                        throw new UnexpectedSyntaxError(statement);
+                        throw new SemanticError(statement);
                     }
                 }
                 else
@@ -275,7 +393,7 @@ public class KismetScriptCompiler
             }
             else
             {
-                throw new UnexpectedSyntaxError(statement);
+                throw new SemanticError(statement);
             }
         }
 
@@ -302,15 +420,15 @@ public class KismetScriptCompiler
     {
         if (declaration is LabelDeclaration labelDeclaration)
         {
-            if (!Scope.TryGetLabel(labelDeclaration.Identifier.Text, out var label))
-                throw new UnexpectedSyntaxError(labelDeclaration);
+            if (!_scope.TryGetLabel(labelDeclaration.Identifier.Text, out var label))
+                throw new SemanticError(labelDeclaration);
 
             label.CodeOffset = _functionState.CodeOffset;
             label.IsResolved = true;
         }
         else if (declaration is VariableDeclaration variableDeclaration)
         {
-            if (!Scope.TryDeclareVariable(variableDeclaration))
+            if (!_scope.TryDeclareVariable(variableDeclaration))
                 throw new CompilationError(variableDeclaration, $"Variable {variableDeclaration.Identifier} redeclared");
 
             if (variableDeclaration.Initializer != null)
@@ -325,7 +443,7 @@ public class KismetScriptCompiler
         }
         else
         {
-            throw new UnexpectedSyntaxError(declaration);
+            throw new SemanticError(declaration);
         }
     }
 
@@ -409,37 +527,6 @@ public class KismetScriptCompiler
         }
     }
 
-    private void ScanFunction(ProcedureDeclaration procedureDeclaration)
-    {
-        void ScanBlock(CompoundStatement compoundStatement)
-        {
-            foreach (var statement in compoundStatement)
-            {
-                if (statement is IBlockStatement blockStatement)
-                {
-                    foreach (var block in blockStatement.Blocks)
-                        ScanBlock(block);
-                }
-                else if (statement is Declaration declaration)
-                {
-                    if (declaration is LabelDeclaration labelDeclaration)
-                    {
-                        if (!Scope.TryDeclareLabel(labelDeclaration))
-                        {
-                            throw new CompilationError(labelDeclaration, $"Label {labelDeclaration.Identifier.Text} declared more than once");
-                        }
-                    }
-                    else
-                    {
-                        //
-                    }
-                }
-            }
-        }
-
-        ScanBlock(procedureDeclaration.Body);
-    }
-
     private CompiledExpressionContext CompileExpression(Expression expression)
     {
         CompiledExpressionContext CompileExpressionInner()
@@ -488,7 +575,7 @@ public class KismetScriptCompiler
                     }
                     else
                     {  
-                        if (Scope.TryGetVariable(identifier.Text, out var variable) &&
+                        if (_scope.TryGetVariable(identifier.Text, out var variable) &&
                             variable.Parameter?.Modifier == ParameterModifier.Out)
                         {
                             return Emit(expression, new EX_LocalOutVariable()
@@ -558,7 +645,7 @@ public class KismetScriptCompiler
             }
             else
             {
-                throw new UnexpectedSyntaxError(expression);
+                throw new SemanticError(expression);
             }
         }
 
@@ -586,7 +673,7 @@ public class KismetScriptCompiler
                     case ValueKind.Float:
                         return Emit(intLiteral, new EX_FloatConst() { Value = intLiteral.Value });
                     default:
-                        throw new UnexpectedSyntaxError(literal);
+                        throw new SemanticError(literal);
                 }
             }
             else if (literal is BoolLiteral boolLiteral)
@@ -602,12 +689,12 @@ public class KismetScriptCompiler
                     case ValueKind.Byte:
                         return Emit(boolLiteral, boolLiteral.Value ? new EX_ByteConst() { Value = 1 } : new EX_ByteConst() { Value = 0 });
                     default:
-                        throw new UnexpectedSyntaxError(literal);
+                        throw new SemanticError(literal);
                 }
             }
             else
             {
-                throw new UnexpectedSyntaxError(literal);
+                throw new SemanticError(literal);
             }
         }
         else
@@ -651,7 +738,7 @@ public class KismetScriptCompiler
         }
         else
         {
-            throw new UnexpectedSyntaxError(literal);
+            throw new SemanticError(literal);
         }
     }
 
@@ -691,7 +778,7 @@ public class KismetScriptCompiler
                         }
                         else
                         {
-                            throw new UnexpectedSyntaxError(procedureDecl);
+                            throw new SemanticError(procedureDecl);
                         }
                     }
                     else
@@ -812,7 +899,7 @@ public class KismetScriptCompiler
     private KismetPropertyPointer GetPropertyPointer(Expression expression)
     {
         if (!TryGetPropertyPointer(expression, out var pointer))
-            throw new UnexpectedSyntaxError(expression);
+            throw new SemanticError(expression);
         return pointer;
     }
 
@@ -1531,7 +1618,7 @@ public class KismetScriptCompiler
         }
         else if (expression is Identifier identifier)
         {
-            if (Scope.TryGetLabel(identifier.Text, out label))
+            if (_scope.TryGetLabel(identifier.Text, out label))
             {
                 return true;
             }
@@ -1565,7 +1652,7 @@ public class KismetScriptCompiler
 
     private LabelInfo GetLabel(string name)
     {
-        if (!Scope.TryGetLabel(name, out var label))
+        if (!_scope.TryGetLabel(name, out var label))
         {
             throw new CompilationError(null, $"Label {name} not found");
         }

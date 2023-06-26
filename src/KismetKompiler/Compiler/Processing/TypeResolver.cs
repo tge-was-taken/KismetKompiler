@@ -234,6 +234,18 @@ public class TypeResolver
         {
             ResolveTypesInVariableDeclaration(variableDeclaration);
         }
+        else if (declaration is ClassDeclaration classDeclaration)
+        {
+            ResolveTypesInClassDeclaration(classDeclaration);
+        }
+    }
+
+    private void ResolveTypesInClassDeclaration(ClassDeclaration classDeclaration)
+    {
+        foreach (var decl in classDeclaration.Declarations)
+        {
+            ResolveTypesInDeclaration(decl);
+        }
     }
 
     internal void ResolveTypesInExpression(Expression expression)

@@ -1,4 +1,5 @@
 ﻿using UAssetAPI.Kismet.Bytecode;
+using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler;
 
@@ -6,36 +7,33 @@ public class KismetScriptLabel
 {
     public string Name { get; set; }
     public int CodeOffset { get; set; }
-
-    public KismetScriptLabel()
-    {
-    }
-
-    public KismetScriptLabel(string name, int codeOffset)
-    {
-        Name = name;
-        CodeOffset = codeOffset;
-    }
 }
 
 public class KismetScriptFunction
 {
     public string Name { get; set; }
-    public List<KismetExpression> Instructions { get; init; } = new();
+    public List<KismetPropertyPointer> LocalVariables { get; init; } = new();
+    public List<KismetExpression> Expressions { get; init; } = new();
+}
 
-    public KismetScriptFunction()
-    {
-        
-    }
+public class KismetScriptProperty
+{
+    public string Name { get; set; }
+    public string Type { get; set; }
+}
 
-    public KismetScriptFunction(string name, List<KismetExpression> instructions)
-    {
-        Name = name;
-        Instructions = instructions;
-    }
+public class KismetScriptClass
+{
+    public EClassFlags Flags { get; set; }
+    public string Name { get; set; }
+    public string? BaseClass { get; set; }
+    public List<KismetScriptProperty> Properties { get; init; } = new();
+    public List<KismetScriptFunction> Functions { get; init; } = new();
 }
 
 public class KismetScript
 {
+    public List<KismetScriptProperty> Properties { get; init; } = new();
     public List<KismetScriptFunction> Functions { get; init; } = new();
+    public List<KismetScriptClass> Classes { get; init; } = new();
 }

@@ -30,22 +30,22 @@ asset.VerifyBinaryEquality();
 StreamWriter outWriter;
 KismetDecompiler decompiler;
 
- outWriter = new StreamWriter("old_out.c", false, Encoding.Unicode);
-decompiler = new KismetDecompiler(outWriter);
-decompiler.LoadAssetContext(asset);
-decompiler.DecompileClass();
+// outWriter = new StreamWriter("old_out.c", false, Encoding.Unicode);
+//decompiler = new KismetDecompiler(outWriter);
+//decompiler.LoadAssetContext(asset);
+//decompiler.DecompileClass();
 
-for (int i = 0; i < asset.Exports.Count; i++)
-{
-    var export = asset.Exports[i];
-    if (export is FunctionExport functionExport && functionExport.ScriptBytecode.Length > 0)
-    {
-        File.WriteAllText($"export{i}.json", JsonConvert.SerializeObject(functionExport.ScriptBytecode));
+//for (int i = 0; i < asset.Exports.Count; i++)
+//{
+//    var export = asset.Exports[i];
+//    if (export is FunctionExport functionExport && functionExport.ScriptBytecode.Length > 0)
+//    {
+//        File.WriteAllText($"export{i}.json", JsonConvert.SerializeObject(functionExport.ScriptBytecode));
 
-        //var result = decompiler.DecompileFunction(functionExport);
-    }
-}
-outWriter.Close();
+//        //var result = decompiler.DecompileFunction(functionExport);
+//    }
+//}
+//outWriter.Close();
 
 var parser = new KismetScriptASTParser();
 var compilationUnit = parser.Parse(new StreamReader("old_out.c", Encoding.Unicode));
@@ -60,8 +60,8 @@ decompiler.LoadAssetContext(asset);
 decompiler.DecompileFunction(new()
 {
     Asset = asset,
-    ScriptBytecode = script.Functions[0].Instructions.ToArray(),
-    ObjectName = new(asset, script.Functions[0].Name),
+    ScriptBytecode = script.Classes[0].Functions[0].Expressions.ToArray(),
+    ObjectName = new(asset, script.Classes[0].Functions[0].Name),
     FunctionFlags = EFunctionFlags.FUNC_UbergraphFunction
 });
 outWriter.Close();
@@ -75,8 +75,9 @@ var oldJsons = asset.Exports
     .Cast<FunctionExport>()
     .Select(x => JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Formatting.Indented));
 
-var newJsons = script.Functions
-    .Select(x => JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Instructions.ToArray()), Formatting.Indented));
+var newJsons = script.Classes
+    .SelectMany(x => x.Functions)
+    .Select(x => JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Expressions.ToArray()), Formatting.Indented));
 
 File.WriteAllText($"old.json", string.Join("\n", oldJsons));
 File.WriteAllText($"new.json", string.Join("\n", newJsons));
