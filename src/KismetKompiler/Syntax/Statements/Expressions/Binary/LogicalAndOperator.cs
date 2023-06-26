@@ -1,0 +1,24 @@
+﻿using KismetKompiler.Syntax;
+using KismetKompiler.Syntax.Statements;
+
+namespace KismetKompiler.Syntax.Statements.Expressions.Binary;
+
+public class LogicalAndOperator : BinaryExpression, IOperator
+{
+    public int Precedence => 13;
+
+    public LogicalAndOperator() : base(ValueKind.Bool)
+    {
+    }
+
+    public LogicalAndOperator(Expression left, Expression right)
+        : base(ValueKind.Bool, left, right)
+    {
+
+    }
+
+    public override string ToString()
+    {
+        return $"({Left}) && ({Right})";
+    }
+}
