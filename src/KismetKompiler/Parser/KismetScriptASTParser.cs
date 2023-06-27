@@ -174,7 +174,21 @@ public class KismetScriptASTParser
             return false;
 
         import = CreateAstNode<Import>(context);
-        import.CompilationUnitFileName = filePath.Trim('"');
+        import.PackageName = filePath.Trim('"');
+
+        if (context.declarationStatement()?.Length > 0)
+        {
+            foreach (var externDecl in context.declarationStatement())
+            {
+                if (!TryParseDeclaration(externDecl, out var externalDeclaration))
+                {
+                    LogError(externDecl, "Failed to parse external declaration");
+                    return false;
+                }
+
+                import.Declarations.Add(externalDeclaration);
+            }
+        }
 
         LogTrace($"Parsed import: {import}");
         return true;
@@ -350,15 +364,7 @@ public class KismetScriptASTParser
         declaration = null;
 
         // Parse function declaration statement
-        if (TryGet(context, context.functionDeclarationStatement, out var functionDeclarationContext))
-        {
-            FunctionDeclaration functionDeclaration = null;
-            if (!TryFunc(functionDeclarationContext, "Failed to parse function declaration", () => TryParseFunctionDeclaration(functionDeclarationContext, out functionDeclaration)))
-                return false;
-
-            declaration = functionDeclaration;
-        }
-        else if (TryGet(context, context.procedureDeclarationStatement, out var procedureDeclarationContext))
+        if (TryGet(context, context.procedureDeclarationStatement, out var procedureDeclarationContext))
         {
             ProcedureDeclaration procedureDeclaration = null;
             if (!TryFunc(procedureDeclarationContext, "Failed to parse procedure declaration", () => TryParseProcedureDeclaration(procedureDeclarationContext, out procedureDeclaration)))
@@ -422,9 +428,9 @@ public class KismetScriptASTParser
             classDeclaration.Attributes.AddRange(attributes);
         }
 
-        if (context.classModifier()?.Length > 0)
+        if (context.modifier()?.Length > 0)
         {
-            foreach (var modifierSymbol in context.classModifier())
+            foreach (var modifierSymbol in context.modifier())
             {
                 switch (modifierSymbol.GetText())
                 {
@@ -436,8 +442,12 @@ public class KismetScriptASTParser
                         classDeclaration.Modifiers |= ClassModifiers.Public;
                         break;
 
+                    case "abstract":
+                        classDeclaration.Modifiers |= ClassModifiers.Abstract;
+                        break;
+
                     default:
-                        LogError(modifierSymbol, "Unknown class modifier");
+                        LogError(modifierSymbol, "Invalid class modifier");
                         break;
                 }
             }
@@ -483,69 +493,6 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseFunctionDeclaration(KismetScriptParser.FunctionDeclarationStatementContext context, out FunctionDeclaration functionDeclaration)
-    {
-        LogTrace("Parsing function declaration");
-        LogContextInfo(context);
-
-        functionDeclaration = CreateAstNode<FunctionDeclaration>(context);
-
-        // Parse return type
-        {
-            if (!TryGet(context, "Expected function return type", () => context.typeIdentifier(), out var typeIdentifierNode))
-            {
-                return false;
-            }
-
-            TypeIdentifier typeIdentifier = null;
-            if (!TryFunc(typeIdentifierNode, "Failed to parse function return type identifier", () => TryParseTypeIdentifier(typeIdentifierNode, out typeIdentifier)))
-                return false;
-
-            functionDeclaration.ReturnType = typeIdentifier;
-        }
-
-        // Parse index
-        {
-            if (!TryGet(context, "Expected function index", context.IntLiteral, out var indexNode))
-                return false;
-
-            IntLiteral indexIntLiteral = null;
-            if (!TryFunc(indexNode, "Failed to parse function index", () => TryParseIntLiteral(indexNode, out indexIntLiteral)))
-                return false;
-
-            functionDeclaration.Index = indexIntLiteral;
-        }
-
-        // Parse identifier
-        {
-            if (!TryGet(context, "Expected function identifier", () => context.Identifier(), out var identifierNode))
-                return false;
-
-            Identifier identifier = null;
-            if (!TryFunc(identifierNode, "Failed to parse function identifier", () => TryParseIdentifier(identifierNode, out identifier)))
-                return false;
-
-            identifier.ExpressionValueKind = ValueKind.Function;
-
-            functionDeclaration.Identifier = identifier;
-        }
-
-        // Parse parameter list
-        {
-            if (!TryGet(context, "Expected function parameter list", context.parameterList, out var parameterListContext))
-                return false;
-
-            List<Parameter> parameters = null;
-            if (!TryFunc(parameterListContext, "Failed to parse function parameter list", () => TryParseParameterList(parameterListContext, out parameters)))
-                return false;
-
-            functionDeclaration.Parameters = parameters;
-        }
-
-        LogInfo($"Parsed function declaration for '{functionDeclaration.Identifier.Text}'");
-        return true;
-    }
-
     private bool TryParseProcedureDeclaration(KismetScriptParser.ProcedureDeclarationStatementContext context, out ProcedureDeclaration procedureDeclaration)
     {
         LogTrace("Start parsing procedure declaration");
@@ -564,7 +511,7 @@ public class KismetScriptASTParser
         }
 
         // Parse modifiers
-        var modifiers = context.procedureModifier();
+        var modifiers = context.modifier();
         if (modifiers != null && modifiers.Length > 0)
         {
             foreach (var mod in modifiers)
@@ -657,7 +604,7 @@ public class KismetScriptASTParser
         variableDeclaration = CreateAstNode<VariableDeclaration>(context);
 
         // Parse modifier(s)
-        if (TryGet(context, context.variableModifier, out var variableModifierContext))
+        if (TryGet(context, context.modifier, out var variableModifierContext))
         {
             if (!TryParseVariableModifier(variableModifierContext, out var modifier))
             {
@@ -730,7 +677,7 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseVariableModifier(KismetScriptParser.VariableModifierContext context, out VariableModifier modifier)
+    private bool TryParseVariableModifier(KismetScriptParser.ModifierContext context, out VariableModifier modifier)
     {
         if (TryGet(context, context.Const, out var constNode))
         {
@@ -751,7 +698,7 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseVariableModifierIndex(KismetScriptParser.VariableModifierContext context, VariableModifier modifier)
+    private bool TryParseVariableModifierIndex(KismetScriptParser.ModifierContext context, VariableModifier modifier)
     {
         return true;
     }
@@ -1702,9 +1649,9 @@ public class KismetScriptASTParser
             parameter.Attributes.AddRange(attributes);
         }
 
-        if (context.parameterModifier() != null)
+        if (context.modifier() != null)
         {
-            var modifier = context.parameterModifier().GetText();
+            var modifier = context.modifier().GetText();
             switch (modifier)
             {
                 case "out":
@@ -1718,7 +1665,7 @@ public class KismetScriptASTParser
                     break;
 
                 default:
-                    LogError(context.parameterModifier(), "Invalid parameter modifier");
+                    LogError(context.modifier(), "Invalid parameter modifier");
                     return false;
             }
         }

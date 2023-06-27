@@ -25,6 +25,9 @@ public static class KismetExpressionSizeCalculator
                 break;
         }
     }
+    public static int CalculateExpressionSize(IEnumerable<KismetExpression> expressions, ObjectVersionUE5 objectVersionUE5 = 0)
+        => expressions.Sum(x => CalculateExpressionSize(x, objectVersionUE5));
+
     public static int CalculateExpressionSize(KismetExpression expression, ObjectVersionUE5 objectVersionUE5 = 0)
     {
         var index = 0;

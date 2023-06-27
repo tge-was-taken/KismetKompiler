@@ -2,7 +2,7 @@ using KismetKompiler.Syntax.Statements.Declarations;
 
 namespace KismetKompiler.Compiler;
 
-internal class LabelInfo
+public class LabelInfo
 {
     public string Name { get; set; }
 

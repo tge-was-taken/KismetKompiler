@@ -30,8 +30,11 @@ public class ProcedureDeclaration : Declaration, IBlockStatement
     public bool IsPrivate => Modifiers.HasFlag(ProcedureModifier.Private);
     public bool IsSealed => Modifiers.HasFlag(ProcedureModifier.Sealed);
     public bool IsVirtual => Modifiers.HasFlag(ProcedureModifier.Virtual);
+    public bool IsOverride => IsVirtual; // TODO
     public bool IsProtected => Modifiers.HasFlag(ProcedureModifier.Protected);
     public bool IsStatic => Modifiers.HasFlag(ProcedureModifier.Static);
+
+    public bool IsExternal => Body == null;
 
     public IntLiteral Index { get; set; }
 

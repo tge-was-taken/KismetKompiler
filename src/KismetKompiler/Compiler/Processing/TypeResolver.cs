@@ -88,13 +88,11 @@ public class TypeResolver
 
     private void ResolveTypesInCompilationUnit(CompilationUnit compilationUnit)
     {
-        Console.WriteLine("CompilationUnit Push");
         PushScope();
 
         foreach (var declaration in compilationUnit.Declarations)
             ResolveTypesInStatement(declaration);
 
-        Console.WriteLine("CompilationUnit Pop");
         PopScope();
     }
 
@@ -203,7 +201,6 @@ public class TypeResolver
 
     private void ResolveTypesInCompoundStatement(CompoundStatement compoundStatement)
     {
-        Console.WriteLine("CompoundStatement Push");
         PushScope();
 
         foreach (var statement in compoundStatement)
@@ -211,7 +208,6 @@ public class TypeResolver
             ResolveTypesInStatement(statement);
         }
 
-        Console.WriteLine("CompoundStatement Pop");
         PopScope();
     }
 
@@ -331,7 +327,6 @@ public class TypeResolver
     private void ResolveTypesInForStatement(ForStatement forStatement)
     {
         // Enter for scope
-        Console.WriteLine("ForStatement Push");
         PushScope();
 
         // For loop Initializer
@@ -347,7 +342,6 @@ public class TypeResolver
         ResolveTypesInCompoundStatement(forStatement.Body);
 
         // Exit for scope
-        Console.WriteLine("ForStatement Pop");
         PopScope();
 
     }
@@ -388,9 +382,9 @@ public class TypeResolver
 
         // Nothing to resolve if there's no body
         if (declaration.Body == null)
+            return;
     
         // Enter procedure body scope
-        Console.WriteLine("ProcedureDeclaration Push");
         PushScope();
 
         foreach (var parameter in declaration.Parameters)
@@ -407,7 +401,6 @@ public class TypeResolver
         ResolveTypesInCompoundStatement(declaration.Body);
 
         // Exit procedure body scope
-        Console.WriteLine("ProcedureDeclaration Pop");
         PopScope();
 
     }
@@ -517,33 +510,33 @@ public class TypeResolver
 
     private void LogTrace(SyntaxNode node, string message)
     {
-        if (node.SourceInfo != null)
-            LogTrace($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
-        else
-            LogTrace(message);
+       // if (node.SourceInfo != null)
+       //     LogTrace($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
+       // else
+       //     LogTrace(message);
     }
 
     private void LogTrace(string message)
     {
-        Console.WriteLine(message);
+        //Console.WriteLine(message);
     }
 
     private void LogInfo(string message)
     {
-        Console.WriteLine(message);
+       // Console.WriteLine(message);
     }
 
     private void LogInfo(SyntaxNode node, string message)
     {
-        Console.WriteLine($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
+        //Console.WriteLine($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
     }
 
     private void LogError(SyntaxNode node, string message)
     {
-        if (node.SourceInfo != null)
-            LogError($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
-        else
-            LogError(message);
+        //if (node.SourceInfo != null)
+       //     LogError($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
+       // else
+       //     LogError(message);
 
         if (Debugger.IsAttached)
             Debugger.Break();
@@ -551,16 +544,16 @@ public class TypeResolver
 
     private void LogError(string message)
     {
-        Console.WriteLine($"{message}");
+        //Console.WriteLine($"{message}");
     }
 
     private void LogWarning(string message)
     {
-        Console.WriteLine($"{message}");
+        //Console.WriteLine($"{message}");
     }
 
     private void LogWarning(SyntaxNode node, string message)
     {
-        Console.WriteLine($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
+        //Console.WriteLine($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
     }
 }

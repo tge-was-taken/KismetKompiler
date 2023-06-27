@@ -1,21 +1,17 @@
-﻿namespace KismetKompiler.Syntax;
+﻿using KismetKompiler.Syntax.Statements;
+using KismetKompiler.Syntax.Statements.Expressions;
+using KismetKompiler.Syntax.Statements.Expressions.Identifiers;
+
+namespace KismetKompiler.Syntax;
 
 public class Import : SyntaxNode
 {
-    public string CompilationUnitFileName { get; set; }
+    public string PackageName { get; set; }
 
-    public Import()
-    {
-
-    }
-
-    public Import(string filepath)
-    {
-        CompilationUnitFileName = filepath;
-    }
+    public List<Declaration> Declarations { get; init; } = new();
 
     public override string ToString()
     {
-        return $"import \"{CompilationUnitFileName}\"";
+        return $"from \"{PackageName}\" import {{}}";
     }
 }

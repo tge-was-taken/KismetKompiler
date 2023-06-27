@@ -11,10 +11,6 @@ compilationUnit
 	: importStatement* declarationStatement* EOF
 	;
 
-importStatement
-	: Import '(' StringLiteral ')' ';'
-	;
-
 statement
 	: nullStatement
 	| compoundStatement
@@ -42,28 +38,28 @@ compoundStatement
 // Declaration statements
 //
 declarationStatement
-	: functionDeclarationStatement
-	| procedureDeclarationStatement
+	: procedureDeclarationStatement
 	| variableDeclarationStatement
 	| enumTypeDeclarationStatement
 	| labelDeclarationStatement
 	| classDeclarationStatement
 	;
 
-classDeclarationStatement
-	: attributeList? classModifier* Class Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
+importStatement
+	: From StringLiteral Import '{' declarationStatement* '}'
+	| Import typeIdentifier StringLiteral ';'
 	;
 
-functionDeclarationStatement
-	: Function'('IntLiteral')' typeIdentifier Identifier parameterList ';'
+classDeclarationStatement
+	: attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
 	;
 
 procedureDeclarationStatement
-	: attributeList? procedureModifier* typeIdentifier Identifier parameterList compoundStatement
+	: attributeList? modifier* typeIdentifier Identifier parameterList compoundStatement?
 	;
 
 variableDeclarationStatement
-	: attributeList? variableModifier? typeIdentifier Identifier ('=' expression)? ';'
+	: attributeList? modifier? typeIdentifier Identifier ('=' expression)? ';'
 	;
 
 arraySignifier
@@ -90,23 +86,18 @@ labelDeclarationStatement
 	: Identifier ':'
 	;
 
-classModifier
-	: Public
-	| Private
-	;
-
-procedureModifier
+modifier
 	: Public
 	| Private
 	| Protected
 	| Sealed
 	| Static
 	| Virtual
-	;
-
-variableModifier
-	: Const
+	| Const
 	| Local
+	| Out
+	| Ref
+	| Abstract
 	;
 
 //
@@ -114,16 +105,11 @@ variableModifier
 //
 parameterList
 	: '(' parameter? (',' parameter)* ')'
+	| '(' '.' '.' '.' ')'
 	;
 
 parameter
-	: attributeList? parameterModifier? typeIdentifier Identifier arraySignifier?
-	;
-
-parameterModifier
-	: Out
-	| Ref
-	| Const
+	: attributeList? modifier? typeIdentifier Identifier arraySignifier?
 	;
 
 //
@@ -235,7 +221,9 @@ typeIdentifier
 
 // Keywords
 //	Directives
-Import:		'import';
+Import:	'import';
+Package: 'package';
+From: 'from';
 
 //	Storage types
 Function:	'function';
@@ -246,6 +234,7 @@ Out:		'out';
 Local:		'local';
 Class:		'class';
 Struct:		'struct';
+Interface:	'interface';
 Ref:		'ref';
 
 // Modifiers
@@ -255,6 +244,7 @@ Protected:	'protected';
 Sealed:		'sealed';
 Static:		'static';
 Virtual:	'virtual';
+Abstract:	'abstract';
 
 
 //	Control flow

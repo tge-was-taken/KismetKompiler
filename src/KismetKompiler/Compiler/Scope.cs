@@ -14,7 +14,7 @@ internal class Scope
 {
     public Scope? Parent { get; }
 
-    public Dictionary<string, FunctionInfo> Functions { get; }
+    public Dictionary<string, ExternalSymbolInfo> Functions { get; }
 
     public Dictionary<string, ProcedureInfo> Procedures { get; }
 
@@ -33,7 +33,7 @@ internal class Scope
     public Scope(Scope? parent)
     {
         Parent = parent;
-        Functions = new Dictionary<string, FunctionInfo>();
+        Functions = new Dictionary<string, ExternalSymbolInfo>();
         Procedures = new Dictionary<string, ProcedureInfo>();
         Variables = new Dictionary<string, VariableInfo>();
         Enums = new Dictionary<string, Enum>();
@@ -70,14 +70,14 @@ internal class Scope
         return false;
     }
 
-    public bool TryGetFunction(string name, out FunctionInfo function)
+    public bool TryGetExternalSymbol(string name, out ExternalSymbolInfo function)
     {
         if (!Functions.TryGetValue(name, out function))
         {
             if (Parent == null)
                 return false;
 
-            if (!Parent.TryGetFunction(name, out function))
+            if (!Parent.TryGetExternalSymbol(name, out function))
                 return false;
         }
 
@@ -174,61 +174,41 @@ internal class Scope
         return true;
     }
 
-    public bool TryDeclareFunction(FunctionDeclaration declaration)
+    public bool TryDeclareExternalSymbol(ExternalSymbolInfo function)
     {
-        if (TryGetFunction(declaration.Identifier.Text, out _))
+        if (TryGetExternalSymbol(function.Declaration.Identifier.Text, out _))
             return false;
 
-        var function = new FunctionInfo();
-        function.Declaration = declaration;
-        function.Index = (short)declaration.Index.Value;
-
-        Functions[declaration.Identifier.Text] = function;
+        Functions[function.Declaration.Identifier.Text] = function;
 
         return true;
     }
 
-    public bool TryDeclareProcedure(ProcedureDeclaration declaration, out ProcedureInfo procedure)
+    public bool TryDeclareProcedure(ProcedureInfo procedureInfo)
     {
-        if (TryGetProcedure(declaration.Identifier.Text, out procedure))
+        var name = procedureInfo.Declaration?.Identifier.Text;
+        if (TryGetProcedure(name, out var proc))
         {
-            return false;
+            if (proc.IsExternal &&
+                procedureInfo.Declaration != null &&
+                procedureInfo.Declaration.IsOverride)
+            {
+                // Overriding an external function is fine
+            }
+            else
+            {
+                return false;
+            }
         }
 
-        var p = new ProcedureInfo();
-        p.Declaration = declaration;
-        p.Index = declaration.Index == null ? (short)Procedures.Count : (short)declaration.Index.Value;
-        Debug.Assert(Procedures.All(x => x.Value.Index != p.Index), "Same procedure index used by multiple procedures");
-        Procedures[declaration.Identifier.Text] = procedure = p;
-        return true;
-    }
-
-    //public bool TryDeclareProcedure(ProcedureDeclaration declaration, Procedure compiled, out ProcedureInfo procedure)
-    //{
-    //    if (!TryDeclareProcedure(declaration, out procedure))
-    //        return false;
-
-    //    procedure.Compiled = compiled;
-    //    procedure.OriginalCompiled = compiled.Clone();
-    //    return true;
-    //}
-
-    public bool TryDeclareVariable(VariableDeclaration declaration)
-    {
-        if (TryGetVariable(declaration.Identifier.Text, out _))
-            return false;
-
-        var variable = new VariableInfo();
-        variable.Declaration = declaration;
-
-        Variables[declaration.Identifier.Text] = variable;
-
+        Procedures[name] = procedureInfo;
         return true;
     }
 
     public bool TryDeclareVariable(VariableInfo variable)
     {
-        if (TryGetVariable(variable.Declaration.Identifier.Text, out _))
+        if (TryGetVariable(variable.Declaration.Identifier.Text, out var existingVar) &&
+            !existingVar.AllowShadowing)
             return false;
 
         Variables[variable.Declaration.Identifier.Text] = variable;
