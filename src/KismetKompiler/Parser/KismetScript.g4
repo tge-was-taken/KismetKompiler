@@ -52,14 +52,16 @@ importStatement
 
 classDeclarationStatement
 	: attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
+	| attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? ';'
 	;
 
 procedureDeclarationStatement
-	: attributeList? modifier* typeIdentifier Identifier parameterList compoundStatement?
+	: attributeList? modifier* typeIdentifier Identifier parameterList compoundStatement
+	| attributeList? modifier* typeIdentifier Identifier parameterList ';'
 	;
 
 variableDeclarationStatement
-	: attributeList? modifier? typeIdentifier Identifier ('=' expression)? ';'
+	: attributeList? modifier* typeIdentifier Identifier ('=' expression)? ';'
 	;
 
 arraySignifier
@@ -90,7 +92,7 @@ modifier
 	: Public
 	| Private
 	| Protected
-	| Sealed
+	| Final
 	| Static
 	| Virtual
 	| Const
@@ -105,11 +107,11 @@ modifier
 //
 parameterList
 	: '(' parameter? (',' parameter)* ')'
-	| '(' '.' '.' '.' ')'
+	| '(' Elipsis ')'
 	;
 
 parameter
-	: attributeList? modifier? typeIdentifier Identifier arraySignifier?
+	: attributeList? modifier* typeIdentifier Identifier arraySignifier?
 	;
 
 //
@@ -208,9 +210,9 @@ switchLabel
 	;
 
 typeIdentifier
-	: BuiltinTypeIdentifier arraySignifier?
+	: Identifier '<' typeIdentifier '>' arraySignifier?
+	| BuiltinTypeIdentifier arraySignifier?
 	| Identifier arraySignifier?
-	| typeIdentifier '<' typeIdentifier '>' arraySignifier?
 	;
 
 ////////////////////
@@ -241,7 +243,7 @@ Ref:		'ref';
 Public:		'public';
 Private:	'private';
 Protected:	'protected';
-Sealed:		'sealed';
+Final:		'final';
 Static:		'static';
 Virtual:	'virtual';
 Abstract:	'abstract';
@@ -259,6 +261,8 @@ Goto:		'goto';
 Switch:		'switch';
 Case:		'case';
 Default:	'default';
+
+Elipsis:	'...';
 
 
 // Literals

@@ -6,18 +6,14 @@ using KismetKompiler.Syntax.Statements.Expressions;
 using KismetKompiler.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Syntax.Statements.Expressions.Unary;
-using Newtonsoft.Json.Linq;
 using System.Data;
 using System.Diagnostics;
-using System.Reflection.Emit;
-using System.Xml.Linq;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.UnrealTypes;
-using UAssetAPI.Unversioned;
 
 namespace KismetKompiler.Compiler;
 
@@ -767,14 +763,20 @@ public partial class KismetScriptCompiler
                 }
                 else
                 {
-                    // TODO improve call detection
-                    if (_context != ContextType.None)
-                    {
-                        var doVirtualCall =
-                            (!_scope.TryGetProcedure(callOperator.Identifier.Text, out var proc)) || // Virtual functions don't need to be explicitly imported, as they do a lookup by name
-                            (proc.Declaration?.IsVirtual ?? false); // Function was explicitly defined as virtual
+                    var functionIsDeclared = _scope.TryGetProcedure(callOperator.Identifier.Text, out var proc);
 
-                        if (doVirtualCall)
+                    if (_context == ContextType.None)
+                    {
+                        // Math functions require no context
+                        return Emit(callOperator, new EX_CallMath()
+                        {
+                            StackNode = GetPackageIndex(callOperator.Identifier),
+                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                        });
+                    }
+                    else if (_context == ContextType.ObjectConst)
+                    {
+                        if (!functionIsDeclared)
                         {
                             return Emit(callOperator, new EX_LocalVirtualFunction()
                             {
@@ -793,12 +795,26 @@ public partial class KismetScriptCompiler
                     }
                     else
                     {
-                        // Math functions require no context
-                        return Emit(callOperator, new EX_CallMath()
+                        var doVirtualCall =
+                            (!functionIsDeclared) || // Virtual functions don't need to be explicitly imported, as they do a lookup by name
+                            (proc.Declaration?.IsVirtual ?? false); // Function was explicitly defined as virtual
+
+                        if (doVirtualCall)
                         {
-                            StackNode = GetPackageIndex(callOperator.Identifier),
-                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                        });
+                            return Emit(callOperator, new EX_LocalVirtualFunction()
+                            {
+                                VirtualFunctionName = GetName(callOperator.Identifier),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else
+                        {
+                            return Emit(callOperator, new EX_FinalFunction()
+                            {
+                                StackNode = GetPackageIndex(callOperator.Identifier),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
                     }
                 }
             }
@@ -920,6 +936,7 @@ public partial class KismetScriptCompiler
     {
         var doVirtualCall =
             (!_scope.TryGetProcedure(callOperator.Identifier.Text, out var proc)) || // Virtual functions don't need to be explicitly imported, as they do a lookup by name
+            (proc.IsExternal) ||
             (proc.Declaration?.IsVirtual ?? false); // Function was explicitly defined as virtual
 
         if (doVirtualCall)
@@ -1057,7 +1074,7 @@ public partial class KismetScriptCompiler
                                 Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
                             });
                         }
-                        else if (proc.Declaration.IsSealed)
+                        else if (proc.Declaration.IsFinal)
                         {
                             return Emit(expression, new EX_LocalFinalFunction()
                             {
@@ -1116,36 +1133,79 @@ public partial class KismetScriptCompiler
                     });
                 }
             }
-            else if (memberExpression.Kind == MemberExpressionKind.Pointer)
-            {
-                // Member access through interface
-                TryGetPropertyPointer(memberExpression.Member, out var pointer);
-                if (pointer == null)
-                    pointer = _rvalue;
+            //else if (memberExpression.Kind == MemberExpressionKind.Pointer)
+            //{
+            //    // Member access through interface
+            //    TryGetPropertyPointer(memberExpression.Member, out var pointer);
+            //    if (pointer == null)
+            //        pointer = _rvalue;
 
-                _context = ContextType.Interface;
-                try
-                {
-                    return Emit(expression, new EX_Context()
-                    {
-                        ObjectExpression = Emit(memberExpression.Context, new EX_InterfaceContext()
-                        {
-                            InterfaceValue = CompileSubExpression(memberExpression.Context)
-                        }).CompiledExpressions.Single(),
-                        ContextExpression = CompileSubExpression(memberExpression.Member),
-                        RValuePointer = pointer ?? new(),
-                    }); ;
-                }
-                finally
-                {
-                    _context = ContextType.None;
-                }
-            }
+            //    _context = ContextType.Interface;
+            //    try
+            //    {
+            //        return Emit(expression, new EX_Context()
+            //        {
+            //            ObjectExpression = Emit(memberExpression.Context, new EX_InterfaceContext()
+            //            {
+            //                InterfaceValue = CompileSubExpression(memberExpression.Context)
+            //            }).CompiledExpressions.Single(),
+            //            ContextExpression = CompileSubExpression(memberExpression.Member),
+            //            RValuePointer = pointer ?? new(),
+            //        }); ;
+            //    }
+            //    finally
+            //    {
+            //        _context = ContextType.None;
+            //    }
+            //}
             else
             {
                 // TODO improve this
-                var isObjectConst = _scope.TryGetExternalSymbol(contextIdentifier.Text, out var symbol);
-                if (isObjectConst)
+                if (_scope.TryGetVariable(contextIdentifier.Text, out var variable))
+                {
+                    if (variable.Declaration.Type.Text == "Interface")
+                    {
+                        // Member access through interface
+                        TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                        if (pointer == null)
+                            pointer = _rvalue;
+
+                        _context = ContextType.Interface;
+                        try
+                        {
+                            return Emit(expression, new EX_Context()
+                            {
+                                ObjectExpression = Emit(memberExpression.Context, new EX_InterfaceContext()
+                                {
+                                    InterfaceValue = CompileSubExpression(memberExpression.Context)
+                                }).CompiledExpressions.Single(),
+                                ContextExpression = CompileSubExpression(memberExpression.Member),
+                                RValuePointer = pointer ?? new(),
+                            }); ;
+                        }
+                        finally
+                        {
+                            _context = ContextType.None;
+                        }
+                    }
+                    else
+                    {
+                        _context = ContextType.Struct;
+                        try
+                        {
+                            return Emit(expression, new EX_StructMemberContext()
+                            {
+                                StructExpression = CompileSubExpression(memberExpression.Context),
+                                StructMemberExpression = GetPropertyPointer(memberExpression.Member)
+                            });
+                        }
+                        finally
+                        {
+                            _context = ContextType.None;
+                        }
+                    }
+                }
+                else if (_scope.TryGetExternalSymbol(contextIdentifier.Text, out var symbol))
                 {
                     // Member access through object const
                     TryGetPropertyPointer(memberExpression.Member, out var pointer);
@@ -1172,19 +1232,7 @@ public partial class KismetScriptCompiler
                 }
                 else
                 {
-                    _context = ContextType.Struct;
-                    try
-                    {
-                        return Emit(expression, new EX_StructMemberContext()
-                        {
-                            StructExpression = CompileSubExpression(memberExpression.Context),
-                            StructMemberExpression = GetPropertyPointer(memberExpression.Member)
-                        });
-                    }
-                    finally
-                    {
-                        _context = ContextType.None;
-                    }
+                    throw new UnexpectedSyntaxError(expression);
                 }
             }
         }
@@ -1324,9 +1372,57 @@ public partial class KismetScriptCompiler
         return GetName(argument.Expression);
     }
 
-    private FScriptText GetScriptText(Argument argument)
+    private FScriptText GetScriptText(IList<Argument> arguments)
     {
-        throw new NotImplementedException();
+        var typeStr = GetString(arguments[0]);
+        var type = System.Enum.Parse<EBlueprintTextLiteralType>(typeStr);
+        switch (type)
+        {
+            case EBlueprintTextLiteralType.Empty:
+                return new FScriptText() { TextLiteralType = type };
+            case EBlueprintTextLiteralType.LocalizedText:
+                {
+                    var localizedSource = CompileSubExpression(arguments[1]);
+                    var localizedKey = CompileSubExpression(arguments[2]);
+                    var localizedNamespace = CompileSubExpression(arguments[3]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        LocalizedSource = localizedSource,
+                        LocalizedKey = localizedKey,
+                        LocalizedNamespace = localizedNamespace
+                    };
+                }
+            case EBlueprintTextLiteralType.InvariantText:
+                {
+                    var invariantLiteralString = CompileSubExpression(arguments[1]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        InvariantLiteralString = invariantLiteralString
+                    };
+                }
+            case EBlueprintTextLiteralType.LiteralString:
+                {
+                    var literalString = CompileSubExpression(arguments[1]);
+                    return new FScriptText() { TextLiteralType = type, InvariantLiteralString = literalString };
+                }
+            case EBlueprintTextLiteralType.StringTableEntry:
+                {
+                    var stringTableAsset = GetPackageIndex(arguments[1]);
+                    var stringTableId = CompileSubExpression(arguments[2]);
+                    var stringTableKey = CompileSubExpression(arguments[3]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        StringTableAsset = stringTableAsset,
+                        StringTableId = stringTableId,
+                        StringTableKey = stringTableKey
+                    };
+                }
+            default:
+                throw new NotImplementedException($"EX_TextConst TextLiteralType {type} not implemented");
+        }
     }
 
     private string GetString(Argument argument)
@@ -1419,6 +1515,10 @@ public partial class KismetScriptCompiler
         if (argument.Expression is FloatLiteral floatLiteral)
         {
             return floatLiteral.Value;
+        }
+        else if (argument.Expression is IntLiteral intLiteral)
+        {
+            return intLiteral.Value;
         }
         else
         {

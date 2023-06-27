@@ -6,6 +6,10 @@ public class TypeIdentifier : Identifier
 
     public ValueKind ValueKind { get; set; }
 
+    public TypeIdentifier? TypeParameter { get; set; }
+
+    public bool IsConstructedType => TypeParameter != null;
+
     public TypeIdentifier() : base(ValueKind.Type)
     {
     }

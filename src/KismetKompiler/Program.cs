@@ -1,10 +1,12 @@
 ﻿using KismetKompiler;
 using KismetKompiler.Compiler;
+using KismetKompiler.Compiler.Exceptions;
 using KismetKompiler.Compiler.Processing;
 using KismetKompiler.Decompiler;
 using KismetKompiler.Parser;
 using Newtonsoft.Json;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
@@ -12,9 +14,14 @@ using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 
 Console.OutputEncoding = Encoding.Unicode;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+
 var path = args.FirstOrDefault(
     //@"C:\Users\cweer\Documents\Unreal Projects\MyProject\Saved\Cooked\WindowsNoEditor\MyProject\Content\FirstPersonBP\Blueprints\FirstPersonCharacter.uasset");
-    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e028.uasset");
+    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e006.uasset");
 //var ver = EngineVersion.VER_UE4_27;
 var ver = EngineVersion.VER_UE4_23;
 if (!File.Exists(path))
@@ -23,8 +30,9 @@ if (!File.Exists(path))
     return;
 }
 
-DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy", EngineVersion.VER_UE4_23);
-//DecompileOne(path);
+//CompileClass(new() { Exports = new() }, "Test_NoViableAltException.kms");
+DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints", EngineVersion.VER_UE4_23, true);
+DecompileOne(path);
 
 Console.ReadKey();
 
@@ -53,28 +61,53 @@ static void DecompileOne(string path)
 
 }
 
-static void DecompileFolder(string folderPath, EngineVersion version)
+static void DecompileFolder(string folderPath, EngineVersion version, bool throwOnException)
 {
-    foreach (var path in Directory.EnumerateFiles(folderPath, "*.uasset", SearchOption.AllDirectories))
+    static void Decompile(string path, EngineVersion version)
     {
-        //var asset = new UAsset(path, version);
-        //var kmsPath = Path.ChangeExtension(path, ".kms");
-        //DumpOld(asset);
-        //DecompileClass(asset, kmsPath);
-        //var script = CompileClass(asset, kmsPath);
-        //DumpOldAndNew(path, asset, script);
+        var asset = new UAsset(path, version);
+        if (asset.GetClassExport() == null)
+            return;
+        var kmsPath = Path.ChangeExtension(path, ".kms");
+        DumpOld(asset);
+        DecompileClass(asset, kmsPath);
+        if (string.IsNullOrWhiteSpace(File.ReadAllText(kmsPath)))
+            return;
         try
         {
-            var asset = new UAsset(path, version);
-            var kmsPath = Path.ChangeExtension(path, ".kms");
-            DumpOld(asset);
-            DecompileClass(asset, kmsPath);
             var script = CompileClass(asset, kmsPath);
             DumpOldAndNew(path, asset, script);
+            Console.WriteLine($"Success: {path}");
         }
-        catch (Exception ex)
+        catch (UnexpectedSyntaxError ex)
         {
-            Console.WriteLine($"Failed: {Path.GetFileName(path)}");
+            // TODO
+        }
+        catch (RedefinitionError ex)
+        {
+            // TODO
+        }
+        catch (KeyNotFoundException exx)
+        {
+            // TODO 
+        }
+    }
+
+    foreach (var path in Directory.EnumerateFiles(folderPath, "*.uasset", SearchOption.AllDirectories))
+    {
+        if (throwOnException)
+            Decompile(path, version);
+        else
+        {
+            try
+            {
+                Decompile(path, version);
+            }
+            catch (Exception ex)
+            {
+               // Console.WriteLine($"Crash: {path}");
+                Console.WriteLine($"Failed: {Path.GetFileName(path)} {ex}");
+            }
         }
     }
 }
@@ -138,5 +171,5 @@ static void DumpOldAndNew(string fileName, UAsset asset, KismetScript script)
     File.WriteAllText($"new.json", newJsonText);
 
     if (oldJsonText != newJsonText)
-        Console.WriteLine($"Failed: {Path.GetFileName(fileName)}");
+        Console.WriteLine($"Verification failed: {fileName}");
 }

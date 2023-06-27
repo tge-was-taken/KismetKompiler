@@ -1,6 +1,9 @@
 ﻿using System.Diagnostics;
+using System.Text.RegularExpressions;
+using Antlr4.Runtime;
 using KismetKompiler.Decompiler.Context;
 using KismetKompiler.Decompiler.Passes;
+using KismetKompiler.Parser;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -46,12 +49,14 @@ public partial class KismetDecompiler
     {
         _asset = asset;
         _class = _asset.GetClassExport();
+        if (_class != null)
+        {
+            _writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
+            _writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
 
-        _writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
-        _writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
-
-        WriteImports();
-        WriteClass();
+            WriteImports();
+            WriteClass();
+        }
     }
 
     private void WriteClass()
@@ -112,7 +117,7 @@ public partial class KismetDecompiler
                 if (children.Any())
                 {
                     var objectName = import.ClassName.ToString() == "Package" ?
-                        $"\"{import.ObjectName}\"" :
+                        $"{FormatString(import.ObjectName.ToString())}" :
                         import.ObjectName.ToString();
 
                     if (import.OuterIndex.Index == 0)
@@ -129,19 +134,19 @@ public partial class KismetDecompiler
                         {
                             if (isClass)
                             {
-                                _writer.WriteLine($"class {objectName} : {GetDecompiledTypeName(import)} {{");
+                                _writer.WriteLine($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
                             }
                             else
                             {
-                                _writer.WriteLine($"struct {objectName} : {GetDecompiledTypeName(import)} {{");
+                                _writer.WriteLine($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
                             }
                         }
                         else
                         {
                             if (isClass)
-                                _writer.WriteLine($"class {objectName} {{");
+                                _writer.WriteLine($"class {FormatIdentifier(objectName)} {{");
                             else
-                                _writer.WriteLine($"struct {objectName} {{");
+                                _writer.WriteLine($"struct {FormatIdentifier(objectName)} {{");
                         }
                     }
 
@@ -157,11 +162,11 @@ public partial class KismetDecompiler
                 {
                     if (import.ClassName.ToString() == "Function")
                     {
-                        _writer.WriteLine($"public Any {import.ObjectName}(...);");
+                        _writer.WriteLine($"public Any {FormatIdentifier(import.ObjectName.ToString())}(...);");
                     }
                     else
                     {
-                        _writer.WriteLine($"{GetDecompiledTypeName(import)} {import.ObjectName};");
+                        _writer.WriteLine($"{(GetDecompiledTypeName(import))} {FormatIdentifier(import.ObjectName.ToString())};");
                     }
                 }
             }
@@ -216,9 +221,7 @@ public partial class KismetDecompiler
 
         var functionModifiers = functionFlags.Where(x => functionModifierFlags.Contains(x))
             .Select(x => x.ToString().Replace("FUNC_", "").ToLower())
-            .Select(x => x == "final" ? "sealed" : x).ToList();
-        if (!functionModifiers.Contains("sealed"))
-            functionModifiers.Add("virtual");
+            .ToList();
 
         var functionAttributes = functionFlags
                 .Except(functionModifierFlags)
@@ -254,7 +257,7 @@ public partial class KismetDecompiler
         {
             _writer.WriteLine($"[{functionAttributeText}]");
         }
-        var functionDeclaration = $"void {GetSafeName(function.ObjectName.ToString())}({functionParameterText}) {{";
+        var functionDeclaration = $"void {FormatIdentifier(function.ObjectName.ToString())}({functionParameterText}) {{";
         var functionModifierText = string.Join(" ", functionModifiers);
         if (!string.IsNullOrWhiteSpace(functionModifierText))
         {
@@ -474,26 +477,24 @@ public partial class KismetDecompiler
         {
             case "Package":
                 return "package";
+            case "FloatProperty":
+                return "float";
             case "IntProperty":
                 return "int";
             case "StrProperty":
                 return "string";
-            case "InterfaceProperty":
-                return "Interface";
-            case "StructProperty":
-                return "Struct";
             case "BoolProperty":
                 return "bool";
             case "ByteProperty":
                 return "byte";
-            case "ArrayProperty":
-                return "Array";
             case "Class":
                 return "class";
-            case "Function":
-                return "Function";
             default:
-                return classType;
+                if (classType != "Property" &&
+                    classType.EndsWith("Property"))
+                    return FormatIdentifier(classType.Substring(0, classType.IndexOf("Property")));
+
+                return FormatIdentifier(classType);
         }
     }
 
@@ -506,6 +507,8 @@ public partial class KismetDecompiler
                 return "int";
             case "StrProperty":
                 return "string";
+            case "FloatProperty":
+                return "float";
             case "InterfaceProperty":
                 {
                     var interfaceName = _asset.GetName(((UInterfaceProperty)prop.Property).InterfaceClass);
@@ -522,10 +525,23 @@ public partial class KismetDecompiler
                 return "byte";
             case "ArrayProperty":
                 {
-                    var innerProp = (PropertyExport)((UArrayProperty)prop.Property).Inner.ToExport(_asset);
-                    return $"{GetDecompiledType(innerProp)}[]";
+                    var export = ((UArrayProperty)prop.Property).Inner.ToExport(_asset);
+                    if (export is PropertyExport propertyExport)
+                    {
+                        var innerProp = (PropertyExport)export;
+                        return $"{GetDecompiledType(innerProp)}[]";
+                    }
+                    else
+                    {
+                        // TODO
+                        return $"Array";
+                    }
                 }
             default:
+                if (classType != "Property" &&
+                    classType.EndsWith("Property"))
+                    return classType.Substring(0, classType.IndexOf("Property"));
+
                 return classType;
         }
     }
@@ -558,13 +574,20 @@ public partial class KismetDecompiler
         }
     }
 
-    private string GetSafeName(string name)
+    private string FormatIdentifier(string name, bool allowKeywords = false)
     {
-        if (name.Contains(" "))
-        {
+        if (!IdentifierRegex().IsMatch(name) ||
+            (!allowKeywords && KismetScriptParser.IsKeyword(name)))
             return $"``{name}``";
-        }
+
         return name;
+    }
+
+    private string FormatString(string value)
+    {
+        if (value.Contains("\\"))
+            value = value.Replace("\\", "\\\\");
+        return $"\"{value}\"";
     }
 
     private string GetDecompiledPropertyText(PropertyExport prop)
@@ -588,18 +611,18 @@ public partial class KismetDecompiler
                 .ToList();
 
 
-        if (!prop.Property.PropertyFlags.HasFlag(EPropertyFlags.CPF_Parm))
-        {
-            if (modifiers.Contains("ref"))
-            {
-                modifiers.Remove("ref");
-                attributes.Add("Ref");
-            }
-        }
+        //if (!prop.Property.PropertyFlags.HasFlag(EPropertyFlags.CPF_Parm))
+        //{
+        //    if (modifiers.Contains("ref"))
+        //    {
+        //        modifiers.Remove("ref");
+        //        attributes.Add("Ref");
+        //    }
+        //}
 
         var modifierText = string.Join(" ", modifiers).Trim();
         var attributeText = string.Join(", ", attributes).Trim();
-        var nameText = $"{GetDecompiledType(prop)} {GetSafeName(prop.ObjectName.ToString())}";
+        var nameText = $"{GetDecompiledType(prop)} {FormatIdentifier(prop.ObjectName.ToString())}";
 
         if (!string.IsNullOrWhiteSpace(attributeText))
             attributeText = $"[{attributeText}]";
@@ -741,5 +764,7 @@ public partial class KismetDecompiler
             _asset.GetName(index);
     }
 
-    private string FormatCodeOffset(uint codeOffset) => $"{_function.ObjectName}_{codeOffset}";
+    private string FormatCodeOffset(uint codeOffset) => FormatIdentifier($"{_function.ObjectName}_{codeOffset}");
+    [GeneratedRegex("^[A-Za-z_][A-Za-z_\\d]*$")]
+    private static partial Regex IdentifierRegex();
 }

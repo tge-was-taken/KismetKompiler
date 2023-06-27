@@ -606,13 +606,16 @@ public class KismetScriptASTParser
         // Parse modifier(s)
         if (TryGet(context, context.modifier, out var variableModifierContext))
         {
-            if (!TryParseVariableModifier(variableModifierContext, out var modifier))
+            foreach (var modifierContext in variableModifierContext)
             {
-                LogError(variableModifierContext, "Failed to parse variable modifier");
-                return false;
-            }
+                if (!Enum.TryParse<VariableModifier>(modifierContext.GetText(), true, out var modValue))
+                {
+                    LogError(modifierContext, $"Invalid variable modifier: {modifierContext.GetText()}");
+                    return false;
+                }
 
-            variableDeclaration.Modifier = modifier;
+                variableDeclaration.Modifiers |= modValue;
+            }
         }
 
         // Parse type identifier
@@ -674,27 +677,6 @@ public class KismetScriptASTParser
         //}
 
         LogTrace($"Done parsing variable declaration: {variableDeclaration}");
-        return true;
-    }
-
-    private bool TryParseVariableModifier(KismetScriptParser.ModifierContext context, out VariableModifier modifier)
-    {
-        if (TryGet(context, context.Const, out var constNode))
-        {
-            modifier = CreateAstNode<VariableModifier>(constNode);
-            modifier.Kind = VariableModifierKind.Constant;
-        }
-        else
-        {
-            LogError(context, "Invalid variable modifier");
-            modifier = null;
-            return false;
-        }
-
-        if (!TryParseVariableModifierIndex(context, modifier))
-            return false;
-
-        LogTrace($"Parsed variable modifier: {modifier}");
         return true;
     }
 
@@ -1649,24 +1631,27 @@ public class KismetScriptASTParser
             parameter.Attributes.AddRange(attributes);
         }
 
-        if (context.modifier() != null)
+        if (context.modifier()?.Length > 0)
         {
-            var modifier = context.modifier().GetText();
-            switch (modifier)
+            foreach (var modifierContext in context.modifier())
             {
-                case "out":
-                    parameter.Modifier = ParameterModifier.Out;
-                    break;
-                case "ref":
-                    parameter.Modifier = ParameterModifier.Ref;
-                    break;
-                case "const":
-                    parameter.Modifier = ParameterModifier.Const;
-                    break;
+                var modifier = modifierContext.GetText();
+                switch (modifier)
+                {
+                    case "out":
+                        parameter.Modifier |= ParameterModifier.Out;
+                        break;
+                    case "ref":
+                        parameter.Modifier |= ParameterModifier.Ref;
+                        break;
+                    case "const":
+                        parameter.Modifier |= ParameterModifier.Const;
+                        break;
 
-                default:
-                    LogError(context.modifier(), "Invalid parameter modifier");
-                    return false;
+                    default:
+                        LogError(modifierContext, "Invalid parameter modifier");
+                        return false;
+                }
             }
         }
 
@@ -1748,7 +1733,18 @@ public class KismetScriptASTParser
     private bool TryParseTypeIdentifier(KismetScriptParser.TypeIdentifierContext node, out TypeIdentifier identifier)
     {
         identifier = CreateAstNode<TypeIdentifier>(node);
-        identifier.Text = node.GetText();
+        if (node.typeIdentifier() != null)
+        {
+            // Constructed type
+            identifier.Text = node.Identifier().GetText();
+            if (!TryParseTypeIdentifier(node.typeIdentifier(), out var typeParam))
+                return false;
+            identifier.TypeParameter = typeParam;
+        }
+        else
+        {
+            identifier.Text = node.GetText();
+        }
 
         if (!Enum.TryParse<ValueKind>(identifier.Text, true, out var primitiveType))
         {
@@ -2165,7 +2161,7 @@ public class KismetScriptASTParser
         mLogger.Error($"({context.Start.Line:D4}:{context.Start.Column:D4}) {str}");
 
         if (Debugger.IsAttached)
-            Debugger.Break();
+            throw new Exception();
     }
 
     private void LogError(IToken token, string message)

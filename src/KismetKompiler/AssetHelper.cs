@@ -164,6 +164,8 @@ public static class AssetHelper
         var parent = asset.Imports.Where(x => x.ObjectName == import.ClassName).FirstOrDefault();
         if (parent == null)
             return false;
+        if (parent == import)
+            return true;
         return asset.ImportInheritsType(parent, type);
     }
 }

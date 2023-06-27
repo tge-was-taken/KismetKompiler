@@ -179,7 +179,7 @@ public partial class KismetScriptCompiler
             case EExprToken.EX_TextConst:
                 return new CompiledExpressionContext(callOperator, offset, new EX_TextConst()
                 {
-                    Value = GetScriptText(callOperator.Arguments[0]),
+                    Value = GetScriptText(callOperator.Arguments),
                 });
             case EExprToken.EX_NoObject:
                 return new CompiledExpressionContext(callOperator, offset, new EX_NoObject());

@@ -160,7 +160,6 @@ public abstract class SyntaxNodeVisitor
 
     public virtual void Visit(VariableDeclaration variableDeclaration)
     {
-        Visit(variableDeclaration.Modifier);
         Visit(variableDeclaration.Type);
         Visit(variableDeclaration.Identifier);
         if (variableDeclaration.Initializer != null)

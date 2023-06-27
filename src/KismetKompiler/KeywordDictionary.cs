@@ -15,11 +15,10 @@ public static class KeywordDictionary
 
     public static Dictionary<string, ValueKind> KeywordToValueType { get; } = ValueTypeToKeyword.Reverse();
 
-    public static Dictionary<VariableModifierKind, string> ModifierTypeToKeyword { get; } = new Dictionary<VariableModifierKind, string>
+    public static Dictionary<VariableModifier, string> ModifierTypeToKeyword { get; } = new Dictionary<VariableModifier, string>
     {
-        { VariableModifierKind.Global, "global" },
-        { VariableModifierKind.Constant, "const" },
+        { VariableModifier.Const, "const" },
     };
 
-    public static Dictionary<string, VariableModifierKind> KeywordToModifierType { get; } = ModifierTypeToKeyword.Reverse();
+    public static Dictionary<string, VariableModifier> KeywordToModifierType { get; } = ModifierTypeToKeyword.Reverse();
 }

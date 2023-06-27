@@ -31,8 +31,8 @@ public static class KismetScriptParserHelper
         // parser
         var parser = new KismetScriptParser(tokenStream);
         parser.BuildParseTree = true;
-        //parser.ErrorHandler = new BailErrorStrategy();
-        parser.ErrorHandler = new DefaultErrorStrategy();
+        parser.ErrorHandler = new BailErrorStrategy();
+        //parser.ErrorHandler = new DefaultErrorStrategy();
 
         if (errorListener != null)
         {

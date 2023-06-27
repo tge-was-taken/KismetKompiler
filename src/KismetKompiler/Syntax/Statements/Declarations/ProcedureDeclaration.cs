@@ -14,7 +14,7 @@ public enum ProcedureModifier
 {
     Public = 1 << 0,
     Private = 1 << 1,
-    Sealed = 1 << 2,
+    Final = 1 << 2,
     Virtual = 1 << 3,
     Protected = 1 << 4,
     Static = 1 << 5,
@@ -28,8 +28,8 @@ public class ProcedureDeclaration : Declaration, IBlockStatement
 
     public bool IsPublic => Modifiers.HasFlag(ProcedureModifier.Public);
     public bool IsPrivate => Modifiers.HasFlag(ProcedureModifier.Private);
-    public bool IsSealed => Modifiers.HasFlag(ProcedureModifier.Sealed);
-    public bool IsVirtual => Modifiers.HasFlag(ProcedureModifier.Virtual);
+    public bool IsFinal => Modifiers.HasFlag(ProcedureModifier.Final);
+    public bool IsVirtual => !IsFinal || IsStatic;
     public bool IsOverride => IsVirtual; // TODO
     public bool IsProtected => Modifiers.HasFlag(ProcedureModifier.Protected);
     public bool IsStatic => Modifiers.HasFlag(ProcedureModifier.Static);

@@ -13,12 +13,12 @@ namespace KismetKompiler.Decompiler
             switch (kismetExpression)
             {
                 case EX_LocalVariable expr:
-                    return GetSafeName(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
+                    return FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
                 case EX_InstanceVariable expr:
                     {
                         //var context = _context == null ? "this" : _context;
                         var context = "this";
-                        return $"{context}.{GetSafeName(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames))}";
+                        return $"{context}.{FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames))}";
                     }
 
                 case EX_Return expr:
@@ -54,14 +54,13 @@ namespace KismetKompiler.Decompiler
                 case EX_Let expr:
                     {
                         var type = GetExpressionType(expr.Expression) ?? "var";
-                        var val = _asset.GetPropertyName(expr.Value, _useFullPropertyNames);
+                        var val = FormatIdentifier(_asset.GetPropertyName(expr.Value, _useFullPropertyNames));
                         var var = FormatExpressionVerbose(expr.Variable);
                         var ex = FormatExpressionVerbose(expr.Expression);
                         var varExists = !_functionState.DeclaredVariables.Add(var) ||
                             var.Contains(".");
 
                         return $"{var} = {ex}";
-                        //return $"EX_Let(\"{val}\", {var},{ex})";
                     }
                 case EX_LetBool expr:
                     {
@@ -108,21 +107,21 @@ namespace KismetKompiler.Decompiler
                 case EX_FloatConst expr:
                     return $"{expr.Value}f";
                 case EX_StringConst expr:
-                    return $"\"{expr.Value}\"";
+                    return $"{FormatString(expr.Value)}";
                 case EX_ByteConst expr:
                     return $"(byte)({expr.Value})";
                 case EX_UnicodeStringConst expr:
-                    return $"\"{expr.Value}\"";
+                    return $"{FormatString(expr.Value)}";
                 case EX_LocalVirtualFunction expr:
                     {
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpressionVerbose(x)));
                         var context = _context == null ? "this" : _context.Expression;
-                        var op = _context?.Type == ContextType.Interface ? "->" : ".";
+                        var op = _context?.Type == ContextType.Interface ? "." : ".";
 
                         if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}{op}{GetSafeName(expr.VirtualFunctionName.ToString())}()";
+                            return $"{context}{op}{FormatIdentifier(expr.VirtualFunctionName.ToString())}()";
                         else
-                            return $"{context}{op}{GetSafeName(expr.VirtualFunctionName.ToString())}({parameters})";
+                            return $"{context}{op}{FormatIdentifier(expr.VirtualFunctionName.ToString())}({parameters})";
                     }
                 case EX_ComputedJump expr:
                     return $"goto {FormatExpressionVerbose(expr.CodeOffsetExpression)}";
@@ -132,7 +131,7 @@ namespace KismetKompiler.Decompiler
                     return $"";
                 case EX_CallMath expr:
                     {
-                        var functionName = GetSafeName(GetFunctionName(expr.StackNode));
+                        var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpressionVerbose(x)));
                         if (string.IsNullOrWhiteSpace(parameters))
                             return $"{functionName}()";
@@ -141,20 +140,20 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_LocalFinalFunction expr:
                     {
-                        var functionName = GetSafeName(GetFunctionName(expr.StackNode));
-                        var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName)
+                        var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
+                        var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
                         .FirstOrDefault();
 
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpressionVerbose(x)));
                         var context = _context == null ? "this" : _context.Expression;
-                        var op = _context?.Type == ContextType.Interface ? "->" : ".";
+                        var op = _context?.Type == ContextType.Interface ? "." : ".";
 
                         if (function != null &&
                             function.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction) &&
                             expr.Parameters.Length == 1 &&
                             expr.Parameters[0] is EX_IntConst firstParamInt)
                         {
-                            return $"{context}{op}{functionName}({GetSafeName(function.ObjectName.ToString())}_{((uint)firstParamInt.Value)})";
+                            return $"{context}{op}{functionName}({FormatIdentifier(function.ObjectName.ToString())}_{((uint)firstParamInt.Value)})";
                         }
                         else
                         {
@@ -168,27 +167,27 @@ namespace KismetKompiler.Decompiler
                     {
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpressionVerbose(x)));
                         var context = _context == null ? "this" : _context.Expression;
-                        var op = _context?.Type == ContextType.Interface ? "->" : ".";
+                        var op = _context?.Type == ContextType.Interface ? "." : ".";
 
                         if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}{op}{GetSafeName(GetFunctionName(expr.StackNode))}()";
+                            return $"{context}{op}{FormatIdentifier(GetFunctionName(expr.StackNode))}()";
                         else
-                            return $"{context}{op}{GetSafeName(GetFunctionName(expr.StackNode))}({parameters})";
+                            return $"{context}{op}{FormatIdentifier(GetFunctionName(expr.StackNode))}({parameters})";
                     }
                 case EX_VirtualFunction expr:
                     {
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpressionVerbose(x)));
                         var context = _context == null ? "this" : _context.Expression;
-                        var op = _context?.Type == ContextType.Interface ? "->" : ".";
+                        var op = _context?.Type == ContextType.Interface ? "." : ".";
 
                         if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}{op}EX_VirtualFunction(\"{expr.VirtualFunctionName}\")";
+                            return $"{context}{op}EX_VirtualFunction({FormatString(expr.VirtualFunctionName.ToString())})";
                         else
-                            return $"{context}{op}EX_VirtualFunction({string.Join(", ", $"\"{expr.VirtualFunctionName}\"", parameters)})";
+                            return $"{context}{op}EX_VirtualFunction({string.Join(", ", $"{FormatString(expr.VirtualFunctionName.ToString())}", parameters)})";
                     }
                 case EX_LocalOutVariable expr:
                     {
-                        return GetSafeName(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
+                        return FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
                     }
                 case EX_True expr:
                     return "true";
@@ -199,12 +198,12 @@ namespace KismetKompiler.Decompiler
                 case EX_StructMemberContext expr:
                     {
                         var @struct = FormatExpressionVerbose(expr.StructExpression);
-                        var prop = GetSafeName(_asset.GetPropertyName(expr.StructMemberExpression, _useFullPropertyNames));
+                        var prop = FormatIdentifier(_asset.GetPropertyName(expr.StructMemberExpression, _useFullPropertyNames));
                         return $"{@struct}.{prop}";
                     }
                 case EX_ObjectConst expr:
                     {
-                        var obj = GetSafeName(_asset.GetName(expr.Value));
+                        var obj = FormatIdentifier(_asset.GetName(expr.Value));
                         return obj;
                     }
                 case EX_PushExecutionFlow expr:
@@ -271,21 +270,168 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_NoObject expr:
                     {
-                        return $"null";
+                        return $"EX_NoObject()";
                     }
                 case EX_LetValueOnPersistentFrame expr:
                     {
-                        var prop = _asset.GetPropertyName(expr.DestinationProperty, _useFullPropertyNames);
+                        var prop = FormatIdentifier(_asset.GetPropertyName(expr.DestinationProperty, _useFullPropertyNames));
                         var assignment = FormatExpressionVerbose(expr.AssignmentExpression);
-                        return $"EX_LetValueOnPersistentFrame(\"{prop}\", {assignment})";
+                        return $"EX_LetValueOnPersistentFrame({FormatString(prop)}, {assignment})";
                     }
                 case EX_NameConst expr:
                     {
-                        return $"EX_NameConst(\"{expr.Value}\")";
+                        return $"EX_NameConst({FormatString(expr.Value.ToString())})";
                     }
                 case EX_ArrayGetByRef expr:
                     {
                         return $"EX_ArrayGetByRef({FormatExpressionVerbose(expr.ArrayVariable)}, {FormatExpressionVerbose(expr.ArrayIndex)})";
+                    }
+                case EX_StructConst expr:
+                    {
+                        var structName = FormatIdentifier(_asset.GetName(expr.Struct));
+                        if (expr.Value?.Length > 0)
+                        {
+                            var members = string.Join(", ", expr.Value.Select(x => FormatExpressionVerbose(x)));
+                            return $"EX_StructConst({structName}, {expr.StructSize}, {members})";
+                        }
+                        else
+                        {
+                            return $"EX_StructConst({structName}, {expr.StructSize})";
+                        }
+                            
+                    }
+                case EX_ObjToInterfaceCast expr:
+                    {
+                        var classPtr = _asset.GetName(expr.ClassPtr);
+                        var target = FormatExpressionVerbose(expr.Target);
+                        return $"EX_ObjToInterfaceCast({FormatString(classPtr)}, {target})";
+                    }
+                case EX_PrimitiveCast expr:
+                    {
+                        var castType = expr.ConversionType.ToString();
+                        var target = FormatExpressionVerbose(expr.Target);
+                        return $"EX_PrimitiveCast({FormatString(castType)}, {target})";
+                    }
+                case EX_SkipOffsetConst expr:
+                    {
+                        var target = FormatCodeOffset(expr.Value);
+                        return $"EX_SkipOffsetConst({target})";
+                    }
+                case EX_BindDelegate expr:
+                    {
+                        var name = expr.FunctionName.ToString();
+                        var delegat = FormatExpressionVerbose(expr.Delegate);
+                        var objectTerm = FormatExpressionVerbose(expr.ObjectTerm);
+                        return $"EX_BindDelegate({FormatString(name)}, {delegat}, {objectTerm})";
+                    }
+                case EX_NoInterface expr:
+                    {
+                        return $"EX_NoInterface()";
+                    }
+                case EX_SoftObjectConst expr:
+                    {
+                        var val = FormatExpressionVerbose(expr.Value);
+                        return $"EX_SoftObjectConst({val})";
+                    }
+                case EX_MetaCast expr:
+                    {
+                        var classPtr = _asset.GetName(expr.ClassPtr);
+                        var target = FormatExpressionVerbose(expr.TargetExpression);
+                        return $"EX_MetaCast({FormatString(classPtr)}, {target})";
+                    }
+                case EX_DynamicCast expr:
+                    {
+                        var classPtr = _asset.GetName(expr.ClassPtr);
+                        var target = FormatExpressionVerbose(expr.TargetExpression);
+                        return $"EX_DynamicCast({FormatString(classPtr)}, {target})";
+                    }
+                case EX_AddMulticastDelegate expr:
+                    {
+                        var delegat = FormatExpressionVerbose(expr.Delegate);
+                        var delegateToAdd = FormatExpressionVerbose(expr.DelegateToAdd);
+                        return $"EX_AddMulticastDelegate({delegat}, {delegateToAdd})";
+                    }
+                case EX_ArrayConst expr:
+                    {
+                        var innerProperty = FormatIdentifier(_asset.GetPropertyName(expr.InnerProperty, _useFullPropertyNames));
+                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpressionVerbose(x)));
+                        if (!string.IsNullOrWhiteSpace(elements))
+                        {
+                            return $"EX_ArrayConst({innerProperty}, {elements})";
+                        }
+                        else
+                        {
+                            return $"EX_ArrayConst({innerProperty})";
+                        }
+                    }
+                case EX_TransformConst expr:
+                    {
+                        var @params = 
+                            $"{expr.Value.Rotation.X}, {expr.Value.Rotation.Y}, {expr.Value.Rotation.Z}, {expr.Value.Rotation.W}, " +
+                            $"{expr.Value.Translation.X}, {expr.Value.Translation.Y}, {expr.Value.Translation.Z}, " +
+                            $"{expr.Value.Scale3D.X}, {expr.Value.Scale3D.Y}, {expr.Value.Scale3D.Z}";
+                        return $"EX_TransformConst({@params})";
+                    }
+                case EX_ClearMulticastDelegate expr:
+                    {
+                        var delegateToClear = FormatExpressionVerbose(expr.DelegateToClear);
+                        return $"EX_ClearMulticastDelegate({delegateToClear})";
+                    }
+                case EX_TextConst expr:
+                    {
+                        var type = FormatString(expr.Value.TextLiteralType.ToString());
+                        switch (expr.Value.TextLiteralType)
+                        {
+                            case EBlueprintTextLiteralType.Empty:
+                                return $"EX_TextConst({type})";
+                            case EBlueprintTextLiteralType.LocalizedText:
+                                {
+                                    var localizedSource = FormatExpressionVerbose(expr.Value.LocalizedSource);
+                                    var localizedKey = FormatExpressionVerbose(expr.Value.LocalizedKey);
+                                    var localizedNamespace = FormatExpressionVerbose(expr.Value.LocalizedNamespace);
+                                    return $"EX_TextConst({type}, {localizedSource}, {localizedKey}, {localizedNamespace})";
+                                }
+                            case EBlueprintTextLiteralType.InvariantText:
+                                {
+                                    var invariantLiteralString = FormatExpressionVerbose(expr.Value.InvariantLiteralString);
+                                    return $"EX_TextConst({type}, {invariantLiteralString})";
+                                }
+                            case EBlueprintTextLiteralType.LiteralString:
+                                {
+                                    var literalString = FormatExpressionVerbose(expr.Value.LiteralString);
+                                    return $"EX_TextConst({type}, {literalString})";
+                                }
+                            case EBlueprintTextLiteralType.StringTableEntry:
+                                {
+                                    var stringTableAsset = _asset.GetName(expr.Value.StringTableAsset);
+                                    var stringTableId = FormatExpressionVerbose(expr.Value.StringTableId);
+                                    var stringTableKey = FormatExpressionVerbose(expr.Value.StringTableKey);
+                                    return $"EX_TextConst({type}, {stringTableAsset}, {stringTableId}, {stringTableKey})";
+                                }
+                            default:
+                                throw new NotImplementedException($"EX_TextConst TextLiteralType {expr.Value.TextLiteralType} not implemented");
+                        }
+                    }
+                case EX_RemoveMulticastDelegate expr:
+                    {
+                        var delegat = FormatExpressionVerbose(expr.Delegate);
+                        var delegateToAdd = FormatExpressionVerbose(expr.DelegateToAdd);
+                        return $"EX_RemoveMulticastDelegate({delegat}, {delegateToAdd})";
+                    }
+                case EX_InterfaceToObjCast expr:
+                    {
+                        var classPtr = _asset.GetName(expr.ClassPtr);
+                        var target = FormatExpressionVerbose(expr.Target);
+                        return $"EX_InterfaceToObjCast({FormatString(classPtr)}, {target})";
+                    }
+                case EX_SetMap expr:
+                    {
+                        var prop = FormatExpressionVerbose(expr.MapProperty);
+                        var elems = string.Join(", ", expr.Elements.Select(x => FormatExpressionVerbose(x)));
+                        if (!string.IsNullOrWhiteSpace(elems))
+                            return $"EX_SetMap({prop}, {elems})";
+                        else
+                            return $"EX_SetMap()";
                     }
                 default:
                     throw new NotImplementedException(kismetExpression.Inst);

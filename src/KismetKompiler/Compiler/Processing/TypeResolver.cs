@@ -390,7 +390,7 @@ public class TypeResolver
         foreach (var parameter in declaration.Parameters)
         {
             var parameterDeclaration = new VariableDeclaration(
-                new VariableModifier(VariableModifierKind.Local),
+                VariableModifier.Local,
                 parameter.Type,
                 parameter.Identifier,
                 null);

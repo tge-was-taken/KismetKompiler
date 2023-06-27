@@ -9,7 +9,7 @@ public class VariableDeclaration : Declaration
 {
     public List<Attribute> Attributes { get; init; } = new();
 
-    public VariableModifier Modifier { get; set; }
+    public VariableModifier Modifiers { get; set; }
 
     public TypeIdentifier Type { get; set; }
 
@@ -17,15 +17,12 @@ public class VariableDeclaration : Declaration
 
     public virtual bool IsArray => false;
 
-    public VariableDeclaration() : base(DeclarationType.Variable)
-    {
-        Modifier = new VariableModifier();
-    }
+    public VariableDeclaration() : base(DeclarationType.Variable) { }
 
     public VariableDeclaration(VariableModifier modifier, TypeIdentifier type, Identifier identifier, Expression initializer)
         : base(DeclarationType.Variable, identifier)
     {
-        Modifier = modifier;
+        Modifiers = modifier;
         Type = type;
         Initializer = initializer;
     }
@@ -34,7 +31,7 @@ public class VariableDeclaration : Declaration
     {
         var builder = new StringBuilder();
 
-        builder.Append($"{Modifier} ");
+        builder.Append($"{Modifiers} ");
 
         builder.Append($"{Type} {Identifier}");
         if (Initializer != null)
@@ -66,7 +63,7 @@ public class ArrayVariableDeclaration : VariableDeclaration
     {
         var builder = new StringBuilder();
 
-        builder.Append($"{Modifier} ");
+        builder.Append($"{Modifiers} ");
 
         builder.Append($"{Type} {Identifier}[{Size}]");
         if (Initializer != null)
