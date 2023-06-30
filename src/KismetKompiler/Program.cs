@@ -1,4 +1,6 @@
-﻿using KismetKompiler;
+﻿using Antlr4.Runtime;
+using Antlr4.Runtime.Misc;
+using KismetKompiler;
 using KismetKompiler.Compiler;
 using KismetKompiler.Compiler.Exceptions;
 using KismetKompiler.Compiler.Processing;
@@ -10,6 +12,7 @@ using System.Globalization;
 using System.Text;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
+using UAssetAPI.IO;
 using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 
@@ -31,7 +34,8 @@ if (!File.Exists(path))
 }
 
 //CompileClass(new() { Exports = new() }, "Test_NoViableAltException.kms");
-DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints", EngineVersion.VER_UE4_23, true);
+DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints", EngineVersion.VER_UE4_23, false, true);
+//DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
 DecompileOne(path);
 
 Console.ReadKey();
@@ -61,47 +65,82 @@ static void DecompileOne(string path)
 
 }
 
-static void DecompileFolder(string folderPath, EngineVersion version, bool throwOnException)
+static void DecompileFolder(string folderPath, EngineVersion version, bool useZen, bool throwOnException)
 {
-    static void Decompile(string path, EngineVersion version)
+    static void Decompile(string path, EngineVersion version, bool useZen)
     {
-        var asset = new UAsset(path, version);
-        if (asset.GetClassExport() == null)
-            return;
-        var kmsPath = Path.ChangeExtension(path, ".kms");
-        DumpOld(asset);
-        DecompileClass(asset, kmsPath);
-        if (string.IsNullOrWhiteSpace(File.ReadAllText(kmsPath)))
-            return;
-        try
+        if (!useZen)
         {
-            var script = CompileClass(asset, kmsPath);
-            DumpOldAndNew(path, asset, script);
-            Console.WriteLine($"Success: {path}");
+            var asset = new UAsset(path, version);
+            if (asset.GetClassExport() == null)
+                return;
+            var kmsPath = Path.ChangeExtension(path, ".kms");
+            DumpOld(asset);
+            DecompileClass(asset, kmsPath);
+            if (string.IsNullOrWhiteSpace(File.ReadAllText(kmsPath)))
+                return;
+            try
+            {
+                var script = CompileClass(asset, kmsPath);
+                DumpOldAndNew(path, asset, script);
+                Console.WriteLine($"Success: {path}");
+            }
+            catch (UnexpectedSyntaxError ex)
+            {
+                // TODO
+            }
+            catch (RedefinitionError ex)
+            {
+                // TODO
+            }
+            catch (KeyNotFoundException exx)
+            {
+                // TODO 
+            }
         }
-        catch (UnexpectedSyntaxError ex)
+        else
         {
-            // TODO
-        }
-        catch (RedefinitionError ex)
-        {
-            // TODO
-        }
-        catch (KeyNotFoundException exx)
-        {
-            // TODO 
+            var asset = new ZenAsset(path, version, new UAssetAPI.Unversioned.Usmap());
+            if (asset.GetClassExport() == null)
+                return;
+            var kmsPath = Path.ChangeExtension(path, ".kms");
+            DumpOld(asset);
+            DecompileClass(asset, kmsPath);
+            if (string.IsNullOrWhiteSpace(File.ReadAllText(kmsPath)))
+                return;
+            try
+            {
+                var script = CompileClass(asset, kmsPath);
+                DumpOldAndNew(path, asset, script);
+                Console.WriteLine($"Success: {path}");
+            }
+            catch (UnexpectedSyntaxError ex)
+            {
+                // TODO
+                Console.WriteLine($"Exception: {path}\t\t{ex.Message.ReplaceLineEndings(" ")}");
+            }
+            catch (RedefinitionError ex)
+            {
+                // TODO
+                Console.WriteLine($"Exception: {path}\t\t{ex.Message.ReplaceLineEndings(" ")}");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // TODO 
+                Console.WriteLine($"Exception: {path}\t\t{ex.Message.ReplaceLineEndings(" ")}");
+            }
         }
     }
 
     foreach (var path in Directory.EnumerateFiles(folderPath, "*.uasset", SearchOption.AllDirectories))
     {
         if (throwOnException)
-            Decompile(path, version);
+            Decompile(path, version, useZen);
         else
         {
             try
             {
-                Decompile(path, version);
+                Decompile(path, version, useZen);
             }
             catch (Exception ex)
             {
@@ -119,25 +158,62 @@ static UAsset LoadAsset(string filePath, EngineVersion version = EngineVersion.V
     return asset;
 }
 
-static void DecompileClass(UAsset asset, string outPath)
+static void DecompileClass(UnrealPackage asset, string outPath)
 {
     using var outWriter = new StreamWriter(outPath, false, Encoding.Unicode);
     var decompiler = new KismetDecompiler(outWriter);
     decompiler.DecompileClass(asset);
 }
 
-static KismetScript CompileClass(UAsset asset, string inPath)
+static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, string[] lines)
 {
-    var parser = new KismetScriptASTParser();
-    var compilationUnit = parser.Parse(new StreamReader(inPath, Encoding.Unicode));
-    var typeResolver = new TypeResolver();
-    typeResolver.ResolveTypes(compilationUnit);
-    var compiler = new KismetScriptCompiler(asset);
-    var script = compiler.CompileCompilationUnit(compilationUnit);
-    return script;
+    if (lineNumber < 1 || lineNumber > lines.Length)
+    {
+        throw new ArgumentOutOfRangeException(nameof(lineNumber), "Invalid line number.");
+    }
+
+    string line = lines[lineNumber - 1];
+    int lineLength = line.Length;
+
+    if (startIndex < 0 || endIndex < 0 || startIndex >= lineLength || endIndex >= lineLength)
+    {
+        throw new ArgumentOutOfRangeException(nameof(startIndex), "Invalid character index.");
+    }
+
+    string highlightedLine = line.Substring(0, startIndex) +
+                             new string('^', endIndex - startIndex + 1) +
+                             line.Substring(endIndex + 1);
+
+    Console.WriteLine($"Syntax error at line {lineNumber}: {line}");
+    Console.WriteLine(new string(' ', lineNumber.ToString().Length + 7) + " " + highlightedLine);
 }
 
-static void DumpOld(UAsset asset)
+static KismetScript CompileClass(UnrealPackage asset, string inPath)
+{
+    try
+    {
+        var parser = new KismetScriptASTParser();
+        var compilationUnit = parser.Parse(new StreamReader(inPath, Encoding.Unicode));
+        var typeResolver = new TypeResolver();
+        typeResolver.ResolveTypes(compilationUnit);
+        var compiler = new KismetScriptCompiler(asset);
+        var script = compiler.CompileCompilationUnit(compilationUnit);
+        return script;
+    }
+    catch (ParseCanceledException ex)
+    {
+        if (ex.InnerException is InputMismatchException innerEx)
+        {
+            var lines = File.ReadAllLines(inPath);
+            PrintSyntaxError(innerEx.OffendingToken.Line, innerEx.OffendingToken.StartIndex, innerEx.OffendingToken.StopIndex,
+                lines);
+        }
+
+        throw;
+    }
+}
+
+static void DumpOld(UnrealPackage asset)
 {
     KismetSerializer.asset = asset;
 
@@ -151,7 +227,7 @@ static void DumpOld(UAsset asset)
     File.WriteAllText($"old.json", oldJsonText);
 }
 
-static void DumpOldAndNew(string fileName, UAsset asset, KismetScript script)
+static void DumpOldAndNew(string fileName, UnrealPackage asset, KismetScript script)
 {
     KismetSerializer.asset = asset;
 

@@ -430,7 +430,9 @@ public partial class KismetScriptCompiler
             case EExprToken.EX_CallMulticastDelegate:
                 return new CompiledExpressionContext(callOperator, offset, new EX_CallMulticastDelegate()
                 {
-                    Delegate = CompileSubExpression(callOperator.Arguments[0])
+                    StackNode = GetPackageIndex(callOperator.Arguments[0]),
+                    Parameters = callOperator.Arguments.Skip(1).TakeWhile(x => x != callOperator.Arguments.Last()).Select(CompileSubExpression).ToArray(),
+                    Delegate = CompileSubExpression(callOperator.Arguments.Last())
                 });
             case EExprToken.EX_LetValueOnPersistentFrame:
                 return new CompiledExpressionContext(callOperator, offset, new EX_LetValueOnPersistentFrame()

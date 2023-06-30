@@ -8,7 +8,7 @@ namespace KismetKompiler;
 
 public static class AssetHelper
 {
-    public static string GetFullName(this UAsset asset, object obj)
+    public static string GetFullName(this UnrealPackage asset, object obj)
     {
         if (obj is Import import)
         {
@@ -44,13 +44,13 @@ public static class AssetHelper
         }
     }
 
-    public static string GetFullName(this UAsset asset, FPackageIndex index)
+    public static string GetFullName(this UnrealPackage asset, FPackageIndex index)
     {
         var obj = asset.GetImportOrExport(index);
         return asset.GetFullName(obj);
     }
 
-    public static string GetName(this UAsset asset, FPackageIndex index)
+    public static string GetName(this UnrealPackage asset, FPackageIndex index)
     {
         if (index.IsExport())
         {
@@ -62,12 +62,12 @@ public static class AssetHelper
         }
     }
 
-    public static FunctionExport GetFunctionExport(this UAsset asset, FPackageIndex index)
+    public static FunctionExport GetFunctionExport(this UnrealPackage asset, FPackageIndex index)
     {
         return (FunctionExport)index.ToExport(asset);
     }
 
-    public static object GetImportOrExport(this UAsset asset, FPackageIndex index)
+    public static object GetImportOrExport(this UnrealPackage asset, FPackageIndex index)
     {
         if (index != null)
         {
@@ -86,7 +86,7 @@ public static class AssetHelper
         }
     }
 
-    public static bool FindProperty(this UAsset asset, int index, FName propname, out FProperty property)
+    public static bool FindProperty(this UnrealPackage asset, int index, FName propname, out FProperty property)
     {
         if (index < 0)
         {
@@ -111,7 +111,7 @@ public static class AssetHelper
         return false;
     }
 
-    public static object GetProperty(this UAsset asset, KismetPropertyPointer pointer)
+    public static object GetProperty(this UnrealPackage asset, KismetPropertyPointer pointer)
     {
         if (pointer.Old != null)
         {
@@ -131,7 +131,7 @@ public static class AssetHelper
         return null;
     }
 
-    public static string GetPropertyName(this UAsset asset, KismetPropertyPointer pointer, bool fullName)
+    public static string GetPropertyName(this UnrealPackage asset, KismetPropertyPointer pointer, bool fullName)
     {
         var prop = asset.GetProperty(pointer);
         if (fullName)
@@ -153,7 +153,7 @@ public static class AssetHelper
         }
     }
 
-    public static bool ImportInheritsType(this UAsset asset, Import import, string type)
+    public static bool ImportInheritsType(this UnrealPackage asset, Import import, string type)
     {
         if (import.ClassName.ToString() == type)
             return true;
@@ -161,7 +161,15 @@ public static class AssetHelper
         if (import.OuterIndex.IsNull())
             return false;
 
-        var parent = asset.Imports.Where(x => x.ObjectName == import.ClassName).FirstOrDefault();
+        Import? parent = null;
+        if (asset is UAsset uasset)
+        {
+            parent = uasset.Imports.Where(x => x.ObjectName == import.ClassName).FirstOrDefault();
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
         if (parent == null)
             return false;
         if (parent == import)

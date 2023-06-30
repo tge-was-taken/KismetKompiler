@@ -27,7 +27,7 @@ public partial class KismetDecompiler
         public ContextType Type { get; set; }
     }
 
-    private UAsset _asset;
+    private UnrealPackage _asset;
     private FunctionExport _function;
     private int _depth = 0;
     private bool _useFullPropertyNames = false;
@@ -45,14 +45,14 @@ public partial class KismetDecompiler
         _writer = new IndentedWriter(writer);
     }
 
-    public void DecompileClass(UAsset asset)
+    public void DecompileClass(UnrealPackage asset)
     {
         _asset = asset;
         _class = _asset.GetClassExport();
         if (_class != null)
         {
-            _writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
-            _writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
+            //_writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
+            //_writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
 
             WriteImports();
             WriteClass();
@@ -106,82 +106,89 @@ public partial class KismetDecompiler
     private void WriteImports()
     {
         _writer.WriteLine("// Imports");
-        foreach (var import in _asset.Imports.Where(x => x.OuterIndex.Index == 0))
+        if (_asset is UAsset uasset)
         {
-            void ProcessImport(Import import)
+            foreach (var import in uasset.Imports.Where(x => x.OuterIndex.Index == 0))
             {
-                var importIndex = -(_asset.Imports.IndexOf(import) + 1);
-                //var @namespace = import.ObjectName.ToString().Replace("/", ".").TrimStart('.').Trim();
-                var children = _asset.Imports.Where(x => x.OuterIndex.Index == importIndex);
-
-                if (children.Any())
+                void ProcessImport(Import import)
                 {
-                    var objectName = import.ClassName.ToString() == "Package" ?
-                        $"{FormatString(import.ObjectName.ToString())}" :
-                        import.ObjectName.ToString();
+                    var importIndex = -(uasset.Imports.IndexOf(import) + 1);
+                    //var @namespace = import.ObjectName.ToString().Replace("/", ".").TrimStart('.').Trim();
+                    var children = uasset.Imports.Where(x => x.OuterIndex.Index == importIndex);
 
-                    if (import.OuterIndex.Index == 0)
+                    if (children.Any())
                     {
-                        _writer.WriteLine($"from {objectName} import {{");
-                    }
-                    else
-                    {
-                        var isClass = _asset.ImportInheritsType(import, "Class");
-                        var isStruct = _asset.ImportInheritsType(import, "Struct");
+                        var objectName = import.ClassName.ToString() == "Package" ?
+                            $"{FormatString(import.ObjectName.ToString())}" :
+                            import.ObjectName.ToString();
 
-                        if (import.ClassName.ToString() != "Class" &&
-                            import.ClassName.ToString() != "Struct")
+                        if (import.OuterIndex.Index == 0)
                         {
-                            if (isClass)
-                            {
-                                _writer.WriteLine($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
-                            }
-                            else
-                            {
-                                _writer.WriteLine($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
-                            }
+                            _writer.WriteLine($"from {objectName} import {{");
                         }
                         else
                         {
-                            if (isClass)
-                                _writer.WriteLine($"class {FormatIdentifier(objectName)} {{");
-                            else
-                                _writer.WriteLine($"struct {FormatIdentifier(objectName)} {{");
-                        }
-                    }
+                            var isClass = _asset.ImportInheritsType(import, "Class");
+                            var isStruct = _asset.ImportInheritsType(import, "Struct");
 
-                    _writer.Push();
-                    foreach (var subImport in children)
-                    {
-                        ProcessImport(subImport);
-                    }
-                    _writer.Pop();
-                    _writer.WriteLine($"}}");
-                }
-                else
-                {
-                    if (import.ClassName.ToString() == "Function")
-                    {
-                        _writer.WriteLine($"public Any {FormatIdentifier(import.ObjectName.ToString())}(...);");
+                            if (import.ClassName.ToString() != "Class" &&
+                                import.ClassName.ToString() != "Struct")
+                            {
+                                if (isClass)
+                                {
+                                    _writer.WriteLine($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
+                                }
+                                else
+                                {
+                                    _writer.WriteLine($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
+                                }
+                            }
+                            else
+                            {
+                                if (isClass)
+                                    _writer.WriteLine($"class {FormatIdentifier(objectName)} {{");
+                                else
+                                    _writer.WriteLine($"struct {FormatIdentifier(objectName)} {{");
+                            }
+                        }
+
+                        _writer.Push();
+                        foreach (var subImport in children)
+                        {
+                            ProcessImport(subImport);
+                        }
+                        _writer.Pop();
+                        _writer.WriteLine($"}}");
                     }
                     else
                     {
-                        _writer.WriteLine($"{(GetDecompiledTypeName(import))} {FormatIdentifier(import.ObjectName.ToString())};");
+                        if (import.ClassName.ToString() == "Function")
+                        {
+                            _writer.WriteLine($"public Any {FormatIdentifier(import.ObjectName.ToString())}(...);");
+                        }
+                        else
+                        {
+                            _writer.WriteLine($"{(GetDecompiledTypeName(import))} {FormatIdentifier(import.ObjectName.ToString())};");
+                        }
                     }
                 }
+
+                var name = _asset.GetFullName(import);
+                var parentName = _asset.GetFullName(import.OuterIndex);
+                var parentNameEscaped = parentName.Replace("/", ".").TrimStart('.');
+                if (parentNameEscaped == "<null>")
+                    parentNameEscaped = "";
+                else
+                    parentNameEscaped = $"{parentNameEscaped}";
+
+                var fullClassName = _asset.GetFullName(import.ClassName);
+
+                ProcessImport(import);
             }
-
-            var name = _asset.GetFullName(import);
-            var parentName = _asset.GetFullName(import.OuterIndex);
-            var parentNameEscaped = parentName.Replace("/", ".").TrimStart('.');
-            if (parentNameEscaped == "<null>")
-                parentNameEscaped = "";
-            else
-                parentNameEscaped = $"{parentNameEscaped}";
-
-            var fullClassName = _asset.GetFullName(import.ClassName);
-
-            ProcessImport(import);
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
         }
         _writer.WriteLine();
     }
@@ -288,7 +295,7 @@ public partial class KismetDecompiler
                     if (isBlockStart)
                         _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset)}:");
 
-                    var cond = FormatExpressionVerbose(ifBlock.Condition);
+                    var cond = FormatExpression(ifBlock.Condition);
                     _writer.WriteLine($"if ({cond}) {{");
                     _writer.Push();
                     WriteBlock(ifBlock);
@@ -311,7 +318,7 @@ public partial class KismetDecompiler
                             }
                             else if (returnNode.Source is EX_JumpIfNot jumpIfNot)
                             {
-                                WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpressionVerbose(jumpIfNot.BooleanExpression)}) return");
+                                WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpression(jumpIfNot.BooleanExpression)}) return");
                             }
                             else
                             {
@@ -382,7 +389,7 @@ public partial class KismetDecompiler
     }
 
     private void WriteExpression(Node node, bool isUbergraphFunction)
-        => WriteExpression(node, isUbergraphFunction, FormatExpressionVerbose(node.Source));
+        => WriteExpression(node, isUbergraphFunction, FormatExpression(node.Source));
 
     private void WriteFunctionVerbose(FunctionExport function, Node root)
     {
@@ -400,11 +407,11 @@ public partial class KismetDecompiler
                 if (node.ReferencedBy.Count > 0 ||
                     (isUbergraphFunction && IsUbergraphEntrypoint(node.CodeStartOffset)))
                 {
-                    line = $"    _{node.CodeStartOffset}: {FormatExpressionVerbose(node.Source)}";
+                    line = $"    _{node.CodeStartOffset}: {FormatExpression(node.Source)}";
                 }
                 else
                 {
-                    line = $"    {FormatExpressionVerbose(node.Source)}";
+                    line = $"    {FormatExpression(node.Source)}";
                 }
                 if (line.Contains(" //"))
                 {
@@ -529,7 +536,7 @@ public partial class KismetDecompiler
                     if (export is PropertyExport propertyExport)
                     {
                         var innerProp = (PropertyExport)export;
-                        return $"{GetDecompiledType(innerProp)}[]";
+                        return $"Array<{GetDecompiledType(innerProp)}>";
                     }
                     else
                     {
@@ -764,7 +771,7 @@ public partial class KismetDecompiler
             _asset.GetName(index);
     }
 
-    private string FormatCodeOffset(uint codeOffset) => FormatIdentifier($"{_function.ObjectName}_{codeOffset}");
+    private string FormatCodeOffset(uint codeOffset, string? functionName = null) => FormatIdentifier($"{(functionName ?? _function.ObjectName.ToString())}_{codeOffset}");
     [GeneratedRegex("^[A-Za-z_][A-Za-z_\\d]*$")]
     private static partial Regex IdentifierRegex();
 }

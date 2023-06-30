@@ -1,6 +1,7 @@
 ﻿using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
+using System.CodeDom.Compiler;
 
 namespace KismetKompiler;
 
@@ -111,6 +112,7 @@ public abstract class KismetExpressionVisitor<T>
             case EX_MapConst exp:
                 {
                     codeOffset += 8;
+                    codeOffset += 8; 
                     codeOffset += 4;
                     for (var j = 1; j <= exp.Elements.Length / 2; j++)
                     {
@@ -429,7 +431,16 @@ public abstract class KismetExpressionVisitor<T>
                 }
             case EX_SetArray exp:
                 {
-                    Visit(exp.AssigningProperty, ref codeOffset);
+                    // TODO
+                    // if (reader.Asset.ObjectVersion >= ObjectVersion.VER_UE4_CHANGE_SETARRAY_BYTECODE)
+                    if (exp.AssigningProperty != null)
+                    {
+                        Visit(exp.AssigningProperty, ref codeOffset);
+                    }
+                    else
+                    {
+                        codeOffset += 8;
+                    }
                     foreach (KismetExpression param in exp.Elements)
                     {
                         Visit(param, ref codeOffset);
@@ -641,5 +652,43 @@ public static class KismetExpressionSizeCalculator
     {
         var visitor = new KismetExpressionSizeCalculatorVisitor() { ObjectVersionUE5 = objectVersionUE5 };
         return visitor.Visit(expression);
+    }
+}
+
+public static class KismetExpressionPrinter
+{
+    private class Visitor : KismetExpressionVisitor<object> 
+    {
+        private IndentedTextWriter _writer;
+
+        public Visitor(TextWriter writer)
+        {
+            _writer = new(writer);
+        }
+
+        protected override void OnEnter(KismetExpressionContext<object> context)
+        {
+            _writer.WriteLine(context.Expression.Inst);
+            _writer.Indent++;
+        }
+
+        protected override void OnExit(KismetExpressionContext<object> context)
+        {
+            _writer.Indent--;
+        }
+    }
+
+    public static void Print(IEnumerable<KismetExpression> expressions)
+    {
+        foreach (var item in expressions)
+        {
+            Print(item);
+        }
+    }
+
+    public static void Print(KismetExpression expression)
+    {
+        var visitor = new Visitor(Console.Out);
+        visitor.Visit(expression);
     }
 }

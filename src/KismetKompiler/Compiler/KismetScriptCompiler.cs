@@ -29,7 +29,7 @@ public enum ContextType
 }
 public partial class KismetScriptCompiler
 {
-    private readonly UAsset _asset;
+    private readonly UnrealPackage _asset;
     private readonly ClassExport _class;
     private ObjectVersion _objectVersion = 0;
     private FunctionState _functionState;
@@ -45,7 +45,7 @@ public partial class KismetScriptCompiler
 
     }
 
-    public KismetScriptCompiler(UAsset asset)
+    public KismetScriptCompiler(UnrealPackage asset)
     {
         _asset = asset;
         _class = _asset.GetClassExport();
@@ -466,10 +466,17 @@ public partial class KismetScriptCompiler
 
     private FPackageIndex? GetImportPackageIndexByObjectName(string name)
     {
-        var index = _asset.Imports.FindIndex(x => x.ObjectName.ToString() == name);
-        if (index == -1)
-            return null;
-        return new FPackageIndex(-(index + 1));
+        if (_asset is UAsset uasset)
+        {
+            var index = uasset.Imports.FindIndex(x => x.ObjectName.ToString() == name);
+            if (index == -1)
+                return null;
+            return new FPackageIndex(-(index + 1));
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
     }
 
     private FPackageIndex? GetExportPackageIndexByObjectName(string name)
@@ -565,27 +572,41 @@ public partial class KismetScriptCompiler
         var coreUObjectIndex = GetImportPackageIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
         if (propertyClassImportIndex == null)
         {
-            propertyClassImportIndex = _asset.AddImport(new UAssetAPI.Import()
+            if (_asset is UAsset uasset)
             {
-                ObjectName = new(_asset, propertyType),
-                OuterIndex = coreUObjectIndex,
-                ClassPackage = new(_asset, "/Script/CoreUObject"),
-                ClassName = new(_asset, "Class"),
-                bImportOptional = false
-            });
+                propertyClassImportIndex = uasset.AddImport(new UAssetAPI.Import()
+                {
+                    ObjectName = new(_asset, propertyType),
+                    OuterIndex = coreUObjectIndex,
+                    ClassPackage = new(_asset, "/Script/CoreUObject"),
+                    ClassName = new(_asset, "Class"),
+                    bImportOptional = false
+                });
+            }
+            else
+            {
+                throw new NotImplementedException("Zen import");
+            }
         }
 
         var propertyTemplateImportIndex = GetImportPackageIndexByObjectName($"Default__{propertyType}");
         if (propertyTemplateImportIndex == null)
         {
-            propertyTemplateImportIndex = _asset.AddImport(new UAssetAPI.Import()
+            if (_asset is UAsset uasset)
             {
-                ObjectName = new(_asset, $"Default__{propertyType}"),
-                OuterIndex = coreUObjectIndex,
-                ClassPackage = new(_asset, "/Script/CoreUObject"),
-                ClassName = new(_asset, propertyType),
-                bImportOptional = false
-            });
+                propertyTemplateImportIndex = uasset.AddImport(new UAssetAPI.Import()
+                {
+                    ObjectName = new(_asset, $"Default__{propertyType}"),
+                    OuterIndex = coreUObjectIndex,
+                    ClassPackage = new(_asset, "/Script/CoreUObject"),
+                    ClassName = new(_asset, propertyType),
+                    bImportOptional = false
+                });
+            }
+            else
+            {
+                throw new NotImplementedException("Zen import");
+            }
         }
 
         var propertyOwnerIndex = isLocal ?
@@ -1700,12 +1721,19 @@ public partial class KismetScriptCompiler
 
     private IEnumerable<(object ImportOrExport, FPackageIndex PackageIndex)> GetPackageIndexByLocalName(string name)
     {
-        foreach (var import in _asset.Imports)
+        if (_asset is UAsset uasset)
         {
-            if (import.ObjectName.ToString() == name)
+            foreach (var import in uasset.Imports)
             {
-                yield return (import, new FPackageIndex(-(_asset.Imports.IndexOf(import) + 1)));
+                if (import.ObjectName.ToString() == name)
+                {
+                    yield return (import, new FPackageIndex(-(uasset.Imports.IndexOf(import) + 1)));
+                }
             }
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
         }
         foreach (var export in _asset.Exports)
         {
@@ -1718,13 +1746,20 @@ public partial class KismetScriptCompiler
 
     private IEnumerable<(object ImportOrExport, FPackageIndex PackageIndex)> GetPackageIndexByFullName(string name)
     {
-        foreach (var import in _asset.Imports)
+        if (_asset is UAsset uasset)
         {
-            var importFullName = GetFullName(import);
-            if (importFullName == name)
+            foreach (var import in uasset.Imports)
             {
-                yield return (import, new FPackageIndex(-(_asset.Imports.IndexOf(import) + 1)));
+                var importFullName = GetFullName(import);
+                if (importFullName == name)
+                {
+                    yield return (import, new FPackageIndex(-(uasset.Imports.IndexOf(import) + 1)));
+                }
             }
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
         }
         foreach (var export in _asset.Exports)
         {
