@@ -5,17 +5,17 @@ namespace KismetKompiler.Syntax;
 
 public class CompilationUnit : SyntaxNode
 {
-    public List<Import> Imports { get; set; }
+    public List<PackageDeclaration> Imports { get; set; }
 
     public List<Declaration> Declarations { get; set; }
 
     public CompilationUnit()
     {
-        Imports = new List<Import>();
+        Imports = new List<PackageDeclaration>();
         Declarations = new List<Declaration>();
     }
 
-    public CompilationUnit(List<Import> imports, List<Declaration> declarations)
+    public CompilationUnit(List<PackageDeclaration> imports, List<Declaration> declarations)
     {
         Imports = imports;
         Declarations = declarations;

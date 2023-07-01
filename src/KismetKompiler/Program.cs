@@ -24,7 +24,7 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var path = args.FirstOrDefault(
     //@"C:\Users\cweer\Documents\Unreal Projects\MyProject\Saved\Cooked\WindowsNoEditor\MyProject\Content\FirstPersonBP\Blueprints\FirstPersonCharacter.uasset");
-    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e006.uasset");
+    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
 //var ver = EngineVersion.VER_UE4_27;
 var ver = EngineVersion.VER_UE4_23;
 if (!File.Exists(path))
@@ -34,10 +34,11 @@ if (!File.Exists(path))
 }
 
 //CompileClass(new() { Exports = new() }, "Test_NoViableAltException.kms");
-DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints", EngineVersion.VER_UE4_23, false, true);
+DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\", EngineVersion.VER_UE4_23, false, true);
 //DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
-DecompileOne(path);
+//DecompileOne(path);
 
+Console.WriteLine("Done");
 Console.ReadKey();
 
 static void DecompileOne(string path)
@@ -74,7 +75,9 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
             var asset = new UAsset(path, version);
             if (asset.GetClassExport() == null)
                 return;
-            var kmsPath = Path.ChangeExtension(path, ".kms");
+            Console.Write(path + " ");
+            //var kmsPath = Path.ChangeExtension(path, ".kms");
+            var kmsPath = "old_out.c";
             DumpOld(asset);
             DecompileClass(asset, kmsPath);
             if (string.IsNullOrWhiteSpace(File.ReadAllText(kmsPath)))
@@ -83,7 +86,7 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
             {
                 var script = CompileClass(asset, kmsPath);
                 DumpOldAndNew(path, asset, script);
-                Console.WriteLine($"Success: {path}");
+                Console.WriteLine($"Success");
             }
             catch (UnexpectedSyntaxError ex)
             {
@@ -184,8 +187,9 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
                              new string('^', endIndex - startIndex + 1) +
                              line.Substring(endIndex + 1);
 
-    Console.WriteLine($"Syntax error at line {lineNumber}: {line}");
-    Console.WriteLine(new string(' ', lineNumber.ToString().Length + 7) + " " + highlightedLine);
+    var messagePrefix = $"Syntax error at line {lineNumber}:";
+    Console.WriteLine($"{messagePrefix}{line}");
+    Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
 static KismetScript CompileClass(UnrealPackage asset, string inPath)
@@ -193,7 +197,8 @@ static KismetScript CompileClass(UnrealPackage asset, string inPath)
     try
     {
         var parser = new KismetScriptASTParser();
-        var compilationUnit = parser.Parse(new StreamReader(inPath, Encoding.Unicode));
+        using var reader = new StreamReader(inPath, Encoding.Unicode);
+        var compilationUnit = parser.Parse(reader);
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler(asset);
@@ -205,7 +210,7 @@ static KismetScript CompileClass(UnrealPackage asset, string inPath)
         if (ex.InnerException is InputMismatchException innerEx)
         {
             var lines = File.ReadAllLines(inPath);
-            PrintSyntaxError(innerEx.OffendingToken.Line, innerEx.OffendingToken.StartIndex, innerEx.OffendingToken.StopIndex,
+            PrintSyntaxError(innerEx.OffendingToken.Line, innerEx.OffendingToken.Column, innerEx.OffendingToken.Column+innerEx.OffendingToken.Text.Length-1,
                 lines);
         }
 

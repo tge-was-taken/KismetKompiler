@@ -1,4 +1,6 @@
-﻿using KismetKompiler.Syntax;
+﻿using KismetKompiler.Compiler.Context;
+using KismetKompiler.Compiler.Symbols;
+using KismetKompiler.Syntax;
 
 namespace KismetKompiler.Compiler.Exceptions;
 
@@ -9,4 +11,8 @@ class RedefinitionError : CompilationError
     {
 
     }
+
+    public RedefinitionError(Symbol symbol)
+        : this(symbol.GetSyntaxNode()) { }
+    
 }

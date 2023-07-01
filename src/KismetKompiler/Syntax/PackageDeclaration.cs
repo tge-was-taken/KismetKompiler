@@ -4,14 +4,16 @@ using KismetKompiler.Syntax.Statements.Expressions.Identifiers;
 
 namespace KismetKompiler.Syntax;
 
-public class Import : SyntaxNode
+public class PackageDeclaration : Declaration
 {
-    public string PackageName { get; set; }
+    public PackageDeclaration() : base(DeclarationType.Package)
+    {
+    }
 
     public List<Declaration> Declarations { get; init; } = new();
 
     public override string ToString()
     {
-        return $"from \"{PackageName}\" import {{}}";
+        return $"from \"{Identifier.Text}\" import {{}}";
     }
 }

@@ -33,9 +33,9 @@ public class SyntaxNodeCollector<T> : SyntaxNodeVisitor where T : SyntaxNode
         base.Visit(compilationUnit);
     }
 
-    public override void Visit(Import import)
+    public override void Visit(PackageDeclaration import)
     {
-        if (typeof(T) == typeof(Import))
+        if (typeof(T) == typeof(PackageDeclaration))
             mCollectedNodes.Add(import as T);
 
         base.Visit(import);

@@ -1,0 +1,367 @@
+﻿using KismetKompiler.Compiler.Exceptions;
+using KismetKompiler.Syntax;
+using KismetKompiler.Syntax.Statements;
+using KismetKompiler.Syntax.Statements.Declarations;
+using System.Collections;
+using System.Xml.Linq;
+using UAssetAPI.Kismet.Bytecode;
+using UAssetAPI.UnrealTypes;
+
+namespace KismetKompiler.Compiler.Symbols
+{
+    public enum SymbolCategory
+    {
+        Variable,
+        Package,
+        Class,
+        Procedure,
+        Label,
+        Any
+    }
+
+    public interface IDeclaredSymbol
+    {
+        Declaration Declaration { get; }
+    }
+
+    public interface IExportSymbol
+    {
+        FPackageIndex PackageIndex { get; }
+    }
+
+    public record struct SymbolKey(string Name, SymbolCategory Category);
+
+
+    public interface ISymbolTable : IEnumerable<Symbol>
+    {
+        Symbol? GetSymbol(string name);
+        Symbol? GetSymbol(string name, SymbolCategory category);
+        T? GetSymbol<T>(string name) where T : Symbol;
+
+        Symbol? GetRequiredSymbol(string name);
+        Symbol? GetRequiredSymbol(string name, SymbolCategory category);
+        T? GetRequiredSymbol<T>(string name) where T : Symbol;
+
+        void DeclareSymbol(Symbol symbol);
+        bool SymbolExists(string name);
+        bool SymbolExists(string name, SymbolCategory category);
+        bool SymbolExists<T>(string name);
+    }
+
+    public abstract class SymbolTableBase : ISymbolTable
+    {
+        private static readonly Dictionary<Type, SymbolCategory> _typeToCategory = new()
+        {
+            [typeof(VariableSymbol)] = SymbolCategory.Variable,
+            [typeof(PackageSymbol)] = SymbolCategory.Package,
+            [typeof(ClassSymbol)] = SymbolCategory.Class,
+            [typeof(ProcedureSymbol)] = SymbolCategory.Procedure,
+            [typeof(LabelSymbol)] = SymbolCategory.Label
+        };
+
+        public abstract void DeclareSymbol(Symbol symbol);
+        public abstract Symbol? GetSymbol(string name, SymbolCategory category);
+        public abstract bool SymbolExists(string name, SymbolCategory category);
+        public abstract IEnumerator<Symbol> GetEnumerator();
+
+        public Symbol? GetSymbol(string name)
+            => GetSymbol(name, SymbolCategory.Any);
+
+        public T? GetSymbol<T>(string name) where T : Symbol
+            => (T)GetSymbol(name, _typeToCategory[typeof(T)]);
+
+        public Symbol? GetRequiredSymbol(string name)
+            => GetSymbol(name, SymbolCategory.Any) ?? throw new UnknownSymbolError(name);
+
+        public Symbol? GetRequiredSymbol(string name, SymbolCategory category)
+            => GetSymbol(name, category) ?? throw new UnknownSymbolError(name);
+
+        public T? GetRequiredSymbol<T>(string name) where T : Symbol
+            => GetSymbol<T>(name) ?? throw new UnknownSymbolError(name);
+
+        public bool SymbolExists(string name)
+            => SymbolExists(name, SymbolCategory.Any);
+
+        public bool SymbolExists<T>(string name)
+            => SymbolExists(name, _typeToCategory[typeof(T)]);
+
+        IEnumerator IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    public abstract class Symbol : SymbolTableBase
+    {
+        private Symbol? _declaringSymbol;
+        private Symbol? _baseSymbol;
+        private List<Symbol> _members = new();
+        private List<Symbol> _inheritors = new();
+
+        public required Symbol? DeclaringSymbol
+        {
+            get => _declaringSymbol;
+            set
+            {
+                if (_declaringSymbol != value &&
+                    _declaringSymbol != null)
+                {
+                    _declaringSymbol._members.Remove(this);
+                }
+                _declaringSymbol = value;
+                _declaringSymbol?._members.Add(this);
+            }
+        }
+
+        public Symbol? BaseSymbol
+        {
+            get => _baseSymbol;
+            set
+            {
+                if (_baseSymbol != value &&
+                    _baseSymbol != null)
+                {
+                    _baseSymbol._inheritors.Remove(this);
+                }
+                _baseSymbol = value;
+                _baseSymbol?._inheritors.Add(this);
+            }
+        }
+
+        public required string Name { get; init; }
+        public required bool IsExternal { get; init; }
+        public IReadOnlyList<Symbol> Members => _members;
+        public IReadOnlyList<Symbol> Inheritors => _inheritors;
+        public abstract SymbolCategory SymbolCategory { get; }
+        public SymbolKey Key => new(Name, SymbolCategory);
+        public ClassSymbol? DeclaringClass
+            => (DeclaringSymbol is ClassSymbol symbol) ? symbol : DeclaringSymbol?.DeclaringClass;
+        public ProcedureSymbol? DeclaringProcedure
+            => (DeclaringSymbol is ProcedureSymbol symbol) ? symbol : DeclaringSymbol?.DeclaringProcedure;
+        public PackageSymbol? DeclaringPackage
+            => (DeclaringSymbol is PackageSymbol symbol) ? symbol : DeclaringSymbol?.DeclaringPackage;
+        public ClassSymbol? BaseClass
+            => (BaseSymbol is ClassSymbol symbol) ? symbol : null;
+
+        public Symbol()
+        {
+            
+        }
+
+        public override string ToString()
+        {
+            return $"{SymbolCategory} {Name} {IsExternal}";
+        }
+
+        public override void DeclareSymbol(Symbol symbol)
+        {
+            if (SymbolExists(symbol.Name, symbol.SymbolCategory))
+                throw new RedefinitionError(symbol);
+            symbol.DeclaringSymbol = this;
+        }
+
+        public override Symbol? GetSymbol(string name, SymbolCategory category)
+            => _members.SingleOrDefault(x => x.Name == name && (category == SymbolCategory.Any || x.SymbolCategory == category)) ?? BaseSymbol?.GetSymbol(name, category);
+
+        public override bool SymbolExists(string name, SymbolCategory category)
+            => _members.Any(x => x.Name == name && (category == SymbolCategory.Any || x.SymbolCategory == category)) || (BaseSymbol?.SymbolExists(name, category) ?? false);
+
+        public override IEnumerator<Symbol> GetEnumerator()
+            => _members.Union(BaseSymbol ?? Enumerable.Empty<Symbol>()).Distinct().GetEnumerator();
+    }
+
+    public abstract class DeclaredSymbol<T> : Symbol, IDeclaredSymbol where T : Declaration
+    {
+        public required T Declaration { get; init; }
+
+        Declaration IDeclaredSymbol.Declaration => Declaration;
+    }
+
+    public enum VariableCategory
+    {
+        Instance,
+        Local,
+        Global,
+        This,
+        Base
+    }
+
+    public class VariableSymbol : DeclaredSymbol<VariableDeclaration>, IExportSymbol
+    {
+        public bool IsParameter => Parameter != null;
+        public bool IsOutParameter => Parameter?.Modifier.HasFlag(ParameterModifier.Out) ?? false;
+        public override SymbolCategory SymbolCategory => SymbolCategory.Variable;
+        public VariableCategory VariableCategory
+        {
+            get
+            {
+                if (Name == "this") return VariableCategory.This;
+                if (Name == "base") return VariableCategory.Base;
+                if (DeclaringProcedure != null) return VariableCategory.Local;
+                if (DeclaringClass != null) return VariableCategory.Instance;
+                return VariableCategory.Global;
+            }
+        }
+
+        public required FPackageIndex PackageIndex { get; init; }
+        public required FFieldPath? FieldPath { get; init; }
+        public Parameter? Parameter { get; set; }
+        public bool AllowShadowing { get; set; } = false;
+        public bool IsReadOnly { get; set; } = false;
+    }
+
+    public class PackageSymbol : DeclaredSymbol<PackageDeclaration>
+    {
+        // TODO
+        public override SymbolCategory SymbolCategory => SymbolCategory.Package;
+    }
+
+    public class ClassSymbol : DeclaredSymbol<ClassDeclaration>, IExportSymbol
+    {
+        public required FPackageIndex PackageIndex { get; init; }
+
+        public override SymbolCategory SymbolCategory => SymbolCategory.Class;
+    }
+
+    public class ProcedureSymbol : DeclaredSymbol<ProcedureDeclaration>, IExportSymbol
+    {
+        public required FPackageIndex PackageIndex { get; init; }
+        public override SymbolCategory SymbolCategory => SymbolCategory.Procedure;
+
+        public bool IsUbergraphFunction 
+            => Declaration?.Attributes.Any(x => x.Identifier.Text == "UbergraphFunction") ?? false;
+
+        public bool IsVirtual
+            => Declaration?.IsVirtual ?? false;
+    }
+
+    public class LabelSymbol : DeclaredSymbol<LabelDeclaration>
+    {
+        public int? CodeOffset { get; set; }
+
+        public bool IsResolved { get; set; }
+
+        public override SymbolCategory SymbolCategory => SymbolCategory.Label;
+    }
+
+    public class SymbolTable : SymbolTableBase
+    {
+        private Dictionary<SymbolKey, Symbol> symbolByKey = new();
+        private Dictionary<string, List<Symbol>> symbolsByName = new();
+
+        public bool CanDeclareSymbol(Symbol symbol)
+            => !SymbolExists(symbol.Name, symbol.SymbolCategory);
+
+        public override bool SymbolExists(string name, SymbolCategory category)
+            => symbolByKey.ContainsKey(new(name, category));
+
+        public override void DeclareSymbol(Symbol symbol)
+        {
+            if (symbolByKey.ContainsKey(symbol.Key))
+                throw new RedefinitionError(symbol);
+
+            symbolByKey[symbol.Key] = symbol;
+
+            if (symbolsByName.ContainsKey(symbol.Name))
+                symbolsByName[symbol.Name].Add(symbol);
+            else
+                symbolsByName[symbol.Name] = new List<Symbol> { symbol };
+        }
+
+        public override Symbol? GetSymbol(string name, SymbolCategory category)
+        {
+            if (category == SymbolCategory.Any)
+            {
+                if (!symbolsByName.ContainsKey(name))
+                    return null;
+                return symbolsByName[name].SingleOrDefault();
+            }
+            else
+            {
+                var key = new SymbolKey(name, category);
+                if (!symbolByKey.ContainsKey(key))
+                    return null;
+                return symbolByKey[key];
+            }
+        }
+
+        public override IEnumerator<Symbol> GetEnumerator()
+            => symbolsByName.SelectMany(x => x.Value).GetEnumerator();
+    }
+
+    public enum ContextType
+    {
+        None,
+        ObjectConst,
+        Interface,
+        Struct,
+        Class,
+        This,
+        Package,
+        Procedure,
+        Base,
+    }
+
+    public class MemberContext : SymbolTableBase
+    {
+        public required ContextType Type { get; init; }
+        public required Symbol Symbol { get; init; }
+        public bool CallVirtualFunctionAsFinal { get; internal set; }
+
+        public override void DeclareSymbol(Symbol symbol)
+        {
+            throw new InvalidOperationException();
+        }
+
+        public override Symbol? GetSymbol(string name, SymbolCategory category)
+        {
+            return Symbol?.GetSymbol(name, category);
+        }
+
+        public override bool SymbolExists(string name, SymbolCategory category)
+        {
+            return Symbol?.SymbolExists(name, category) ?? false;
+        }
+
+        public override IEnumerator<Symbol> GetEnumerator()
+            => Symbol?.GetEnumerator() ?? Enumerable.Empty<Symbol>().GetEnumerator();
+    }
+
+    public class Scope : SymbolTableBase
+    {
+        public Scope Parent { get; set; }
+        public Symbol? DeclaringSymbol { get; set; }
+        public ISymbolTable SymbolTable { get; set; }
+        public LabelSymbol? BreakLabel { get; set; }
+        public LabelSymbol? ContinueLabel { get; set; }
+
+        public Scope(Scope parent, Symbol? declaringSymbol)
+        {
+            Parent = parent;
+            SymbolTable = new SymbolTable();
+            DeclaringSymbol = declaringSymbol;
+        }
+
+        public override Symbol? GetSymbol(string name, SymbolCategory category)
+            => SymbolTable.GetSymbol(name, category) ?? Parent?.GetSymbol(name, category);
+
+        public override void DeclareSymbol(Symbol symbol)
+            => SymbolTable.DeclareSymbol(symbol);
+
+        public override bool SymbolExists(string name, SymbolCategory category)
+            => SymbolTable.SymbolExists(name, category) || (Parent?.SymbolExists(name, category) ?? false);
+
+        public override IEnumerator<Symbol> GetEnumerator()
+            => SymbolTable.Union(Parent ?? Enumerable.Empty<Symbol>()).GetEnumerator();
+    }
+
+    public class FunctionContext
+    {
+        public string Name { get; init; }
+        public List<CompiledExpressionContext> AllExpressions { get; init; } = new();
+        public Dictionary<KismetExpression, CompiledExpressionContext> ExpressionContextLookup { get; init; } = new();
+        public List<CompiledExpressionContext> PrimaryExpressions { get; init; } = new();
+        public int CodeOffset { get; set; } = 0;
+        public LabelSymbol ReturnLabel { get; set; }
+        public ProcedureSymbol Symbol { get; set; }
+        public ProcedureDeclaration Declaration { get; set; }
+    }
+}

@@ -118,47 +118,63 @@ public partial class KismetDecompiler
 
                     if (children.Any())
                     {
-                        var objectName = import.ClassName.ToString() == "Package" ?
-                            $"{FormatString(import.ObjectName.ToString())}" :
-                            import.ObjectName.ToString();
-
-                        if (import.OuterIndex.Index == 0)
+                        if (import.ClassName.ToString() == "ArrayProperty")
                         {
-                            _writer.WriteLine($"from {objectName} import {{");
+                            if (children.Count() != 1)
+                                throw new NotImplementedException();
+
+                            _writer.WriteLine($"Array<{GetDecompiledTypeName(children.First())}> {FormatIdentifier(import.ObjectName.ToString())};");
                         }
                         else
                         {
-                            var isClass = _asset.ImportInheritsType(import, "Class");
-                            var isStruct = _asset.ImportInheritsType(import, "Struct");
+                            var objectName = import.ClassName.ToString() == "Package" ?
+                                $"{FormatString(import.ObjectName.ToString())}" :
+                                import.ObjectName.ToString();
 
-                            if (import.ClassName.ToString() != "Class" &&
-                                import.ClassName.ToString() != "Struct")
+
+                            if (import.OuterIndex.Index == 0)
                             {
-                                if (isClass)
-                                {
-                                    _writer.WriteLine($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
-                                }
-                                else
-                                {
-                                    _writer.WriteLine($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
-                                }
+                                _writer.WriteLine($"from {objectName} import {{");
                             }
                             else
                             {
-                                if (isClass)
-                                    _writer.WriteLine($"class {FormatIdentifier(objectName)} {{");
-                                else
-                                    _writer.WriteLine($"struct {FormatIdentifier(objectName)} {{");
-                            }
-                        }
+                                var isClass = _asset.ImportInheritsType(import, "Class");
+                                var isStruct = _asset.ImportInheritsType(import, "Struct");
 
-                        _writer.Push();
-                        foreach (var subImport in children)
-                        {
-                            ProcessImport(subImport);
+                                if (import.ClassName.ToString() != "Class" &&
+                                    import.ClassName.ToString() != "Struct")
+                                {
+                                    if (isClass)
+                                    {
+                                        _writer.WriteLine($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
+                                    }
+                                    else
+                                    {
+                                        _writer.WriteLine($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))} {{");
+                                    }
+                                }
+                                else
+                                {
+                                    if (isClass)
+                                        _writer.WriteLine($"class {FormatIdentifier(objectName)} {{");
+                                    else
+                                        _writer.WriteLine($"struct {FormatIdentifier(objectName)} {{");
+                                }
+                            }
+
+                            _writer.Push();
+                            foreach (var subImport in children)
+                            {
+                                ProcessImport(subImport);
+                            }
+                            _writer.Pop();
+                            _writer.WriteLine($"}}");
                         }
-                        _writer.Pop();
-                        _writer.WriteLine($"}}");
+                    }
+
+                    if (children.Any())
+                    {
+
                     }
                     else
                     {
@@ -235,22 +251,16 @@ public partial class KismetDecompiler
                 .Select(x => x.ToString().Replace("FUNC_", ""))
                 .ToList();
 
-        var allProperties = _asset.Exports
-            .Where(x => x is PropertyExport)
+        var functionProperties = function.Children != null ?
+            function.Children.Select(x => x.ToExport(_asset)).Cast<PropertyExport>() :
+            _asset.Exports.Where(x => !x.OuterIndex.IsNull() && x.OuterIndex.ToExport(_asset) == function)
             .Cast<PropertyExport>();
-
-        var classProperties = allProperties
-            .Where(x => x.OuterIndex.Index == _asset.Exports.IndexOf(_class) + 1);
-
-        var functionProperties = allProperties
-            .Where(x => x.OuterIndex.Index == _asset.Exports.IndexOf(function)+1);
 
         var functionParams = functionProperties
             .Where(x => (x.Property.PropertyFlags & EPropertyFlags.CPF_Parm) != 0);
 
         var functionLocals = functionProperties
-            .Except(functionParams)
-            .Except(classProperties);
+            .Except(functionParams);
 
 
         var functionParameterText =
@@ -614,7 +624,7 @@ public partial class KismetDecompiler
 
         var attributes = flags
                 .Except(modifierFlags)
-                .Select(x => x.ToString().Replace("CPF_", "").Replace("Param", "").Trim())
+                .Select(x => x.ToString().Replace("CPF_", "").Replace("Param", "").Replace("Parm", "").Trim())
                 .ToList();
 
 

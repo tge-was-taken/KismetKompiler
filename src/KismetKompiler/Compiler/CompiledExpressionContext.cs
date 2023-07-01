@@ -1,4 +1,5 @@
-﻿using KismetKompiler.Syntax;
+﻿using KismetKompiler.Compiler.Symbols;
+using KismetKompiler.Syntax;
 using UAssetAPI.Kismet.Bytecode;
 
 namespace KismetKompiler.Compiler;
@@ -7,7 +8,7 @@ public class CompiledExpressionContext
 {
     public SyntaxNode SyntaxNode { get; init; }
     public List<KismetExpression> CompiledExpressions { get; init; } = new();
-    public List<LabelInfo> ReferencedLabels { get; init; } = new();
+    public List<LabelSymbol> ReferencedLabels { get; init; } = new();
     public int CodeOffset { get; init; }
 
     public CompiledExpressionContext()
@@ -22,7 +23,7 @@ public class CompiledExpressionContext
         CompiledExpressions = new() { compiledExpression };
     }
 
-    public CompiledExpressionContext(SyntaxNode syntaxNode, int codeOffset, KismetExpression compiledExpression, IEnumerable<LabelInfo> referencedLabels)
+    public CompiledExpressionContext(SyntaxNode syntaxNode, int codeOffset, KismetExpression compiledExpression, IEnumerable<LabelSymbol> referencedLabels)
     {
         SyntaxNode = syntaxNode;
         CodeOffset = codeOffset;

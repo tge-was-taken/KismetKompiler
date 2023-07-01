@@ -8,5 +8,6 @@ public enum DeclarationType
     Enum,
     EnumLabel,
     Label,
-    Class
+    Class,
+    Package
 }

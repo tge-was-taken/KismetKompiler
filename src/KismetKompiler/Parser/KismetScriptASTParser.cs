@@ -122,7 +122,7 @@ public class KismetScriptASTParser
         // Parse using statements
         if (TryGet(context, context.importStatement, out var importContexts))
         {
-            List<Import> imports = null;
+            List<PackageDeclaration> imports = null;
             if (!TryFunc(context, "Failed to parse imports", () => TryParseImports(importContexts, out imports)))
                 return false;
 
@@ -143,14 +143,14 @@ public class KismetScriptASTParser
     //
     // Imports
     //
-    private bool TryParseImports(KismetScriptParser.ImportStatementContext[] contexts, out List<Import> imports)
+    private bool TryParseImports(KismetScriptParser.ImportStatementContext[] contexts, out List<PackageDeclaration> imports)
     {
         LogTrace("Start parsing import statements");
-        imports = new List<Import>();
+        imports = new List<PackageDeclaration>();
 
         foreach (var importContext in contexts)
         {
-            Import import = null;
+            PackageDeclaration import = null;
             if (!TryFunc(importContext, "Failed to parse import statement", () => TryParseImport(importContext, out import)))
                 return false;
 
@@ -161,7 +161,7 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseImport(KismetScriptParser.ImportStatementContext context, out Import import)
+    private bool TryParseImport(KismetScriptParser.ImportStatementContext context, out PackageDeclaration import)
     {
         LogContextInfo(context);
 
@@ -173,8 +173,8 @@ public class KismetScriptASTParser
         if (!TryGet(context, "Expected file path", () => filePathNode.Symbol.Text, out var filePath))
             return false;
 
-        import = CreateAstNode<Import>(context);
-        import.PackageName = filePath.Trim('"');
+        import = CreateAstNode<PackageDeclaration>(context);
+        import.Identifier = new(filePath.Trim('"'));
 
         if (context.declarationStatement()?.Length > 0)
         {

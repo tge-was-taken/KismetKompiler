@@ -24,7 +24,7 @@ public abstract class SyntaxNodeVisitor
         }
     }
 
-    public virtual void Visit(Import import)
+    public virtual void Visit(PackageDeclaration import)
     {
     }
 

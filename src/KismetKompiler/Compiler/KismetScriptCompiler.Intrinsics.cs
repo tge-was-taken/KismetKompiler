@@ -4,6 +4,7 @@ using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Syntax;
 using KismetKompiler.Compiler.Exceptions;
+using KismetKompiler.Compiler.Symbols;
 
 namespace KismetKompiler.Compiler;
 
@@ -12,7 +13,7 @@ public partial class KismetScriptCompiler
     private CompiledExpressionContext CompileIntrinsicCall(CallOperator callOperator)
     {
         var token = GetInstrinsicFunctionToken(callOperator.Identifier.Text);
-        var offset = _functionState.CodeOffset;
+        var offset = _functionContext.CodeOffset;
         switch (token)
         {
             case EExprToken.EX_LocalVariable:
@@ -460,7 +461,7 @@ public partial class KismetScriptCompiler
                     Parameters = callOperator.Arguments.Skip(1).Select(CompileSubExpression).ToArray()
                 });
             case EExprToken.EX_SwitchValue:
-                var referencedLabels = new List<LabelInfo>()
+                var referencedLabels = new List<LabelSymbol>()
             {
                 GetLabel(callOperator.Arguments[0])
             };
@@ -498,7 +499,7 @@ public partial class KismetScriptCompiler
         }
     }
 
-    private FKismetSwitchCase[] CompileSwitchCases(IEnumerable<Argument> args, List<LabelInfo> referencedLabels)
+    private FKismetSwitchCase[] CompileSwitchCases(IEnumerable<Argument> args, List<LabelSymbol> referencedLabels)
     {
         var enumerator = args.GetEnumerator();
         var result = new List<FKismetSwitchCase>();

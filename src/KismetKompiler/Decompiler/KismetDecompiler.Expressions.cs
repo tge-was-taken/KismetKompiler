@@ -146,6 +146,13 @@ namespace KismetKompiler.Decompiler
                         }
                         else
                         {
+                            var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
+                            var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
+                            if (!isFinalFunction && isClassMemberFunction && _context == null)
+                            {
+                                context = _class.ObjectName.ToString();
+                            }
+
                             if (string.IsNullOrWhiteSpace(parameters))
                                 return $"{context}.{functionName}()";
                             else
