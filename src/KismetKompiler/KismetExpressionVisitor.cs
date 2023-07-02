@@ -641,6 +641,35 @@ public abstract class KismetExpressionVisitor<T>
     }
 }
 
+public static class KismetExpressionEnumerableExtensions
+{
+    private class Visitor : KismetExpressionVisitor<object>
+    {
+        private List<KismetExpression> _expressions = new();
+        public IReadOnlyList<KismetExpression> Expressions => _expressions;
+
+        protected override void OnEnter(KismetExpressionContext<object> context)
+        {
+            _expressions.Add(context.Expression);
+            base.OnEnter(context);
+        }
+    }
+
+    public static IEnumerable<KismetExpression> Flatten(this KismetExpression enumerable)
+    {
+        var visitor = new Visitor();
+        visitor.Visit(enumerable);
+        return visitor.Expressions;
+    }
+
+    public static IEnumerable<KismetExpression> Flatten(this IEnumerable<KismetExpression> enumerable)
+    {
+        var visitor = new Visitor();
+        visitor.Visit(enumerable);
+        return visitor.Expressions;
+    }
+}
+
 public static class KismetExpressionSizeCalculator
 {
     private class KismetExpressionSizeCalculatorVisitor : KismetExpressionVisitor<object> { }

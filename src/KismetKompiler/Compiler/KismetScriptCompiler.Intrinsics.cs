@@ -227,7 +227,8 @@ public partial class KismetScriptCompiler
                 return new CompiledExpressionContext(callOperator, offset, new EX_StructConst()
                 {
                     Struct = GetPackageIndex(callOperator.Arguments[0]),
-                    StructSize = GetInt32(callOperator.Arguments[1])
+                    StructSize = GetInt32(callOperator.Arguments[1]),
+                    Value = callOperator.Arguments.Skip(2).Select(CompileSubExpression).ToArray()
                 });
             case EExprToken.EX_EndStructConst:
                 return new CompiledExpressionContext(callOperator, offset, new EX_EndStructConst());

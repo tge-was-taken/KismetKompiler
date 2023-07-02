@@ -24,7 +24,7 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var path = args.FirstOrDefault(
     //@"C:\Users\cweer\Documents\Unreal Projects\MyProject\Saved\Cooked\WindowsNoEditor\MyProject\Content\FirstPersonBP\Blueprints\FirstPersonCharacter.uasset");
-    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
+    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Blueprint\SkillAction\Common\BattleSkillActionBase.uasset");
 //var ver = EngineVersion.VER_UE4_27;
 var ver = EngineVersion.VER_UE4_23;
 if (!File.Exists(path))
@@ -34,9 +34,9 @@ if (!File.Exists(path))
 }
 
 //CompileClass(new() { Exports = new() }, "Test_NoViableAltException.kms");
-DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\", EngineVersion.VER_UE4_23, false, true);
+//DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle", EngineVersion.VER_UE4_23, false, false);
 //DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
-//DecompileOne(path);
+DecompileOne(path);
 
 Console.WriteLine("Done");
 Console.ReadKey();
@@ -239,11 +239,12 @@ static void DumpOldAndNew(string fileName, UnrealPackage asset, KismetScript scr
     var oldJsons = asset.Exports
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()
-        .Select(x => JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Formatting.Indented));
+        .OrderBy(x => asset.GetClassExport().FuncMap.IndexOf(x.ObjectName))
+        .Select(x => (x.ObjectName.ToString(), JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Formatting.Indented)));
 
     var newJsons = script.Classes
         .SelectMany(x => x.Functions)
-        .Select(x => JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Expressions.ToArray()), Formatting.Indented));
+        .Select(x => (x.Name, JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Expressions.ToArray()), Formatting.Indented)));
 
     var oldJsonText = string.Join("\n", oldJsons);
     var newJsonText = string.Join("\n", newJsons);

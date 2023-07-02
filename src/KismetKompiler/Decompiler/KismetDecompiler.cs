@@ -180,7 +180,74 @@ public partial class KismetDecompiler
                     {
                         if (import.ClassName.ToString() == "Function")
                         {
-                            _writer.WriteLine($"public Any {FormatIdentifier(import.ObjectName.ToString())}(...);");
+                            var functionTokens = new[] { EExprToken.EX_FinalFunction, EExprToken.EX_LocalFinalFunction, EExprToken.EX_LocalVirtualFunction, EExprToken.EX_VirtualFunction, EExprToken.EX_CallMath };
+                            var functionCalls = _asset.Exports
+                                .Where(x => x is FunctionExport)
+                                .Cast<FunctionExport>()
+                                .SelectMany(x => x.ScriptBytecode.Flatten())
+                                .Where(x => functionTokens.Contains(x.Token))
+                                .Select(x => new 
+                                { 
+                                    Token = x.Token, 
+                                    StackNode = (x as EX_FinalFunction)?.StackNode, 
+                                    Name = (x switch
+                                    {
+                                        EX_FinalFunction funcExpr => _asset.GetName(funcExpr.StackNode),
+                                        EX_VirtualFunction funcExpr => funcExpr.VirtualFunctionName.ToString(),
+                                    }) });
+
+                            var callInstructions = functionCalls
+                                .Where(x =>
+                                    (x.StackNode != null && x.StackNode.IsImport() && x.StackNode.ToImport(_asset) == import) ||
+                                    (x.StackNode == null && x.Name == import.ObjectName.ToString()))
+                                .ToList();
+                            if (callInstructions.Any(x => x.StackNode != null))
+                                callInstructions.RemoveAll(x => x.StackNode == null);
+
+                            var callInstructionTokens = callInstructions
+                                .Select(x => x.Token)
+                                .Distinct()
+                                .ToList();
+
+                            var functionModifier = "";
+                            var functionAttribute = "";
+                            if (callInstructionTokens.Count > 0)
+                            {
+                                var callInstruction = callInstructionTokens.First();
+                                if (callInstructionTokens.Count > 1)
+                                {
+                                    if (callInstructionTokens.All(x => x == EExprToken.EX_CallMath || x == EExprToken.EX_FinalFunction))
+                                    {
+                                        // TODO
+                                        callInstruction = EExprToken.EX_CallMath;
+                                    }
+                                    else
+                                    {
+                                        throw new NotImplementedException();
+                                    }
+                                }
+
+                                functionModifier = callInstruction switch
+                                {
+                                    EExprToken.EX_FinalFunction => "final",
+                                    EExprToken.EX_LocalFinalFunction => "final",
+                                    EExprToken.EX_LocalVirtualFunction => "virtual",
+                                    EExprToken.EX_VirtualFunction => "virtual",
+                                    EExprToken.EX_CallMath => "static final",
+                                };
+                                functionAttribute = callInstruction switch
+                                {
+                                    EExprToken.EX_LocalFinalFunction => "[CalledLocally]",
+                                    EExprToken.EX_LocalVirtualFunction => "[CalledLocally]",
+                                    _ => ""
+                                };
+                            }
+                            if (!string.IsNullOrWhiteSpace(functionModifier))
+                                functionModifier += " ";
+                            if (!string.IsNullOrWhiteSpace(functionAttribute))
+                                functionAttribute += " ";
+
+                            _writer.WriteLine($"{functionAttribute}public {functionModifier}Any {FormatIdentifier(import.ObjectName.ToString())}(...);");
                         }
                         else
                         {
@@ -251,8 +318,12 @@ public partial class KismetDecompiler
                 .Select(x => x.ToString().Replace("FUNC_", ""))
                 .ToList();
 
-        var functionProperties = function.Children != null ?
-            function.Children.Select(x => x.ToExport(_asset)).Cast<PropertyExport>() :
+        //var functionProperties = function.Children != null ?
+        //    function.Children.Select(x => x.ToExport(_asset)).Cast<PropertyExport>() :
+        //    _asset.Exports.Where(x => !x.OuterIndex.IsNull() && x.OuterIndex.ToExport(_asset) == function)
+        //    .Cast<PropertyExport>();
+
+        var functionProperties =
             _asset.Exports.Where(x => !x.OuterIndex.IsNull() && x.OuterIndex.ToExport(_asset) == function)
             .Cast<PropertyExport>();
 

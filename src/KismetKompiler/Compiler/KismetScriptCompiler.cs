@@ -81,10 +81,36 @@ public partial class KismetScriptCompiler
         => _rvalueStack.Pop();
 
     private Symbol? GetSymbol(string name)
-        => Context?.GetSymbol(name) ?? Scope.GetSymbol(name);
+    {
+        var contextSymbol = Context?.GetSymbol(name);
+        var scopeSymbol = Scope.GetSymbol(name);
+        if (Context?.Type == ContextType.This &&
+            Context?.IsImplicit == true)
+        {
+            // Implicit this context has less priority
+            return scopeSymbol ?? contextSymbol;
+        }
+        else
+        {
+            return contextSymbol ?? scopeSymbol;
+        }
+    }
 
     private T? GetSymbol<T>(string name) where T : Symbol
-        => Context?.GetSymbol<T>(name) ?? Scope.GetSymbol<T>(name);
+    {
+        var contextSymbol = Context?.GetSymbol<T>(name);
+        var scopeSymbol = Scope.GetSymbol<T>(name);
+        if (Context?.Type == ContextType.This &&
+            Context?.IsImplicit == true)
+        {
+            // Implicit this context has less priority
+            return scopeSymbol ?? contextSymbol;
+        }
+        else
+        {
+            return contextSymbol ?? scopeSymbol;
+        }
+    }
 
     private Symbol GetRequiredSymbol(string name)
         => GetSymbol(name) ?? throw new UnknownSymbolError(name);
@@ -299,7 +325,15 @@ public partial class KismetScriptCompiler
                     var baseClassSymbol = GetSymbol(baseClass.Text);
                     if (baseClassSymbol != null)
                     {
-                        symbol.BaseSymbol = baseClassSymbol;
+                        classSymbol.BaseSymbol = baseClassSymbol;
+
+                        // TODO: figure out a better solution
+                        // HACK: import members from an object named Default__ClassName into ClassName
+                        if (classSymbol.Name.StartsWith("Default__"))
+                        {
+                            foreach (var member in classSymbol.Members.ToList())
+                                classSymbol.BaseClass!.DeclareSymbol(member);
+                        }
                     }   
                     else
                     {
@@ -347,7 +381,7 @@ public partial class KismetScriptCompiler
         var functions = new List<KismetScriptFunction>();
         var properties = new List<KismetScriptProperty>();
 
-        PushContext(ContextType.This, _classContext.Symbol);
+        PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
         try
         {
             PushScope(_classContext.Symbol);
@@ -956,16 +990,9 @@ public partial class KismetScriptCompiler
                     if (Context.Type == ContextType.This ||
                         Context.Type == ContextType.Base)
                     {
-                        if (procedureSymbol.IsExternal)
+                        if (Context.SymbolExists(procedureSymbol.Name, procedureSymbol.SymbolCategory))
                         {
-                            return Emit(callOperator, new EX_CallMath()
-                            {
-                                StackNode = GetPackageIndex(callOperator.Identifier),
-                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                            });
-                        }
-                        else
-                        {
+                            // Procedure is local to class
                             if (procedureSymbol.IsVirtual && !Context.CallVirtualFunctionAsFinal)
                             {
                                 return Emit(callOperator, new EX_LocalVirtualFunction()
@@ -983,20 +1010,22 @@ public partial class KismetScriptCompiler
                                 });
                             }
                         }
-                    }
-                    else if (Context.Type == ContextType.ObjectConst)
-                    {
-                        return Emit(callOperator, new EX_FinalFunction()
+                        else
                         {
-                            StackNode = GetPackageIndex(callOperator.Identifier),
-                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                        });
+                            // Static function
+                            return Emit(callOperator, new EX_CallMath()
+                            {
+                                StackNode = GetPackageIndex(callOperator.Identifier),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
                     }
-                    else if (Context.Type == ContextType.Class)
+                    else if (Context.Type == ContextType.ObjectConst ||
+                            Context.Type == ContextType.Class)
                     {
                         if (procedureSymbol.IsVirtual)
                         {
-                            return Emit(callOperator, new EX_LocalVirtualFunction()
+                            return Emit(callOperator, new EX_VirtualFunction()
                             {
                                 VirtualFunctionName = GetName(callOperator.Identifier),
                                 Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1004,7 +1033,7 @@ public partial class KismetScriptCompiler
                         }
                         else
                         {
-                            return Emit(callOperator, new EX_LocalFinalFunction()
+                            return Emit(callOperator, new EX_FinalFunction()
                             {
                                 StackNode = GetPackageIndex(callOperator.Identifier),
                                 Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1156,6 +1185,13 @@ public partial class KismetScriptCompiler
             return Emit(identifier, new EX_IntConst()
             {
                 Value = labelSymbol.CodeOffset.Value
+            });
+        }
+        else if (symbol is ClassSymbol classSymbol)
+        {
+            return Emit(identifier, new EX_ObjectConst()
+            {
+                Value = GetPackageIndex(identifier.Text)
             });
         }
         else
@@ -1344,35 +1380,18 @@ public partial class KismetScriptCompiler
                 contextType = ContextType.Class;
             }
         }
-        else
-        {
-            throw new NotImplementedException();
-        }
-
+        
         if (contextSymbol == null)
         {
             // TODO fix this in the decompiler
             // Fuzzy match
-            if (contextSymbolTemp != null)
-            {
-                if (memberExpression.Member is Identifier memberIdentifier)
-                {
-                    contextSymbol = Scope
-                        .Where(x => x is ClassSymbol)
-                        .SelectMany(x => x.Members)
-                        .Where(x => x.Name == memberIdentifier.Text)
-                        .Select(x => x.DeclaringClass)
-                        .Single();
-                }
-                else
-                {
-                    throw new NotImplementedException();
-                }
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            var memberIdentifier = GetIdentifier(memberExpression.Member);
+            contextSymbol = Scope
+                 .Where(x => x is ClassSymbol)
+                 .SelectMany(x => x.Members)
+                 .Where(x => x.Name == memberIdentifier.Text)
+                 .Select(x => x.DeclaringClass)
+                 .Single();
         }
 
         Debug.Assert(contextSymbol is ClassSymbol);
@@ -1392,6 +1411,15 @@ public partial class KismetScriptCompiler
         }
 
         return context;
+    }
+
+    private Identifier GetIdentifier(Expression expression)
+    {
+        if (expression is Identifier identifier)
+            return identifier;
+        if (expression is CallOperator callOperator)
+            return callOperator.Identifier;
+        throw new NotImplementedException();
     }
 
     private CompiledExpressionContext CompileMemberExpression(MemberExpression memberExpression)
@@ -1456,206 +1484,6 @@ public partial class KismetScriptCompiler
         {
             PopContext();
         }
-
-        //if (memberExpression.Context is Identifier contextIdentifier)
-        //{
-
-        //    if (contextIdentifier.Text == "this")
-        //    {
-        //        PushContext(ContextType.Class, _classContext.Symbol);
-        //        try
-        //        {
-        //            if (memberExpression.Member is CallOperator callOperator)
-        //            {
-        //                var proc = GetSymbol<ProcedureSymbol>(contextIdentifier.Text);
-        //                var doVirtualCall =
-        //                                       proc == null  /* Virtual functions can be called by name without being imported */ ||
-        //                                       (proc.Declaration?.IsVirtual ?? false);                             /* Function was declared as virtual */
-
-        //                if (doVirtualCall)
-        //                {
-
-        //                    return Emit(expmemberExpressionression, new EX_LocalVirtualFunction()
-        //                    {
-        //                        VirtualFunctionName = GetName(callOperator.Identifier),
-        //                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                    });
-        //                }
-        //                else
-        //                {
-        //                    if (proc.Declaration.IsVirtual)
-        //                    {
-        //                        return Emit(memberExpression, new EX_LocalVirtualFunction()
-        //                        {
-        //                            VirtualFunctionName = GetName(callOperator.Identifier),
-        //                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                        });
-        //                    }
-        //                    else if (proc.Declaration.IsFinal)
-        //                    {
-        //                        return Emit(memberExpression, new EX_LocalFinalFunction()
-        //                        {
-        //                            StackNode = GetPackageIndex(callOperator.Identifier),
-        //                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                        });
-        //                    }
-        //                    else
-        //                    {
-        //                        throw new UnexpectedSyntaxError(proc.Declaration);
-        //                    }
-        //                }
-
-        //                //var doVirtualCall = 
-        //                //    !_scope.TryGetProcedure(callOperator.Identifier.Text, out var proc)  /* Virtual functions can be called by name without being imported */ ||
-        //                //    (proc.Declaration?.IsVirtual ?? false);                             /* Function was declared as virtual */
-
-        //                //if (doVirtualCall)
-        //                //{
-
-        //                //    return Emit(expression, new EX_LocalVirtualFunction()
-        //                //    {
-        //                //        VirtualFunctionName = GetName(callOperator.Identifier),
-        //                //        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                //    });
-        //                //}
-        //                //else
-        //                //{
-        //                //    if (proc.Declaration.IsVirtual)
-        //                //    {
-        //                //        return Emit(expression, new EX_LocalVirtualFunction()
-        //                //        {
-        //                //            VirtualFunctionName = GetName(callOperator.Identifier),
-        //                //            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                //        });
-        //                //    }
-        //                //    else if (proc.Declaration.IsSealed)
-        //                //    {
-        //                //        return Emit(expression, new EX_LocalFinalFunction()
-        //                //        {
-        //                //            StackNode = GetPackageIndex(callOperator.Identifier),
-        //                //            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-        //                //        });
-        //                //    }
-        //                //    else
-        //                //    {
-        //                //        throw new UnexpectedSyntaxError(proc.Declaration);
-        //                //    }
-        //                //}
-        //            }
-        //            else
-        //            {
-        //                return Emit(memberExpression, new EX_InstanceVariable()
-        //                {
-        //                    Variable = GetPropertyPointer(memberExpression.Member),
-        //                });
-        //            }
-        //        }
-        //        finally
-        //        {
-        //            PopContext();
-        //        }
-        //    }
-        //    else
-        //    {
-        //        // TODO improve this
-        //        var symbol = GetRequiredSymbol(contextIdentifier.Text);
-        //        if (symbol is VariableSymbol variable && !variable.IsExternal)
-        //        {
-        //            if (variable.Declaration.Type.Text == "Interface")
-        //            {
-        //                // Member access through interface
-        //                TryGetPropertyPointer(memberExpression.Member, out var pointer);
-        //                if (pointer == null)
-        //                    pointer = RValue;
-
-        //                PushContext(ContextType.Interface, symbol);
-        //                try
-        //                {
-        //                    return Emit(memberExpression, new EX_Context()
-        //                    {
-        //                        ObjectExpression = Emit(memberExpression.Context, new EX_InterfaceContext()
-        //                        {
-        //                            InterfaceValue = CompileSubExpression(memberExpression.Context)
-        //                        }).CompiledExpressions.Single(),
-        //                        ContextExpression = CompileSubExpression(memberExpression.Member),
-        //                        RValuePointer = pointer ?? new(),
-        //                    }); ;
-        //                }
-        //                finally
-        //                {
-        //                    PopContext();
-        //                }
-        //            }
-        //            else
-        //            {
-        //                PushContext(ContextType.Struct, symbol);
-        //                try
-        //                {
-        //                    return Emit(expression, new EX_StructMemberContext()
-        //                    {
-        //                        StructExpression = CompileSubExpression(memberExpression.Context),
-        //                        StructMemberExpression = GetPropertyPointer(memberExpression.Member)
-        //                    });
-        //                }
-        //                finally
-        //                {
-        //                    PopContext();
-        //                }
-        //            }
-        //        }
-        //        else if (symbol.IsExternal)
-        //        {
-        //            // Member access through object const
-        //            TryGetPropertyPointer(memberExpression.Member, out var pointer);
-        //            if (pointer == null)
-        //                pointer = RValue;
-
-        //            PushContext(ContextType.ObjectConst, symbol);
-        //            try
-        //            {
-        //                return Emit(expression, new EX_Context()
-        //                {
-        //                    ObjectExpression = Emit(memberExpression.Context, new EX_ObjectConst()
-        //                    {
-        //                        Value = GetPackageIndex(memberExpression.Context)
-        //                    }).CompiledExpressions.Single(),
-        //                    ContextExpression = CompileSubExpression(memberExpression.Member),
-        //                    RValuePointer = pointer ?? new(),
-        //                }); ;
-        //            }
-        //            finally
-        //            {
-        //                PopContext();
-        //            }
-        //        }
-        //        else
-        //        {
-        //            throw new UnexpectedSyntaxError(expression);
-        //        }
-        //    }
-        //}
-        //else
-        //{
-        //    TryGetPropertyPointer(memberExpression.Member, out var pointer);
-        //    if (pointer == null)
-        //        pointer = RValue;
-
-        //    // TODO
-        //    PushContext(ContextType.This, null);
-        //    try
-        //    {
-        //        return Emit(expression, new EX_Context()
-        //        {
-        //            ObjectExpression = CompileSubExpression(memberExpression.Context),
-        //            ContextExpression = CompileSubExpression(memberExpression.Member),
-        //            RValuePointer = pointer ?? new(),
-        //        });
-        //    }
-        //    finally
-        //    {
-        //        PopContext();
-        //    }
-        //}
     }
 
     private KismetExpression CompileSubExpression(Expression right)
@@ -1737,6 +1565,19 @@ public partial class KismetScriptCompiler
             finally
             {
                 PopContext();
+            }
+        }
+        else if (expression is CallOperator callOperator)
+        {
+            if (callOperator.Identifier.Text == "EX_ArrayGetByRef")
+            {
+                // 0: Array, 1: Index
+                var arrayObject = callOperator.Arguments.First();
+                return GetSymbol(arrayObject.Expression);
+            }
+            else
+            {
+                throw new NotImplementedException();
             }
         }
         else
@@ -2097,6 +1938,18 @@ public partial class KismetScriptCompiler
             finally
             {
                 PopContext();
+            }
+        }
+        else if (expression is CallOperator callOperator)
+        {
+            if (callOperator.Identifier.Text == "EX_ArrayGetByRef")
+            {
+                var arrayObject = callOperator.Arguments.First();
+                return GetPackageIndex(arrayObject);
+            }
+            else
+            {
+                throw new NotImplementedException();
             }
         }
         else

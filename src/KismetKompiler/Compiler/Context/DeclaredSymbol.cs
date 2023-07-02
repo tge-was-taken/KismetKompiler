@@ -305,6 +305,7 @@ namespace KismetKompiler.Compiler.Symbols
         public required ContextType Type { get; init; }
         public required Symbol Symbol { get; init; }
         public bool CallVirtualFunctionAsFinal { get; internal set; }
+        public bool IsImplicit { get; set; }
 
         public override void DeclareSymbol(Symbol symbol)
         {

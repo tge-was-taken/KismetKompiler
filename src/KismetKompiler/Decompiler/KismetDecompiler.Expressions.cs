@@ -281,14 +281,26 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_FinalFunction expr:
                     {
-                        var stackNode = FormatIdentifier(GetFunctionName(expr.StackNode));
+                        var stackNode = GetFunctionName(expr.StackNode);
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
                         var context = _context == null ? "this" : _context.Expression;
 
-                        if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}.{stackNode}()";
+                        if (true)
+                        {
+                            stackNode = FormatIdentifier(stackNode);
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"{context}.{stackNode}()";
+                            else
+                                return $"{context}.{stackNode}({parameters})";
+                        }
                         else
-                            return $"{context}.{stackNode}({parameters})";
+                        {
+                            stackNode = FormatString(stackNode);
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"{context}.EX_FinalFunction({stackNode})";
+                            else
+                                return $"{context}.EX_FinalFunction({stackNode}, {parameters})";
+                        }
                     }
                 case EX_VirtualFunction expr:
                     {
@@ -335,7 +347,8 @@ namespace KismetKompiler.Decompiler
                     return $"{expr.Value}";
                 case EX_SkipOffsetConst expr:
                     {
-                        var target = FormatCodeOffset(expr.Value);
+                        //var target = FormatCodeOffset(expr.Value);
+                        var target = expr.Value; // TODO
                         return $"EX_SkipOffsetConst({target})";
                     }
                 case EX_FloatConst expr:
