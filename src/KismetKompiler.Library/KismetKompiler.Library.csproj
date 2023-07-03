@@ -1,15 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Remove="KismetCompiler.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Antlr4" Version="4.6.6">
@@ -22,7 +17,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\external\UAssetAPI\UAssetAPI\UAssetAPI.csproj" />
-    <ProjectReference Include="..\KismetKompiler.Library\KismetKompiler.Library.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Parser\KismetScript.g4">
+      <DefaultCustomToolNamespace>$([MSBuild]::ValueOrDefault('$(RootNamespace).%(DefaultCustomToolNamespace)', '').TrimEnd('.'))</DefaultCustomToolNamespace>
+      <CustomToolNamespace>$([MSBuild]::ValueOrDefault(%(CustomToolNamespace), %(DefaultCustomToolNamespace)))</CustomToolNamespace>
+    </None>
   </ItemGroup>
 
 </Project>

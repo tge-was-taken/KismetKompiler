@@ -1,11 +1,9 @@
 ﻿using Antlr4.Runtime;
 using Antlr4.Runtime.Misc;
-using KismetKompiler;
 using KismetKompiler.Compiler;
-using KismetKompiler.Compiler.Exceptions;
-using KismetKompiler.Compiler.Processing;
+using KismetKompiler.Library.Compiler.Exceptions;
+using KismetKompiler.Library.Compiler.Processing;
 using KismetKompiler.Decompiler;
-using KismetKompiler.Parser;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Globalization;
@@ -16,6 +14,8 @@ using UAssetAPI.IO;
 using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
+using KismetKompiler.Library;
+using KismetKompiler.Library.Parser;
 
 Console.OutputEncoding = Encoding.Unicode;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
