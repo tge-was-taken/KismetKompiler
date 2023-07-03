@@ -15,6 +15,7 @@ using UAssetAPI.ExportTypes;
 using UAssetAPI.IO;
 using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
+using UAssetAPI.Unversioned;
 
 Console.OutputEncoding = Encoding.Unicode;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -22,11 +23,33 @@ CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
-var path = args.FirstOrDefault(
-    //@"C:\Users\cweer\Documents\Unreal Projects\MyProject\Saved\Cooked\WindowsNoEditor\MyProject\Content\FirstPersonBP\Blueprints\FirstPersonCharacter.uasset");
-    @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Blueprint\SkillAction\Common\BattleSkillActionBase.uasset");
-//var ver = EngineVersion.VER_UE4_27;
+#if DEBUG
+var path = @"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset";
+var outPath = @"C:\Users\cweer\AppData\Roaming\yuzu\load\010063B012DC6000\CustomAI\romfs\Project\Content\Paks\~mod\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset";
+var usmapPath = @"";
 var ver = EngineVersion.VER_UE4_23;
+//var path = @"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints\ABP_Baby.uasset";
+//var ver = EngineVersion.VER_UE4_26;
+//var usmapPath = @"D:\Users\smart\Downloads\Mappings.usmap";
+#else
+var path = "";
+var ver = EngineVersion.VER_UE4_23;
+var usmapPath = "";
+#endif
+
+if (args.Length > 0)
+{
+    path = args[0];
+}
+if (args.Length > 1)
+{
+    ver = Enum.Parse<EngineVersion>(args[1]);
+}
+if (args.Length > 2)
+{
+    usmapPath = args[2];
+}
+
 if (!File.Exists(path))
 {
     Console.WriteLine("Invalid file specified");
@@ -36,14 +59,39 @@ if (!File.Exists(path))
 //CompileClass(new() { Exports = new() }, "Test_NoViableAltException.kms");
 //DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle", EngineVersion.VER_UE4_23, false, false);
 //DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
-DecompileOne(path);
+//DecompileOne(path, ver, usmapPath);
+
+var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
+var script = CompileClass(asset, @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
+foreach (var cls in script.Classes)
+{
+    foreach (var func in cls.Functions)
+    {
+        var export = (FunctionExport)asset.Exports.Where(x => x.ObjectName.ToString() == func.Name).FirstOrDefault();
+        export.ScriptBytecode = func.Expressions.ToArray();
+    }
+}
+asset.Write(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
+File.Delete(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak");
+Process.Start(@"E:\Projects\smtv_ai\tools\UnrealPak\UnrealPak-With-Compression.bat", @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI").WaitForExit();
+File.Copy(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak", @"C:\Users\cweer\AppData\Roaming\yuzu\load\010063B012DC6000\CustomAI\romfs\Project\Content\Paks\~mod\CustomAI.pak", true);
 
 Console.WriteLine("Done");
 Console.ReadKey();
 
-static void DecompileOne(string path)
+static void DecompileOne(string path, EngineVersion ver, string? usmapPath = default)
 {
-    var asset = LoadAsset(path);
+    UnrealPackage asset;
+    if (!string.IsNullOrEmpty(usmapPath))
+    {
+        var usmap = new Usmap(usmapPath);
+        asset = new ZenAsset(path, ver, usmap);
+    }
+    else
+    {
+        asset = LoadAsset(path, ver);
+    }
+
     DecompileClass(asset, "old_out.c");
     var script = CompileClass(asset, "old_out.c");
 

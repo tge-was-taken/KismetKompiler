@@ -5,6 +5,8 @@ using UAssetAPI.UnrealTypes;
 using KismetKompiler.Syntax;
 using KismetKompiler.Compiler.Exceptions;
 using KismetKompiler.Compiler.Symbols;
+using KismetKompiler.Syntax.Statements.Expressions.Literals;
+using KismetKompiler.Syntax.Statements;
 
 namespace KismetKompiler.Compiler;
 
@@ -518,5 +520,200 @@ public partial class KismetScriptCompiler
             result.Add(new(caseIndexValueTerm, 0, caseTerm));
         }
         return result.ToArray();
+    }
+
+    private FName GetName(Expression expression)
+    {
+        if (expression is StringLiteral stringLiteral)
+        {
+            return new FName(_asset, _asset.AddNameReference(new(stringLiteral.Value)));
+        }
+        else if (expression is Identifier identifier)
+        {
+            return new FName(_asset, _asset.AddNameReference(new(identifier.Text)));
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private T GetEnum<T>(Argument argument)
+    {
+        if (argument.Expression is Identifier identifier)
+        {
+            return (T)System.Enum.Parse(typeof(T), identifier.Text);
+        }
+        else if (argument.Expression is StringLiteral stringLiteral)
+        {
+            return (T)System.Enum.Parse(typeof(T), stringLiteral.Value);
+        }
+        else if (argument.Expression is IntLiteral intLiteral)
+        {
+            return (T)Convert.ChangeType(intLiteral.Value, System.Enum.GetUnderlyingType(typeof(T)));
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private FName GetName(Argument argument)
+    {
+        return GetName(argument.Expression);
+    }
+
+    private FScriptText GetScriptText(IList<Argument> arguments)
+    {
+        var typeStr = GetString(arguments[0]);
+        var type = System.Enum.Parse<EBlueprintTextLiteralType>(typeStr);
+        switch (type)
+        {
+            case EBlueprintTextLiteralType.Empty:
+                return new FScriptText() { TextLiteralType = type };
+            case EBlueprintTextLiteralType.LocalizedText:
+                {
+                    var localizedSource = CompileSubExpression(arguments[1]);
+                    var localizedKey = CompileSubExpression(arguments[2]);
+                    var localizedNamespace = CompileSubExpression(arguments[3]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        LocalizedSource = localizedSource,
+                        LocalizedKey = localizedKey,
+                        LocalizedNamespace = localizedNamespace
+                    };
+                }
+            case EBlueprintTextLiteralType.InvariantText:
+                {
+                    var invariantLiteralString = CompileSubExpression(arguments[1]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        InvariantLiteralString = invariantLiteralString
+                    };
+                }
+            case EBlueprintTextLiteralType.LiteralString:
+                {
+                    var literalString = CompileSubExpression(arguments[1]);
+                    return new FScriptText() { TextLiteralType = type, InvariantLiteralString = literalString };
+                }
+            case EBlueprintTextLiteralType.StringTableEntry:
+                {
+                    var stringTableAsset = GetPackageIndex(arguments[1]);
+                    var stringTableId = CompileSubExpression(arguments[2]);
+                    var stringTableKey = CompileSubExpression(arguments[3]);
+                    return new FScriptText()
+                    {
+                        TextLiteralType = type,
+                        StringTableAsset = stringTableAsset,
+                        StringTableId = stringTableId,
+                        StringTableKey = stringTableKey
+                    };
+                }
+            default:
+                throw new NotImplementedException($"EX_TextConst TextLiteralType {type} not implemented");
+        }
+    }
+
+    private string GetString(Argument argument)
+    {
+        if (argument.Expression is StringLiteral stringLiteral)
+        {
+            return stringLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private bool GetBool(Argument argument)
+    {
+        if (argument.Expression is BoolLiteral boolLiteral)
+        {
+            return boolLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private ushort GetUInt16(Argument argument)
+    {
+        if (argument.Expression is IntLiteral intLiteral)
+        {
+            // TODO check bounds
+            return (ushort)intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private long GetInt64(Argument argument)
+    {
+        if (argument.Expression is IntLiteral intLiteral)
+        {
+            return (long)intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private ulong GetUInt64(Argument argument)
+    {
+        if (argument.Expression is IntLiteral intLiteral)
+        {
+            return (ulong)intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private int GetInt32(Argument argument)
+    {
+        if (argument.Expression is IntLiteral intLiteral)
+        {
+            return intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private byte GetByte(Argument argument)
+    {
+        if (argument.Expression is IntLiteral intLiteral)
+        {
+            return (byte)intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    private float GetFloat(Argument argument)
+    {
+        if (argument.Expression is FloatLiteral floatLiteral)
+        {
+            return floatLiteral.Value;
+        }
+        else if (argument.Expression is IntLiteral intLiteral)
+        {
+            return intLiteral.Value;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
     }
 }

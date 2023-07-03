@@ -10,7 +10,6 @@ using KismetKompiler.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Syntax.Statements.Expressions.Unary;
 using System.Data;
 using System.Diagnostics;
-using System.Net.Mime;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -33,6 +32,7 @@ public partial class KismetScriptCompiler
     private CompilationUnit _compilationUnit;
     private ClassContext _classContext;
     private FunctionContext _functionContext;
+    private bool _strictMode = true;
 
     private readonly Stack<KismetPropertyPointer?> _rvalueStack;
     private readonly Stack<MemberContext> _contextStack;
@@ -204,6 +204,11 @@ public partial class KismetScriptCompiler
             }
             else if (declaration is VariableDeclaration variableDeclaration)
             {
+                if (!TryFindPackageIndexInAsset(declaringPackage, declaringClass, declaringProcedure, variableDeclaration.Identifier.Text, out var packageIndex))
+                {
+                    (packageIndex, var propertyExport) = CreateVariable(variableDeclaration, declaringProcedure, true);
+                }
+
                 return new VariableSymbol()
                 {
                     Declaration = variableDeclaration,
@@ -673,7 +678,7 @@ public partial class KismetScriptCompiler
         return new FPackageIndex(+(index + 1));
     }
 
-    private (FPackageIndex PackageIndex, PropertyExport PropertyExport) CreateVariable(VariableDeclaration variableDeclaration, bool isLocal)
+    private (FPackageIndex PackageIndex, PropertyExport PropertyExport) CreateVariable(VariableDeclaration variableDeclaration, string functionName, bool isLocal)
     {
         string propertyType = null;
         int? serialSize = null;
@@ -745,7 +750,7 @@ public partial class KismetScriptCompiler
                 throw new NotImplementedException();
         }
         var classIndex = GetExportPackageIndexByExport(_class) ?? throw new NotImplementedException();
-        var functionIndex = GetExportPackageIndexByObjectName(_functionContext.Name);
+        var functionIndex = GetExportPackageIndexByObjectName(functionName);
         var propertyClassImportIndex = GetImportPackageIndexByObjectName(propertyType);
         var coreUObjectIndex = GetImportPackageIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
         if (propertyClassImportIndex == null)
@@ -838,7 +843,7 @@ public partial class KismetScriptCompiler
         {
             if (!TryFindPackageIndexInAsset(variableDeclaration.Identifier.Text, out var variablePackageIndex))
             {
-                (variablePackageIndex, var export) = CreateVariable(variableDeclaration, true);
+                (variablePackageIndex, var export) = CreateVariable(variableDeclaration, _functionContext.Name, true);
             }
 
             var variableSymbol = new VariableSymbol()
@@ -1099,7 +1104,7 @@ public partial class KismetScriptCompiler
                         TryGetPropertyPointer(assignmentOperator.Left, out var pointer);
                         return Emit(expression, new EX_Let()
                         {
-                            Value = pointer ?? new KismetPropertyPointer(),
+                            Value = pointer ?? new KismetPropertyPointer() { Old = new() },
                             Variable = CompileSubExpression(assignmentOperator.Left),
                             Expression = CompileSubExpression(assignmentOperator.Right),
                         });
@@ -1385,13 +1390,16 @@ public partial class KismetScriptCompiler
         {
             // TODO fix this in the decompiler
             // Fuzzy match
-            var memberIdentifier = GetIdentifier(memberExpression.Member);
-            contextSymbol = Scope
-                 .Where(x => x is ClassSymbol)
-                 .SelectMany(x => x.Members)
-                 .Where(x => x.Name == memberIdentifier.Text)
-                 .Select(x => x.DeclaringClass)
-                 .Single();
+            if (!_strictMode)
+            {
+                var memberIdentifier = GetIdentifier(memberExpression.Member);
+                contextSymbol = Scope
+                     .Where(x => x is ClassSymbol)
+                     .SelectMany(x => x.Members)
+                     .Where(x => x.Name == memberIdentifier.Text)
+                     .Select(x => x.DeclaringClass)
+                     .Single();
+            }
         }
 
         Debug.Assert(contextSymbol is ClassSymbol);
@@ -1447,7 +1455,7 @@ public partial class KismetScriptCompiler
                         InterfaceValue = CompileSubExpression(memberExpression.Context)
                     }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new(),
+                    RValuePointer = pointer ?? new() { Old = new() },
                 }); ;
             }
             else if (Context.Type == ContextType.Struct)
@@ -1467,7 +1475,7 @@ public partial class KismetScriptCompiler
                         Value = GetPackageIndex(memberExpression.Context)
                     }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new(),
+                    RValuePointer = pointer ?? new() { Old = new() },
                 }); ;
             }
             else
@@ -1476,7 +1484,7 @@ public partial class KismetScriptCompiler
                 {
                     ObjectExpression = CompileSubExpression(memberExpression.Context),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new(),
+                    RValuePointer = pointer ?? new() { Old = new() },
                 });
             }
         }
@@ -1613,201 +1621,6 @@ public partial class KismetScriptCompiler
             CompiledExpressions = new() { expression },
             ReferencedLabels = referencedLabels?.ToList() ?? new()
         };
-    }
-
-    private FName GetName(Expression expression)
-    {
-        if (expression is StringLiteral stringLiteral)
-        {
-            return new FName(_asset, _asset.AddNameReference(new(stringLiteral.Value)));
-        }
-        else if (expression is Identifier identifier)
-        {
-            return new FName(_asset, _asset.AddNameReference(new(identifier.Text)));
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private T GetEnum<T>(Argument argument)
-    {
-        if (argument.Expression is Identifier identifier)
-        {
-            return (T)System.Enum.Parse(typeof(T), identifier.Text);
-        }
-        else if (argument.Expression is StringLiteral stringLiteral)
-        {
-            return (T)System.Enum.Parse(typeof(T), stringLiteral.Value);
-        }
-        else if (argument.Expression is IntLiteral intLiteral)
-        {
-            return (T)Convert.ChangeType(intLiteral.Value, System.Enum.GetUnderlyingType(typeof(T)));
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private FName GetName(Argument argument)
-    {
-        return GetName(argument.Expression);
-    }
-
-    private FScriptText GetScriptText(IList<Argument> arguments)
-    {
-        var typeStr = GetString(arguments[0]);
-        var type = System.Enum.Parse<EBlueprintTextLiteralType>(typeStr);
-        switch (type)
-        {
-            case EBlueprintTextLiteralType.Empty:
-                return new FScriptText() { TextLiteralType = type };
-            case EBlueprintTextLiteralType.LocalizedText:
-                {
-                    var localizedSource = CompileSubExpression(arguments[1]);
-                    var localizedKey = CompileSubExpression(arguments[2]);
-                    var localizedNamespace = CompileSubExpression(arguments[3]);
-                    return new FScriptText()
-                    {
-                        TextLiteralType = type,
-                        LocalizedSource = localizedSource,
-                        LocalizedKey = localizedKey,
-                        LocalizedNamespace = localizedNamespace
-                    };
-                }
-            case EBlueprintTextLiteralType.InvariantText:
-                {
-                    var invariantLiteralString = CompileSubExpression(arguments[1]);
-                    return new FScriptText()
-                    {
-                        TextLiteralType = type,
-                        InvariantLiteralString = invariantLiteralString
-                    };
-                }
-            case EBlueprintTextLiteralType.LiteralString:
-                {
-                    var literalString = CompileSubExpression(arguments[1]);
-                    return new FScriptText() { TextLiteralType = type, InvariantLiteralString = literalString };
-                }
-            case EBlueprintTextLiteralType.StringTableEntry:
-                {
-                    var stringTableAsset = GetPackageIndex(arguments[1]);
-                    var stringTableId = CompileSubExpression(arguments[2]);
-                    var stringTableKey = CompileSubExpression(arguments[3]);
-                    return new FScriptText()
-                    {
-                        TextLiteralType = type,
-                        StringTableAsset = stringTableAsset,
-                        StringTableId = stringTableId,
-                        StringTableKey = stringTableKey
-                    };
-                }
-            default:
-                throw new NotImplementedException($"EX_TextConst TextLiteralType {type} not implemented");
-        }
-    }
-
-    private string GetString(Argument argument)
-    {
-        if (argument.Expression is StringLiteral stringLiteral)
-        {
-            return stringLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private bool GetBool(Argument argument)
-    {
-        if (argument.Expression is BoolLiteral boolLiteral)
-        {
-            return boolLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private ushort GetUInt16(Argument argument)
-    {
-        if (argument.Expression is IntLiteral intLiteral)
-        {
-            // TODO check bounds
-            return (ushort)intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private long GetInt64(Argument argument)
-    {
-        if (argument.Expression is IntLiteral intLiteral)
-        {
-            return (long)intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private ulong GetUInt64(Argument argument)
-    {
-        if (argument.Expression is IntLiteral intLiteral)
-        {
-            return (ulong)intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private int GetInt32(Argument argument)
-    {
-        if (argument.Expression is IntLiteral intLiteral)
-        {
-            return intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private byte GetByte(Argument argument)
-    {
-        if (argument.Expression is IntLiteral intLiteral)
-        {
-            return (byte)intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    private float GetFloat(Argument argument)
-    {
-        if (argument.Expression is FloatLiteral floatLiteral)
-        {
-            return floatLiteral.Value;
-        }
-        else if (argument.Expression is IntLiteral intLiteral)
-        {
-            return intLiteral.Value;
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
     }
 
     private bool TryGetLabel(Expression expression, out LabelSymbol label)
@@ -2064,7 +1877,7 @@ public partial class KismetScriptCompiler
     {
         // TODO fix
         if (name == "<null>")
-            return null;
+            return new FPackageIndex();
 
         var symbol = GetRequiredSymbol(name);
 
