@@ -15,8 +15,8 @@ using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
 using KismetKompiler.Library.Parser;
-using KismetKompiler.Library.Models;
 using KismetKompiler.Library.Packaging;
+using KismetKompiler.Library.Compiler;
 
 Console.OutputEncoding = Encoding.Unicode;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;

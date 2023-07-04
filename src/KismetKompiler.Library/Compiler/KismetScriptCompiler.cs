@@ -12,7 +12,6 @@ using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
 using System.Data;
 using System.Diagnostics;
-using KismetKompiler.Library.Models;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
@@ -393,7 +392,7 @@ public partial class KismetScriptCompiler
             flags |= flag;
         }
 
-        var functions = new List<Library.Models.CompiledFunctionContext>();
+        var functions = new List<CompiledFunctionContext>();
         var properties = new List<CompiledVariableContext>();
 
         PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
@@ -465,6 +464,36 @@ public partial class KismetScriptCompiler
         };
     }
 
+    private EFunctionFlags GetFunctionFlags(ProcedureDeclaration procedureDeclaration)
+    {
+        EFunctionFlags functionFlags = 0;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Public))
+            functionFlags |= EFunctionFlags.FUNC_Public;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Private))
+            functionFlags |= EFunctionFlags.FUNC_Private;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Sealed))
+            functionFlags |= EFunctionFlags.FUNC_Final;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Virtual))
+            ; // Not sealed
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Protected))
+            functionFlags |= EFunctionFlags.FUNC_Protected;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Static))
+            functionFlags |= EFunctionFlags.FUNC_Static;
+
+        foreach (var attr in procedureDeclaration.Attributes)
+        {
+            if (attr.Identifier.Text == "Extern" ||
+                attr.Identifier.Text == "UnknownSignature")
+                continue;
+
+            var flagFormat = $"FUNC_{attr.Identifier.Text}";
+            if (!Enum.TryParse<EFunctionFlags>(flagFormat, out var flag))
+                throw new CompilationError(attr, $"Unknown function attribute: {attr}");
+            functionFlags |= flag;
+        }
+        return functionFlags;
+    }
+
     public CompiledFunctionContext CompileFunction(ProcedureDeclaration procedureDeclaration)
     {
         var symbol = GetSymbol<ProcedureSymbol>(procedureDeclaration);
@@ -473,27 +502,31 @@ public partial class KismetScriptCompiler
             Name = procedureDeclaration.Identifier.Text,
             Declaration = procedureDeclaration,
             Symbol = symbol,
+            CompiledFunctionContext = new CompiledFunctionContext(symbol)
+            {
+                Flags = GetFunctionFlags(procedureDeclaration)
+            }
         };
-        _functionContext.ReturnLabel = CreateCompilerLabel("ReturnLabel");
 
-        PushScope(_functionContext.Symbol);
-        ForwardDeclareProcedureSymbols();
-        if (procedureDeclaration.Body != null)
+        if (!procedureDeclaration.IsExternal)
         {
-            CompileCompoundStatement(procedureDeclaration.Body);
+            _functionContext.ReturnLabel = CreateCompilerLabel("ReturnLabel");
+
+            PushScope(_functionContext.Symbol);
+            ForwardDeclareProcedureSymbols();
+            if (procedureDeclaration.Body != null)
+            {
+                CompileCompoundStatement(procedureDeclaration.Body);
+            }
+            ResolveLabel(_functionContext.ReturnLabel);
+            DoFixups();
+            EnsureEndOfScriptPresent();
+
+            PopScope();
         }
-        ResolveLabel(_functionContext.ReturnLabel);
-        DoFixups();
-        EnsureEndOfScriptPresent();
 
-        PopScope();
-        
-        var function = new CompiledFunctionContext(symbol)
-        {
-            Bytecode = _functionContext.PrimaryExpressions.SelectMany(x => x.CompiledExpressions).ToList(),
-        };
-
-        return function;
+        _functionContext.CompiledFunctionContext.Bytecode.AddRange(_functionContext.PrimaryExpressions.SelectMany(x => x.CompiledExpressions));
+        return _functionContext.CompiledFunctionContext;
     }
 
     private void ForwardDeclareProcedureSymbols()
@@ -507,6 +540,7 @@ public partial class KismetScriptCompiler
                 Name = param.Identifier.Text,
                 DeclaringSymbol = _functionContext.Symbol,
             };
+            _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
             DeclareSymbol(variableSymbol);
         }
 
@@ -656,6 +690,11 @@ public partial class KismetScriptCompiler
             var label = GetSymbol<LabelSymbol>(labelDeclaration);
             label.CodeOffset = _functionContext.CodeOffset;
             label.IsResolved = true;
+
+            _functionContext.CompiledFunctionContext.Labels.Add(new(label)
+            {
+                CodeOffset = label.CodeOffset.Value,
+            });
         }
         else if (declaration is VariableDeclaration variableDeclaration)
         {
@@ -671,6 +710,8 @@ public partial class KismetScriptCompiler
                     Expression = CompileSubExpression(variableDeclaration.Initializer)
                 });
             }
+
+            _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
         }
         else
         {

@@ -225,6 +225,7 @@ namespace KismetKompiler.Library.Compiler.Context
         public Parameter? Parameter { get; set; }
         public bool AllowShadowing { get; set; } = false;
         public bool IsReadOnly { get; set; } = false;
+        public bool IsReturnParameter { get; set; } = false;
     }
 
     public class PackageSymbol : DeclaredSymbol<PackageDeclaration>
@@ -405,5 +406,6 @@ namespace KismetKompiler.Library.Compiler.Context
         public LabelSymbol ReturnLabel { get; set; }
         public ProcedureSymbol Symbol { get; set; }
         public ProcedureDeclaration Declaration { get; set; }
+        public CompiledFunctionContext CompiledFunctionContext { get; set; }
     }
 }

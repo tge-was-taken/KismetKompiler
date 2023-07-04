@@ -92,7 +92,7 @@ modifier
 	: Public
 	| Private
 	| Protected
-	| Final
+	| Sealed
 	| Static
 	| Virtual
 	| Const
@@ -100,6 +100,7 @@ modifier
 	| Out
 	| Ref
 	| Abstract
+	| Override
 	;
 
 //
@@ -243,10 +244,11 @@ Ref:		'ref';
 Public:		'public';
 Private:	'private';
 Protected:	'protected';
-Final:		'final';
+Sealed:		'sealed';
 Static:		'static';
 Virtual:	'virtual';
 Abstract:	'abstract';
+Override:	'override';
 
 
 //	Control flow

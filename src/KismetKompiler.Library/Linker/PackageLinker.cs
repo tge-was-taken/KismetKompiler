@@ -1,6 +1,8 @@
-﻿using KismetKompiler.Library.Compiler.Context;
+﻿using KismetKompiler.Library.Compiler;
+using KismetKompiler.Library.Compiler.Context;
+using KismetKompiler.Library.Compiler.Exceptions;
 using KismetKompiler.Library.Compiler.Intermediate;
-using KismetKompiler.Library.Models;
+using KismetKompiler.Library.Syntax.Statements.Declarations;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -124,6 +126,10 @@ public record ImportIndex(
 
 //}
 
+public record PackageImport(FPackageIndex Index, Import Import);
+
+public record PackageExport<T>(FPackageIndex Index, T Export) where T : Export;
+
 public class UAssetLinker : PackageLinker
 {
     private UAsset _asset;
@@ -199,16 +205,35 @@ public class UAssetLinker : PackageLinker
         };
     }
 
-    private FPackageIndex EnsureObjectImported(Import parent, string objectName, string className, bool bImportOptional = false)
+    private FPackageIndex EnsurePackageImported(string objectName, bool bImportOptional = false)
     {
-        var import = _asset.GetImportByName(objectName);
+        var import = _asset.FindImportByObjectName(objectName);
         if (import == null)
         {
             import = new UAssetAPI.Import()
             {
                 ObjectName = new(_asset, objectName),
-                OuterIndex = FPackageIndex.FromImport(_asset.Imports.IndexOf(parent)),
-                ClassPackage = parent.ObjectName,
+                OuterIndex =FPackageIndex.Null,
+                ClassPackage = new(_asset, objectName),
+                ClassName = new(_asset, "Package"),
+                bImportOptional = bImportOptional
+            };
+        }
+
+        return FPackageIndex.FromImport(_asset.Imports.IndexOf(import));
+    }
+
+    private FPackageIndex EnsureObjectImported(FPackageIndex parent, string objectName, string className, bool bImportOptional = false)
+    {
+        var import = _asset.FindImportByObjectName(objectName);
+        if (import == null)
+        {
+            var parentImport = parent.ToImport(_asset);
+            import = new UAssetAPI.Import()
+            {
+                ObjectName = new(_asset, objectName),
+                OuterIndex = parent,
+                ClassPackage = parentImport.ObjectName,
                 ClassName = new(_asset, className),
                 bImportOptional = bImportOptional
             };
@@ -261,7 +286,9 @@ public class UAssetLinker : PackageLinker
         var createBeforeSerializationDependencies = new List<FPackageIndex>();
         var createBeforeCreateDependencies = new List<FPackageIndex>();
 
-        switch (symbol.Declaration.Type.Text)
+        var type = symbol.Declaration?.Type.Text ?? symbol.Parameter.Type.Text;
+
+        switch (type)
         {
             case "byte":
                 propertyType = "ByteProperty";
@@ -375,9 +402,23 @@ public class UAssetLinker : PackageLinker
             default:
                 throw new NotImplementedException();
         }
+
+        if (symbol.IsParameter)
+        {
+            property.PropertyFlags = EPropertyFlags.CPF_BlueprintVisible | EPropertyFlags.CPF_BlueprintReadOnly | EPropertyFlags.CPF_Parm;
+            if (symbol.IsOutParameter)
+            {
+                property.PropertyFlags |= EPropertyFlags.CPF_OutParm;
+            }
+            if (symbol.IsReturnParameter)
+            {
+                property.PropertyFlags |= EPropertyFlags.CPF_ReturnParm;
+            }
+        }
+
         var classExport =  _asset.FindClassExportByName(symbol.DeclaringClass?.Name) ?? throw new NotImplementedException();
         var functionExport = _asset.FindFunctionExportByName(symbol?.DeclaringProcedure?.Name);
-        var coreUObjectImport = _asset.GetImportByName("/Script/CoreUObject") ?? throw new NotImplementedException();
+        var coreUObjectImport = _asset.FindImportIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
         var propertyClassImportIndex = EnsureObjectImported(coreUObjectImport, propertyType, "Class");
         var propertyTemplateImportIndex = EnsureObjectImported(coreUObjectImport, $"Default__{propertyType}", propertyType);
 
@@ -418,6 +459,9 @@ public class UAssetLinker : PackageLinker
 
     private FPackageIndex CreatePackageIndexForSymbol(Symbol symbol)
     {
+        if (TryFindPackageIndexInAsset(symbol, out var packageIndex))
+            return packageIndex;
+
         if (symbol is VariableSymbol variableSymbol)
         {
             return CreateVariable(variableSymbol);
@@ -443,10 +487,7 @@ public class UAssetLinker : PackageLinker
     {
         if (pointer is IntermediatePropertyPointer iProperty)
         {
-            if (!TryFindPackageIndexInAsset(iProperty.Symbol, out var packageIndex))
-            {
-                packageIndex = CreatePackageIndexForSymbol(iProperty.Symbol);
-            }
+            var packageIndex = CreatePackageIndexForSymbol(iProperty.Symbol);
 
             pointer = new KismetPropertyPointer()
             {
@@ -460,10 +501,7 @@ public class UAssetLinker : PackageLinker
     {
         if (packageIndex is IntermediatePackageIndex iPackageIndex)
         {
-            if (!TryFindPackageIndexInAsset(iPackageIndex.Symbol, out packageIndex))
-            {
-                packageIndex = CreatePackageIndexForSymbol(iPackageIndex.Symbol);
-            }
+            packageIndex = CreatePackageIndexForSymbol(iPackageIndex.Symbol);
         }
     }
 
@@ -777,6 +815,87 @@ public class UAssetLinker : PackageLinker
         return bytecode;
     }
 
+    private FunctionExport CreateFunctionExport(CompiledFunctionContext context)
+    {
+        var coreUObjectImport = EnsurePackageImported("/Script/CoreUObject");
+        var functionClassImport = EnsureObjectImported(coreUObjectImport, "Function", "Class");
+        var functionDefaultObjectImport = EnsureObjectImported(coreUObjectImport, "Default__Function", "Function");
+        var classExport = _asset.FindClassExportByName(context.Symbol?.DeclaringClass?.Name);
+
+        var ownerIndex = context.Symbol.DeclaringClass != null ?
+            FPackageIndex.FromExport(_asset.Exports.IndexOf(classExport)) :
+            FPackageIndex.Null;
+
+        // TODO: override
+        var baseFunctionClassIndex = FPackageIndex.Null;
+        var baseFunctionIndex = FPackageIndex.Null;
+        var ubergraphFunctionIndex = FPackageIndex.FromExport(_asset.Exports.IndexOf(_asset.GetUbergraphFunction()));
+
+        var export = new FunctionExport()
+        {
+            FunctionFlags = context.Flags,
+            SuperStruct = baseFunctionIndex,
+            Children = new(),
+            LoadedProperties = Array.Empty<FProperty>(),
+            ScriptBytecode = null,
+            ScriptBytecodeSize = 0,
+            ScriptBytecodeRaw = null,
+            Field = new() { Next = null },
+            Data = new(),
+            ObjectName = new(_asset, context.Symbol.Name),
+            ObjectFlags = EObjectFlags.RF_Public,
+            SerialSize = 0xDEADBEEF,
+            SerialOffset = 0xDEADBEEF,
+            bForcedExport = false,
+            bNotForClient = false,
+            bNotForServer = false,
+            PackageGuid = Guid.Empty,
+            IsInheritedInstance = false,
+            PackageFlags = EPackageFlags.PKG_None,
+            bNotAlwaysLoadedForEditorGame = false,
+            bIsAsset = false,
+            GeneratePublicHash = false,
+            SerializationBeforeSerializationDependencies = new(),
+            CreateBeforeSerializationDependencies = new() { /*ubergraphFunctionIndex*/ },
+            SerializationBeforeCreateDependencies = new(),
+            CreateBeforeCreateDependencies = new() { ownerIndex },
+            PublicExportHash = 0,
+            Padding = null,
+            Extras = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 },
+            OuterIndex = ownerIndex,
+            ClassIndex = functionClassImport,
+            SuperIndex = baseFunctionIndex, 
+            TemplateIndex = functionDefaultObjectImport,
+        };
+        _asset.Exports.Add(export);
+
+        var children = context.Variables
+            .Select(x => CreatePackageIndexForSymbol(x.Symbol))
+            .ToList();
+        export.Children.AddRange(children);
+        export.SerializationBeforeSerializationDependencies.AddRange(children);
+
+        if (!baseFunctionClassIndex.IsNull())
+        {
+            export.CreateBeforeSerializationDependencies.Insert(0, baseFunctionClassIndex);
+        }
+        if (!baseFunctionIndex.IsNull())
+        {
+            export.SerializationBeforeSerializationDependencies.Insert(0, baseFunctionIndex);
+            export.CreateBeforeCreateDependencies.Add(baseFunctionIndex);
+        }
+        
+        var exportIndex = FPackageIndex.FromExport(_asset.Exports.IndexOf(export));
+        if (classExport != null)
+        {
+            classExport.FuncMap[export.ObjectName] = exportIndex;
+            classExport.Children.Add(exportIndex);
+            classExport.CreateBeforeSerializationDependencies.Add(exportIndex);
+        }
+
+        return export;
+    }
+
     public override UAssetLinker LinkCompiledScript(CompiledScriptContext scriptContext)
     {
         foreach (var classContext in scriptContext.Classes)
@@ -788,8 +907,10 @@ public class UAssetLinker : PackageLinker
             foreach (var functionContext in classContext.Functions)
             {
                 var functionExport = _asset.FindFunctionExportByName(functionContext.Symbol.Name);
-                if (functionExport == null) 
-                    throw new NotImplementedException();
+                if (functionExport == null)
+                {
+                    functionExport = CreateFunctionExport(functionContext);
+                }
 
                 functionExport.ScriptBytecode = GetFixedBytecode(functionContext.Bytecode);
             }

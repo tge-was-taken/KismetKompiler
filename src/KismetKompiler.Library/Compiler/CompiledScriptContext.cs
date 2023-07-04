@@ -2,13 +2,13 @@
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 
-namespace KismetKompiler.Library.Models;
+namespace KismetKompiler.Library.Compiler;
 
 public abstract class CompiledDeclarationContext
 {
     public virtual Symbol Symbol { get; }
 
-    public CompiledDeclarationContext(Symbol symbol) 
+    public CompiledDeclarationContext(Symbol symbol)
     {
         Symbol = symbol;
     }
@@ -16,7 +16,7 @@ public abstract class CompiledDeclarationContext
 
 public class CompiledDeclarationContext<T> : CompiledDeclarationContext where T : Symbol
 {
-    public CompiledDeclarationContext(T symbol) : base(symbol) 
+    public CompiledDeclarationContext(T symbol) : base(symbol)
     {
         Symbol = symbol;
     }
@@ -34,6 +34,7 @@ public class CompiledFunctionContext : CompiledDeclarationContext<ProcedureSymbo
 {
     public CompiledFunctionContext(ProcedureSymbol symbol) : base(symbol) { }
 
+    public EFunctionFlags Flags { get; set; }
     public List<CompiledVariableContext> Variables { get; init; } = new();
     public List<CompiledLabelContext> Labels { get; init; } = new();
     public List<KismetExpression> Bytecode { get; init; } = new();

@@ -195,7 +195,7 @@ public static class AssetHelper
             .SingleOrDefault();
     }
 
-    public static Import? GetImportByName(this UnrealPackage asset, string name)
+    public static Import? FindImportByObjectName(this UnrealPackage asset, string name)
     {
         if (asset is UAsset uasset)
         {
@@ -207,5 +207,27 @@ public static class AssetHelper
         {
             throw new NotImplementedException("Zen import");
         }
+    }
+
+    public static FPackageIndex? FindImportIndexByObjectName(this UnrealPackage asset, string name)
+    {
+        if (asset is UAsset uasset)
+        {
+            var import = FindImportByObjectName(asset, name);
+            return FPackageIndex.FromImport(uasset.Imports.IndexOf(import));
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
+    }
+
+    public static FunctionExport? GetUbergraphFunction(this UnrealPackage asset)
+    {
+        return asset.Exports
+            .Where(x => x is FunctionExport)
+            .Cast<FunctionExport>()
+            .Where(x => x.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction))
+            .SingleOrDefault();
     }
 }
