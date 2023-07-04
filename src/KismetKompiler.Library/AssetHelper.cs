@@ -1,5 +1,4 @@
-﻿using KismetKompiler.Library;
-using UAssetAPI;
+﻿using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
 using UAssetAPI.Kismet.Bytecode;
@@ -176,5 +175,37 @@ public static class AssetHelper
         if (parent == import)
             return true;
         return asset.ImportInheritsType(parent, type);
+    }
+
+    public static ClassExport? FindClassExportByName(this UnrealPackage asset, string name)
+    {
+        return asset.Exports
+            .Where(x => x is ClassExport)
+            .Where(x => x.ObjectName.ToString() == name)
+            .Cast<ClassExport>()
+            .SingleOrDefault();
+    }
+
+    public static FunctionExport? FindFunctionExportByName(this UnrealPackage asset, string name)
+    {
+        return asset.Exports
+            .Where(x => x is FunctionExport)
+            .Where(x => x.ObjectName.ToString() == name)
+            .Cast<FunctionExport>()
+            .SingleOrDefault();
+    }
+
+    public static Import? GetImportByName(this UnrealPackage asset, string name)
+    {
+        if (asset is UAsset uasset)
+        {
+            return uasset.Imports
+                .Where(x => x.ObjectName.ToString() == name)
+                .SingleOrDefault();
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
     }
 }

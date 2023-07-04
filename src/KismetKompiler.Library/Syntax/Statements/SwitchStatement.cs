@@ -1,8 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace KismetKompiler.Library.Syntax.Statements;
+﻿namespace KismetKompiler.Library.Syntax.Statements;
 
 public class SwitchStatement : Statement
 {

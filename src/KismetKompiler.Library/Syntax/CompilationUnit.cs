@@ -1,5 +1,4 @@
 ﻿using KismetKompiler.Library.Syntax.Statements;
-using System.Collections.Generic;
 
 namespace KismetKompiler.Library.Syntax;
 

@@ -1,6 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions;
 
 public class NullExpression : Expression
 {

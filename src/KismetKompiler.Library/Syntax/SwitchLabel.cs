@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
-
 namespace KismetKompiler.Library.Syntax;
 
 public abstract class SwitchLabel : SyntaxNode

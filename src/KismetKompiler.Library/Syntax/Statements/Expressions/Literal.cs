@@ -1,7 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions;
 
 public abstract class Literal : Expression
 {

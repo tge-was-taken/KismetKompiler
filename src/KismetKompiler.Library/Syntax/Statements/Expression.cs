@@ -1,6 +1,4 @@
 ﻿using Antlr4.Runtime;
-using KismetKompiler.Library.Compiler.Processing;
-using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Parser;
 
 namespace KismetKompiler.Library.Syntax.Statements;

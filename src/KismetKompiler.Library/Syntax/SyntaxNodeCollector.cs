@@ -5,7 +5,6 @@ using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
-using System.Collections.Generic;
 
 namespace KismetKompiler.Library.Syntax;
 

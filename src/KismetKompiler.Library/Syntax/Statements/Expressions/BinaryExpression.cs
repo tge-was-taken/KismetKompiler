@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions;
 
 public abstract class BinaryExpression : Expression
 {

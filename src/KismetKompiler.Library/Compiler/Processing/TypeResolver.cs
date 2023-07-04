@@ -1,8 +1,5 @@
 ﻿using System.Diagnostics;
-using UAssetAPI;
 using UAssetAPI.ExportTypes;
-using UAssetAPI.UnrealTypes;
-using static System.Formats.Asn1.AsnWriter;
 using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
 using KismetKompiler.Library.Syntax.Statements;

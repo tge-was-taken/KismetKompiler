@@ -3,9 +3,7 @@ using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Syntax.Statements.Declarations;
 using System.Collections;
-using System.Xml.Linq;
 using UAssetAPI.Kismet.Bytecode;
-using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Library.Compiler.Context
 {
@@ -21,7 +19,6 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public interface IExportSymbol
     {
-        FPackageIndex PackageIndex { get; }
     }
 
     public record struct SymbolKey(string Name, SymbolCategory Category);
@@ -94,8 +91,10 @@ namespace KismetKompiler.Library.Compiler.Context
     {
         private Symbol? _declaringSymbol;
         private Symbol? _baseSymbol;
+        private Symbol? _innerSymbol;
         private List<Symbol> _members = new();
         private List<Symbol> _inheritors = new();
+        private List<Symbol> _usedBy = new();
 
         public required Symbol? DeclaringSymbol
         {
@@ -127,11 +126,27 @@ namespace KismetKompiler.Library.Compiler.Context
             }
         }
 
+        public Symbol? InnerSymbol
+        {
+            get => _innerSymbol;
+            set
+            {
+                if (_innerSymbol != value &&
+                    _innerSymbol != null)
+                {
+                    _innerSymbol._usedBy.Remove(this);
+                }
+                _innerSymbol = value;
+                _innerSymbol?._usedBy.Add(this);
+            }
+        }
+
         public required string Name { get; init; }
         public required bool IsExternal { get; init; }
         public virtual Declaration Declaration { get; }
         public IReadOnlyList<Symbol> Members => _members;
         public IReadOnlyList<Symbol> Inheritors => _inheritors;
+        public IReadOnlyList<Symbol> UsedBy => _usedBy;
         public abstract SymbolCategory SymbolCategory { get; }
         public SymbolKey Key => new(Name, SymbolCategory);
         public ClassSymbol? DeclaringClass
@@ -207,9 +222,6 @@ namespace KismetKompiler.Library.Compiler.Context
                 return VariableCategory.Global;
             }
         }
-
-        public required FPackageIndex PackageIndex { get; init; }
-        public required FFieldPath? FieldPath { get; init; }
         public Parameter? Parameter { get; set; }
         public bool AllowShadowing { get; set; } = false;
         public bool IsReadOnly { get; set; } = false;
@@ -231,8 +243,6 @@ namespace KismetKompiler.Library.Compiler.Context
         {
         }
 
-        public required FPackageIndex PackageIndex { get; init; }
-
         public override SymbolCategory SymbolCategory => SymbolCategory.Class;
     }
 
@@ -242,7 +252,6 @@ namespace KismetKompiler.Library.Compiler.Context
         {
         }
 
-        public FPackageIndex PackageIndex { get; set; }
         public override SymbolCategory SymbolCategory => SymbolCategory.Procedure;
 
         public bool IsUbergraphFunction

@@ -1,6 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 
 public abstract class AssignmentOperatorBase : BinaryExpression, IOperator
 {

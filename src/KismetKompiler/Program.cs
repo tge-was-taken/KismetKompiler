@@ -14,8 +14,9 @@ using UAssetAPI.IO;
 using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
-using KismetKompiler.Library;
 using KismetKompiler.Library.Parser;
+using KismetKompiler.Library.Models;
+using KismetKompiler.Library.Packaging;
 
 Console.OutputEncoding = Encoding.Unicode;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -61,9 +62,15 @@ if (!File.Exists(path))
 //DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
 //DecompileOne(path, ver, usmapPath);
 //PackageCustomAI();
-DecompileOne(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", ver);
-var script = CompileClass(null, "out.c");
+//DecompileOne(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", ver);
+//var script = CompileClass(null, "old_out.c");
+//var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", ver);
+//var assetBuilder = new UAssetBuilder(asset)
+//    .AddCompiledScript(script)
+//    .Build();
+//DumpOldAndNew(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", asset, script);
 
+PackageCustomAI();
 
 Console.WriteLine("Done");
 Console.ReadKey();
@@ -73,15 +80,11 @@ static void PackageCustomAI()
     var ver = EngineVersion.VER_UE4_23;
     var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
     var script = CompileClass(asset, @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
-    foreach (var cls in script.Classes)
-    {
-        foreach (var func in cls.Functions)
-        {
-            var export = (FunctionExport)asset.Exports.Where(x => x.ObjectName.ToString() == func.Name).FirstOrDefault();
-            export.ScriptBytecode = func.Expressions.ToArray();
-        }
-    }
-    asset.Write(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
+    var newAsset = new UAssetLinker(asset)
+        .LinkCompiledScript(script)
+        .Build();
+
+    newAsset.Write(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
     DecompileOne(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
     File.Delete(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak");
     Process.Start(@"E:\Projects\smtv_ai\tools\UnrealPak\UnrealPak-With-Compression.bat", @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI").WaitForExit();
@@ -103,23 +106,26 @@ static void DecompileOne(string path, EngineVersion ver, string? usmapPath = def
 
     DecompileClass(asset, "old_out.c");
     var script = CompileClass(asset, "old_out.c");
+    var newAsset = new UAssetLinker((UAsset)asset)
+        .LinkCompiledScript(script)
+        .Build();
 
-    var outWriter = new StreamWriter("new_out.c", false, Encoding.Unicode);
-    var decompiler = new KismetDecompiler(outWriter);
-    decompiler.DecompileFunction(new()
-    {
-        Asset = asset,
-        ScriptBytecode = script.Classes[0].Functions[0].Expressions.ToArray(),
-        ObjectName = new(asset, script.Classes[0].Functions[0].Name),
-        FunctionFlags = EFunctionFlags.FUNC_UbergraphFunction
-    });
-    outWriter.Close();
+    //var outWriter = new StreamWriter("new_out.c", false, Encoding.Unicode);
+    //var decompiler = new KismetDecompiler(outWriter);
+    //decompiler.DecompileFunction(new()
+    //{
+    //    Asset = newAsset,
+    //    ScriptBytecode = script.Classes[0].Functions[0].Bytecode.ToArray(),
+    //    ObjectName = new(newAsset, script.Classes[0].Functions[0].Symbol.Name),
+    //    FunctionFlags = EFunctionFlags.FUNC_UbergraphFunction
+    //});
+    //outWriter.Close();
 
 
-    var old = ((FunctionExport)asset.Exports.Where(x => x is FunctionExport).FirstOrDefault());
-    KismetSerializer.asset = asset;
+    var old = ((FunctionExport)newAsset.Exports.Where(x => x is FunctionExport).FirstOrDefault());
+    KismetSerializer.asset = newAsset;
 
-    DumpOldAndNew(path, asset, script);
+    DumpOldAndNew(path, newAsset, script);
 
 }
 
@@ -249,7 +255,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static KismetScript CompileClass(UnrealPackage asset, string inPath)
+static CompiledScriptContext CompileClass(UnrealPackage asset, string inPath)
 {
     try
     {
@@ -258,7 +264,7 @@ static KismetScript CompileClass(UnrealPackage asset, string inPath)
         var compilationUnit = parser.Parse(reader);
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
-        var compiler = new KismetScriptCompiler(asset);
+        var compiler = new KismetScriptCompiler();
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;
     }
@@ -289,7 +295,7 @@ static void DumpOld(UnrealPackage asset)
     File.WriteAllText($"old.json", oldJsonText);
 }
 
-static void DumpOldAndNew(string fileName, UnrealPackage asset, KismetScript script)
+static void DumpOldAndNew(string fileName, UnrealPackage asset, CompiledScriptContext script)
 {
     KismetSerializer.asset = asset;
 
@@ -301,7 +307,7 @@ static void DumpOldAndNew(string fileName, UnrealPackage asset, KismetScript scr
 
     var newJsons = script.Classes
         .SelectMany(x => x.Functions)
-        .Select(x => (x.Name, JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Expressions.ToArray()), Formatting.Indented)));
+        .Select(x => (x.Symbol.Name, JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.Bytecode.ToArray()), Formatting.Indented)));
 
     var oldJsonText = string.Join("\n", oldJsons);
     var newJsonText = string.Join("\n", newJsons);

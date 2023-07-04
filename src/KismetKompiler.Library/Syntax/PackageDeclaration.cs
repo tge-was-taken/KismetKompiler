@@ -1,6 +1,5 @@
 ﻿using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
-using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 
 namespace KismetKompiler.Library.Syntax;
 

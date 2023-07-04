@@ -1,4 +1,3 @@
-using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 
 namespace KismetKompiler.Library.Syntax.Statements.Expressions;

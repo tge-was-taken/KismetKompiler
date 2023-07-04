@@ -1,6 +1,5 @@
 ﻿using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
-using KismetKompiler.Library;
 using KismetKompiler.Library.Decompiler.Context;
 
 namespace KismetKompiler.Library.Decompiler.Passes

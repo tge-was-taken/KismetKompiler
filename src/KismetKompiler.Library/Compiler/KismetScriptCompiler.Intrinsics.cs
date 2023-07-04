@@ -8,6 +8,7 @@ using KismetKompiler.Library.Compiler.Context;
 using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
+using KismetKompiler.Library.Compiler.Intermediate;
 
 namespace KismetKompiler.Compiler;
 
@@ -527,11 +528,11 @@ public partial class KismetScriptCompiler
     {
         if (expression is StringLiteral stringLiteral)
         {
-            return new FName(_asset, _asset.AddNameReference(new(stringLiteral.Value)));
+            return new IntermediateName(stringLiteral.Value);
         }
         else if (expression is Identifier identifier)
         {
-            return new FName(_asset, _asset.AddNameReference(new(identifier.Text)));
+            return new IntermediateName(identifier.Text);
         }
         else
         {

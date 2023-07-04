@@ -1,7 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-using System;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 
 public class BoolLiteral : Literal<bool>, IEquatable<BoolLiteral>
 {

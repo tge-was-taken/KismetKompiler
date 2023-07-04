@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace KismetKompiler.Library;
+﻿namespace KismetKompiler.Library;
 
 public static class DictionaryExtensions
 {

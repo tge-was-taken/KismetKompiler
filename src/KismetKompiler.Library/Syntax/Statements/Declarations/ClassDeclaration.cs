@@ -1,9 +1,4 @@
 ﻿using KismetKompiler.Library.Syntax.Statements.Expressions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace KismetKompiler.Library.Syntax.Statements.Declarations
 {

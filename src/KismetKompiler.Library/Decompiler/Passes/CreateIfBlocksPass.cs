@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using KismetKompiler.Library.Decompiler.Context;
-using KismetKompiler.Library.Decompiler.Context;
+﻿using KismetKompiler.Library.Decompiler.Context;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 
 namespace KismetKompiler.Library.Decompiler.Passes

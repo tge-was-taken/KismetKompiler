@@ -1,6 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-
-namespace KismetKompiler.Library.Syntax.Statements;
+﻿namespace KismetKompiler.Library.Syntax.Statements;
 
 public class ForStatement : Statement, IBlockStatement
 {

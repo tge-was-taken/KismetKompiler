@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace KismetKompiler.Library.Parser
+﻿namespace KismetKompiler.Library.Parser
 {
     public partial class KismetScriptParser
     {

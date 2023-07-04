@@ -1,7 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-using KismetKompiler.Library.Syntax.Statements;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
 
 public abstract class PostfixOperator : UnaryExpression, IOperator
 {

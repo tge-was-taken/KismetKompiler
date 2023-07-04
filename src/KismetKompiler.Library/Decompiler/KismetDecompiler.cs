@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
-using Antlr4.Runtime;
 using KismetKompiler.Library;
 using KismetKompiler.Library.Decompiler;
 using KismetKompiler.Library.Decompiler.Context;

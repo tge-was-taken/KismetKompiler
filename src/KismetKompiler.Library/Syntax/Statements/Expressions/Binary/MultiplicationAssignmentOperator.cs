@@ -1,6 +1,4 @@
-﻿using KismetKompiler.Library.Syntax.Statements;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 
 public class MultiplicationAssignmentOperator : CompoundAssignmentOperator
 {

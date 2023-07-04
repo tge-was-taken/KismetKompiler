@@ -1,6 +1,4 @@
-﻿using KismetKompiler.Library.Syntax.Statements;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
 
 public class NegationOperator : PrefixOperator
 {

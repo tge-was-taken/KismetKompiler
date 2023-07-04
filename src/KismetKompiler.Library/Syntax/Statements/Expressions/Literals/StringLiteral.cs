@@ -1,8 +1,4 @@
-﻿using KismetKompiler.Library.Syntax;
-using KismetKompiler.Library.Syntax.Statements.Expressions;
-using System;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 
 public class StringLiteral : Literal<string>, IEquatable<StringLiteral>
 {

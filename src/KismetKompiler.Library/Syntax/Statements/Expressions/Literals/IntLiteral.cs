@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
+﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 
 public class IntLiteral : Literal<int>, IEquatable<IntLiteral>
 {
