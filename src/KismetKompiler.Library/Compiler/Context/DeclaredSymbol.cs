@@ -19,11 +19,6 @@ namespace KismetKompiler.Library.Compiler.Context
         Any
     }
 
-    public interface IDeclaredSymbol
-    {
-        Declaration Declaration { get; }
-    }
-
     public interface IExportSymbol
     {
         FPackageIndex PackageIndex { get; }
@@ -36,7 +31,9 @@ namespace KismetKompiler.Library.Compiler.Context
     {
         Symbol? GetSymbol(string name);
         Symbol? GetSymbol(string name, SymbolCategory category);
+        Symbol? GetSymbol(Declaration declaration);
         T? GetSymbol<T>(string name) where T : Symbol;
+        T? GetSymbol<T>(Declaration declaration) where T : Symbol;
 
         Symbol? GetRequiredSymbol(string name);
         Symbol? GetRequiredSymbol(string name, SymbolCategory category);
@@ -61,6 +58,7 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public abstract void DeclareSymbol(Symbol symbol);
         public abstract Symbol? GetSymbol(string name, SymbolCategory category);
+        public abstract Symbol? GetSymbol(Declaration declaration);
         public abstract bool SymbolExists(string name, SymbolCategory category);
         public abstract IEnumerator<Symbol> GetEnumerator();
 
@@ -87,6 +85,9 @@ namespace KismetKompiler.Library.Compiler.Context
 
         IEnumerator IEnumerable.GetEnumerator()
             => GetEnumerator();
+
+        public T? GetSymbol<T>(Declaration declaration) where T : Symbol
+            => (T)GetSymbol(declaration);
     }
 
     public abstract class Symbol : SymbolTableBase
@@ -128,6 +129,7 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public required string Name { get; init; }
         public required bool IsExternal { get; init; }
+        public virtual Declaration Declaration { get; }
         public IReadOnlyList<Symbol> Members => _members;
         public IReadOnlyList<Symbol> Inheritors => _inheritors;
         public abstract SymbolCategory SymbolCategory { get; }
@@ -140,11 +142,6 @@ namespace KismetKompiler.Library.Compiler.Context
             => DeclaringSymbol is PackageSymbol symbol ? symbol : DeclaringSymbol?.DeclaringPackage;
         public ClassSymbol? BaseClass
             => BaseSymbol is ClassSymbol symbol ? symbol : null;
-
-        public Symbol()
-        {
-
-        }
 
         public override string ToString()
         {
@@ -166,13 +163,19 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override IEnumerator<Symbol> GetEnumerator()
             => _members.Union(BaseSymbol ?? Enumerable.Empty<Symbol>()).Distinct().GetEnumerator();
+
+        public override Symbol? GetSymbol(Declaration declaration)
+            => _members.SingleOrDefault(x => x.Declaration == declaration) ?? BaseSymbol?.GetSymbol(declaration);
     }
 
-    public abstract class DeclaredSymbol<T> : Symbol, IDeclaredSymbol where T : Declaration
+    public abstract class DeclaredSymbol<T> : Symbol where T : Declaration
     {
-        public required T Declaration { get; init; }
+        public override T Declaration { get; }
 
-        Declaration IDeclaredSymbol.Declaration => Declaration;
+        public DeclaredSymbol(T declaration)
+        {
+            Declaration = declaration;
+        }
     }
 
     public enum VariableCategory
@@ -186,6 +189,10 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public class VariableSymbol : DeclaredSymbol<VariableDeclaration>, IExportSymbol
     {
+        public VariableSymbol(VariableDeclaration declaration) : base(declaration)
+        {
+        }
+
         public bool IsParameter => Parameter != null;
         public bool IsOutParameter => Parameter?.Modifier.HasFlag(ParameterModifier.Out) ?? false;
         public override SymbolCategory SymbolCategory => SymbolCategory.Variable;
@@ -210,12 +217,20 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public class PackageSymbol : DeclaredSymbol<PackageDeclaration>
     {
+        public PackageSymbol(PackageDeclaration declaration) : base(declaration)
+        {
+        }
+
         // TODO
         public override SymbolCategory SymbolCategory => SymbolCategory.Package;
     }
 
     public class ClassSymbol : DeclaredSymbol<ClassDeclaration>, IExportSymbol
     {
+        public ClassSymbol(ClassDeclaration declaration) : base(declaration)
+        {
+        }
+
         public required FPackageIndex PackageIndex { get; init; }
 
         public override SymbolCategory SymbolCategory => SymbolCategory.Class;
@@ -223,7 +238,11 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public class ProcedureSymbol : DeclaredSymbol<ProcedureDeclaration>, IExportSymbol
     {
-        public required FPackageIndex PackageIndex { get; init; }
+        public ProcedureSymbol(ProcedureDeclaration declaration) : base(declaration)
+        {
+        }
+
+        public FPackageIndex PackageIndex { get; set; }
         public override SymbolCategory SymbolCategory => SymbolCategory.Procedure;
 
         public bool IsUbergraphFunction
@@ -235,6 +254,10 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public class LabelSymbol : DeclaredSymbol<LabelDeclaration>
     {
+        public LabelSymbol(LabelDeclaration declaration) : base(declaration)
+        {
+        }
+
         public int? CodeOffset { get; set; }
 
         public bool IsResolved { get; set; }
@@ -285,6 +308,9 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override IEnumerator<Symbol> GetEnumerator()
             => symbolsByName.SelectMany(x => x.Value).GetEnumerator();
+
+        public override Symbol? GetSymbol(Declaration declaration)
+            => symbolsByName.SelectMany(x => x.Value).Where(x => x.Declaration == declaration).SingleOrDefault();
     }
 
     public enum ContextType
@@ -324,6 +350,9 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override IEnumerator<Symbol> GetEnumerator()
             => Symbol?.GetEnumerator() ?? Enumerable.Empty<Symbol>().GetEnumerator();
+
+        public override Symbol? GetSymbol(Declaration declaration)
+            => Symbol?.GetSymbol(declaration);
     }
 
     public class Scope : SymbolTableBase
@@ -352,6 +381,9 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override IEnumerator<Symbol> GetEnumerator()
             => SymbolTable.Union(Parent ?? Enumerable.Empty<Symbol>()).GetEnumerator();
+
+        public override Symbol? GetSymbol(Declaration declaration)
+            => SymbolTable.GetSymbol(declaration) ?? Parent?.GetSymbol(declaration);
     }
 
     public class FunctionContext

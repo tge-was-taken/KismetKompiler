@@ -60,24 +60,33 @@ if (!File.Exists(path))
 //DecompileFolder(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle", EngineVersion.VER_UE4_23, false, false);
 //DecompileFolder(@"D:\Users\smart\Downloads\Pikmin4DemoBlueprints\Pikmin4DemoBlueprints", EngineVersion.VER_UE4_27, true, true);
 //DecompileOne(path, ver, usmapPath);
+//PackageCustomAI();
+DecompileOne(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", ver);
+var script = CompileClass(null, "out.c");
 
-var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
-var script = CompileClass(asset, @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
-foreach (var cls in script.Classes)
-{
-    foreach (var func in cls.Functions)
-    {
-        var export = (FunctionExport)asset.Exports.Where(x => x.ObjectName.ToString() == func.Name).FirstOrDefault();
-        export.ScriptBytecode = func.Expressions.ToArray();
-    }
-}
-asset.Write(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
-File.Delete(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak");
-Process.Start(@"E:\Projects\smtv_ai\tools\UnrealPak\UnrealPak-With-Compression.bat", @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI").WaitForExit();
-File.Copy(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak", @"C:\Users\cweer\AppData\Roaming\yuzu\load\010063B012DC6000\CustomAI\romfs\Project\Content\Paks\~mod\CustomAI.pak", true);
 
 Console.WriteLine("Done");
 Console.ReadKey();
+
+static void PackageCustomAI()
+{
+    var ver = EngineVersion.VER_UE4_23;
+    var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
+    var script = CompileClass(asset, @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
+    foreach (var cls in script.Classes)
+    {
+        foreach (var func in cls.Functions)
+        {
+            var export = (FunctionExport)asset.Exports.Where(x => x.ObjectName.ToString() == func.Name).FirstOrDefault();
+            export.ScriptBytecode = func.Expressions.ToArray();
+        }
+    }
+    asset.Write(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset");
+    DecompileOne(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
+    File.Delete(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak");
+    Process.Start(@"E:\Projects\smtv_ai\tools\UnrealPak\UnrealPak-With-Compression.bat", @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI").WaitForExit();
+    File.Copy(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI.pak", @"C:\Users\cweer\AppData\Roaming\yuzu\load\010063B012DC6000\CustomAI\romfs\Project\Content\Paks\~mod\CustomAI.pak", true);
+}
 
 static void DecompileOne(string path, EngineVersion ver, string? usmapPath = default)
 {

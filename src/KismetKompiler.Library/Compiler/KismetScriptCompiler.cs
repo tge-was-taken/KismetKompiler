@@ -18,6 +18,10 @@ using UAssetAPI.FieldTypes;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.UnrealTypes;
+using System.Collections.Generic;
+using System.Diagnostics.Metrics;
+using System.Xml.Linq;
+using UAssetAPI.Unversioned;
 
 namespace KismetKompiler.Compiler;
 
@@ -52,13 +56,17 @@ public partial class KismetScriptCompiler
         _scopeStack.Push(new(null, null));
         _rvalueStack = new();
         _rvalueStack.Push(null);
+        _asset = new UAssetBuilder().Build();
     }
 
     public KismetScriptCompiler(UnrealPackage asset) : this()
     {
-        _asset = asset;
-        _class = _asset.GetClassExport();
-        _objectVersion = _asset.ObjectVersion;
+        if (asset != null)
+        {
+            _asset = asset;
+            _class = _asset.GetClassExport();
+            _objectVersion = _asset.ObjectVersion;
+        }
     }
 
     private void PushScope(Symbol? declaringSymbol)
@@ -86,8 +94,7 @@ public partial class KismetScriptCompiler
     {
         var contextSymbol = Context?.GetSymbol(name);
         var scopeSymbol = Scope.GetSymbol(name);
-        if (Context?.Type == ContextType.This &&
-            Context?.IsImplicit == true)
+        if (IsDefaultClassContext())
         {
             // Implicit this context has less priority
             return scopeSymbol ?? contextSymbol;
@@ -102,8 +109,7 @@ public partial class KismetScriptCompiler
     {
         var contextSymbol = Context?.GetSymbol<T>(name);
         var scopeSymbol = Scope.GetSymbol<T>(name);
-        if (Context?.Type == ContextType.This &&
-            Context?.IsImplicit == true)
+        if (IsDefaultClassContext())
         {
             // Implicit this context has less priority
             return scopeSymbol ?? contextSymbol;
@@ -112,6 +118,17 @@ public partial class KismetScriptCompiler
         {
             return contextSymbol ?? scopeSymbol;
         }
+    }
+
+    private T GetSymbol<T>(Declaration declaration) where T : Symbol
+    {
+        return _functionContext.Symbol.GetSymbol<T>(declaration) ?? throw new UnknownSymbolError(declaration.Identifier);
+    }
+
+    private bool IsDefaultClassContext()
+    {
+        return Context?.Type == ContextType.This &&
+                    Context?.IsImplicit == true;
     }
 
     private Symbol GetRequiredSymbol(string name)
@@ -161,6 +178,123 @@ public partial class KismetScriptCompiler
         }
     }
 
+    private FPackageIndex GetImportPackageIndex(Import import)
+    {
+        if (_asset is UAsset uasset)
+        {
+            var index = uasset.Imports.IndexOf(import);
+            return FPackageIndex.FromImport(index);
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
+    }
+
+    private FPackageIndex GetExportPackageIndex(Export export)
+    {
+        var index = _asset.Exports.IndexOf(export);
+        return FPackageIndex.FromExport(index);
+    }
+
+    private (FPackageIndex, Import) ImportProcedure(PackageSymbol packageSymbol, ClassSymbol classSymbol, ProcedureDeclaration procedureDeclaration)
+    {
+        var import = new Import()
+        {
+            ObjectName = new(_asset, procedureDeclaration.Identifier.Text),
+            OuterIndex = classSymbol.PackageIndex,
+            ClassPackage = new(_asset, packageSymbol.Name),
+            ClassName = new(_asset, "Function"),
+            bImportOptional = false
+        };
+        if (_asset is UAsset uasset)
+        {
+            uasset.Imports.Add(import);
+            return (GetImportPackageIndex(import), import);
+        }
+        else
+        {
+            throw new NotImplementedException("Zen import");
+        }
+    }
+
+    private EFunctionFlags GetFunctionFlags(ProcedureDeclaration procedureDeclaration)
+    {
+        EFunctionFlags functionFlags = 0;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Public))
+            functionFlags |= EFunctionFlags.FUNC_Public;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Private))
+            functionFlags |= EFunctionFlags.FUNC_Private;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Final))
+            functionFlags |= EFunctionFlags.FUNC_Final;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Virtual))
+            ; // Not sealed
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Protected))
+            functionFlags |= EFunctionFlags.FUNC_Protected;
+        if (procedureDeclaration.Modifiers.HasFlag(ProcedureModifier.Static))
+            functionFlags |= EFunctionFlags.FUNC_Static;
+
+        foreach (var attr in procedureDeclaration.Attributes)
+        {
+            var flagFormat = $"FUNC_{attr.Identifier.Text}";
+            if (!Enum.TryParse<EFunctionFlags>(flagFormat, out var flag))
+                throw new CompilationError(attr, $"Unknown function attribute: {attr}");
+            functionFlags |= flag;
+        }
+        return functionFlags;
+    }
+
+    private FPackageIndex CreateProcedureExport(ProcedureSymbol symbol)
+    {
+        var children = symbol.Members
+            .Where(x => x is VariableSymbol)
+            .Select(x => ((VariableSymbol)x).PackageIndex)
+            .ToArray();
+        var coreUObjectIndex = GetImportPackageIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
+        var functionClassIndex = EnsureCoreUObjectClassImported(coreUObjectIndex, "Function");
+        var functionDefaultObjectIndex = EnsureCoreUObjectClassImported(coreUObjectIndex, "Default__Function");
+        var ownerIndex = symbol.DeclaringClass?.PackageIndex ?? FPackageIndex.Null;
+
+        var export = new FunctionExport()
+        {
+            FunctionFlags = GetFunctionFlags(symbol.Declaration),
+            SuperStruct = FPackageIndex.Null,
+            Children = children,
+            LoadedProperties = new FProperty[] { },
+            ScriptBytecode = null,
+            ScriptBytecodeSize = 0,
+            ScriptBytecodeRaw = null,
+            Field = new() { Next = null },
+            Data = new(),
+            ObjectName = new(_asset, symbol.Declaration.Identifier.Text),
+            ObjectFlags = EObjectFlags.RF_Public,
+            SerialSize = 194,
+            SerialOffset = 0,
+            bForcedExport = false,
+            bNotForClient = false,
+            bNotForServer = false,
+            PackageGuid = Guid.Empty,
+            IsInheritedInstance = false,
+            PackageFlags = EPackageFlags.PKG_None,
+            bNotAlwaysLoadedForEditorGame = false,
+            bIsAsset = false,
+            GeneratePublicHash = false,
+            SerializationBeforeSerializationDependencies = new(children),
+            CreateBeforeSerializationDependencies = new() { }, /* Referenced imports */
+            SerializationBeforeCreateDependencies = new(),
+            CreateBeforeCreateDependencies = new() { ownerIndex }, /* Class export */
+            PublicExportHash = 0,
+            Padding = null,
+            Extras = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 },
+            OuterIndex = ownerIndex,
+            ClassIndex = functionClassIndex,
+            SuperIndex = FPackageIndex.Null,
+            TemplateIndex = functionDefaultObjectIndex, 
+        };
+        _asset.Exports.Add(export);
+        return GetExportPackageIndex(export);
+    }
+
     private void BuildSymbolTree()
     {
         void ScanCompoundStatement(CompoundStatement compoundStatement, Symbol parent, bool isExternal)
@@ -190,15 +324,14 @@ public partial class KismetScriptCompiler
 
         Symbol CreateDeclarationSymbol(Declaration declaration, Symbol? parent, bool isExternal)
         {
-            var declaringPackage = (parent is PackageSymbol packageSymbol) ? packageSymbol?.Name : parent?.DeclaringPackage?.Name;
-            var declaringClass = (parent is ClassSymbol classSymbol) ? classSymbol.Name : parent?.DeclaringClass?.Name;
-            var declaringProcedure = (parent is ProcedureSymbol procedureSymbol) ? procedureSymbol.Name : parent?.DeclaringProcedure?.Name;
+            var declaringPackage = (parent is PackageSymbol packageSymbol) ? packageSymbol : parent?.DeclaringPackage;
+            var declaringClass = (parent is ClassSymbol classSymbol) ? classSymbol : parent?.DeclaringClass;
+            var declaringProcedure = (parent is ProcedureSymbol procedureSymbol) ? procedureSymbol : parent?.DeclaringProcedure;
 
             if (declaration is LabelDeclaration labelDeclaration)
             {
-                return new LabelSymbol()
+                return new LabelSymbol(labelDeclaration)
                 {
-                    Declaration = labelDeclaration,
                     Name = labelDeclaration.Identifier.Text,
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
@@ -206,44 +339,58 @@ public partial class KismetScriptCompiler
             }
             else if (declaration is VariableDeclaration variableDeclaration)
             {
-                if (!TryFindPackageIndexInAsset(declaringPackage, declaringClass, declaringProcedure, variableDeclaration.Identifier.Text, out var packageIndex))
+                if (!TryFindPackageIndexInAsset(declaringPackage?.Name, declaringClass?.Name, declaringProcedure?.Name, variableDeclaration.Identifier.Text, out var packageIndex))
                 {
-                    (packageIndex, var propertyExport) = CreateVariable(variableDeclaration, declaringProcedure, true);
+                    (packageIndex, var propertyExport) = CreateVariable(variableDeclaration, declaringProcedure.Name, true);
                 }
 
-                return new VariableSymbol()
+                return new VariableSymbol(variableDeclaration)
                 {
-                    Declaration = variableDeclaration,
                     Name = variableDeclaration.Identifier.Text,
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
-                    PackageIndex = FindPackageIndexInAsset(declaringPackage, declaringClass, declaringProcedure, variableDeclaration.Identifier.Text),
+                    PackageIndex = FindPackageIndexInAsset(declaringPackage?.Name, declaringClass?.Name, declaringProcedure?.Name, variableDeclaration.Identifier.Text),
                     FieldPath = GetFieldPath(variableDeclaration.Identifier.Text),
                 };
             }
             else if (declaration is ProcedureDeclaration procedureDeclaration)
             {
-                var symbol = new ProcedureSymbol()
+                var symbol = new ProcedureSymbol(procedureDeclaration)
                 {
-                    Declaration = procedureDeclaration,
                     Name = procedureDeclaration.Identifier.Text,
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
-                    PackageIndex = FindPackageIndexInAsset(declaringPackage, declaringClass, declaringProcedure, procedureDeclaration.Identifier.Text)
+                    PackageIndex = null
                 };
                 if (procedureDeclaration.Body != null)
+                {
                     ScanCompoundStatement(procedureDeclaration.Body, symbol, isExternal);
+                }
+
+                if (!TryFindPackageIndexInAsset(declaringPackage?.Name, declaringClass?.Name, declaringProcedure?.Name, procedureDeclaration.Identifier.Text, out var packageIndex))
+                {
+                    if (isExternal)
+                    {
+                        (packageIndex, _) = ImportProcedure(declaringPackage, declaringClass, procedureDeclaration);
+                    }
+                    else
+                    {
+                        packageIndex = CreateProcedureExport(symbol);
+                    }
+                }
+                symbol.PackageIndex = packageIndex;
+
+
                 return symbol;
             }
             else if (declaration is ClassDeclaration classDeclaration)
             {
-                var symbol = new ClassSymbol()
+                var symbol = new ClassSymbol(classDeclaration)
                 {
-                    Declaration = classDeclaration,
                     Name = classDeclaration.Identifier.Text,
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
-                    PackageIndex = FindPackageIndexInAsset(declaringPackage, declaringClass, declaringProcedure, classDeclaration.Identifier.Text),
+                    PackageIndex = FindPackageIndexInAsset(declaringPackage?.Name, declaringClass?.Name, declaringProcedure?.Name, classDeclaration.Identifier.Text),
                 };
                 if (classDeclaration.Declarations != null)
                 {
@@ -260,12 +407,11 @@ public partial class KismetScriptCompiler
 
         foreach (var packageDeclaration in _compilationUnit.Imports)
         {
-            var packageSymbol = new PackageSymbol()
+            var packageSymbol = new PackageSymbol(packageDeclaration)
             {
                 IsExternal = true,
                 Name = packageDeclaration.Identifier.Text,
                 DeclaringSymbol = null,
-                Declaration = packageDeclaration
             };
             foreach (var item in packageDeclaration.Declarations)
                 CreateDeclarationSymbol(item, packageSymbol, true);
@@ -306,11 +452,7 @@ public partial class KismetScriptCompiler
             {
                 foreach (var item in symbol.Members)
                 {
-                    var isUbergraphFunction = item.DeclaringProcedure?.IsUbergraphFunction ?? false;
-                    var isK2NodeVariable = item.Name.StartsWith("K2Node") && item.SymbolCategory == SymbolCategory.Variable;
-                    var isLabel = item.SymbolCategory == SymbolCategory.Label;
-
-                    if (isUbergraphFunction && (isK2NodeVariable || isLabel))
+                    if (ShouldGloballyDeclareProcecureLocalSymbol(item))
                     {
                         DeclareSymbol(item);
                     }
@@ -345,9 +487,8 @@ public partial class KismetScriptCompiler
                     else
                     {
                         // UserDefinedStruct, etc.
-                        symbol.BaseSymbol = new ClassSymbol()
+                        symbol.BaseSymbol = new ClassSymbol(null)
                         {
-                            Declaration = null,
                             DeclaringSymbol = null,
                             IsExternal = true,
                             Name = baseClass.Text,
@@ -367,6 +508,15 @@ public partial class KismetScriptCompiler
         {
             ResolveSymbolReferences(item);
         }
+    }
+
+    private static bool ShouldGloballyDeclareProcecureLocalSymbol(Symbol item)
+    {
+        var isUbergraphFunction = item.DeclaringProcedure?.IsUbergraphFunction ?? false;
+        var isK2NodeVariable = item.Name.StartsWith("K2Node") && item.SymbolCategory == SymbolCategory.Variable;
+        var isLabel = item.SymbolCategory == SymbolCategory.Label;
+        var shouldDeclareSymbol = isUbergraphFunction && (isK2NodeVariable || isLabel);
+        return shouldDeclareSymbol;
     }
 
     public KismetScriptClass CompileClass(ClassDeclaration classDeclaration)
@@ -394,9 +544,8 @@ public partial class KismetScriptCompiler
             PushScope(_classContext.Symbol);
             try
             {
-                DeclareSymbol(new VariableSymbol()
+                DeclareSymbol(new VariableSymbol(null)
                 {
-                    Declaration = null,
                     DeclaringSymbol = _classContext.Symbol,
                     FieldPath = null,
                     IsExternal = false,
@@ -407,9 +556,8 @@ public partial class KismetScriptCompiler
 
                 if (_classContext.Symbol.BaseClass != null)
                 {
-                    DeclareSymbol(new VariableSymbol()
+                    DeclareSymbol(new VariableSymbol(null)
                     {
-                        Declaration = null,
                         DeclaringSymbol = _classContext.Symbol.BaseClass,
                         FieldPath = null,
                         IsExternal = false,
@@ -496,9 +644,8 @@ public partial class KismetScriptCompiler
     {
         foreach (var param in _functionContext.Declaration.Parameters)
         {
-            var variableSymbol = new VariableSymbol()
+            var variableSymbol = new VariableSymbol(null)
             {
-                Declaration = null,
                 Parameter = param,
                 PackageIndex = FindPackageIndexInAsset(param.Identifier.Text),
                 FieldPath = FindFieldPathInAsset(param.Identifier.Text),
@@ -632,12 +779,11 @@ public partial class KismetScriptCompiler
 
     private LabelSymbol CreateCompilerLabel(string name)
     {
-        return new LabelSymbol()
+        return new LabelSymbol(null)
         {
             CodeOffset = null,
             IsResolved = false,
             Name = name,
-            Declaration = null,
             IsExternal = false,
             DeclaringSymbol = _functionContext.Symbol,
         };
@@ -680,14 +826,81 @@ public partial class KismetScriptCompiler
         return new FPackageIndex(+(index + 1));
     }
 
+    private PropertyExport CreatePropertyExport(UProperty property, string name, int serialSize, IEnumerable<FPackageIndex> serializationBeforeSerializationDependencies,  IEnumerable<FPackageIndex> createBeforeSerializationDependencies, IEnumerable<FPackageIndex> createBeforeCreateDependencies, FPackageIndex outerIndex, FPackageIndex classIndex, FPackageIndex templateIndex )
+    {
+        var propertyExport = new PropertyExport()
+        {
+            Asset = _asset,
+            Property = property,
+            Data = new(),
+            ObjectName = new FName(_asset, name),
+            ObjectFlags = EObjectFlags.RF_Public,
+            SerialSize = serialSize,
+            SerialOffset = 0, // Filled be serializer
+            bForcedExport = false,
+            bNotForClient = false,
+            bNotForServer = false,
+            PackageGuid = Guid.Empty,
+            IsInheritedInstance = false,
+            PackageFlags = EPackageFlags.PKG_None,
+            bNotAlwaysLoadedForEditorGame = false,
+            bIsAsset = false,
+            GeneratePublicHash = false,
+            SerializationBeforeSerializationDependencies = new(serializationBeforeSerializationDependencies),
+            CreateBeforeSerializationDependencies = new(createBeforeSerializationDependencies),
+            SerializationBeforeCreateDependencies = new(),
+            CreateBeforeCreateDependencies = new(createBeforeCreateDependencies),
+            PublicExportHash = 0,
+            Padding = null,
+            Extras = new byte[0],
+            OuterIndex = outerIndex,
+            ClassIndex = classIndex,
+            SuperIndex = new FPackageIndex(0),
+            TemplateIndex = templateIndex,
+        };
+        return propertyExport;
+    }
+
+    private string GetPropertyType(VariableDeclaration variableDeclaration)
+    {
+        return variableDeclaration.Type.Text switch
+        {
+            "bool" => "BoolProperty",
+            "int" => "IntProperty",
+            "string" => "StringProperty",
+            "float" => "FloatProperty",
+            "Interface" => "InterfaceProperty",
+            "Struct" => "StructProperty",
+            _ => throw new NotImplementedException($"Unknown property type for {variableDeclaration}")
+        };
+    }
+
     private (FPackageIndex PackageIndex, PropertyExport PropertyExport) CreateVariable(VariableDeclaration variableDeclaration, string functionName, bool isLocal)
     {
         string propertyType = null;
         int? serialSize = null;
         UProperty property = null;
+        var serializationBeforeSerializationDependencies = new List<FPackageIndex>();
+        var createBeforeSerializationDependencies = new List<FPackageIndex>();
+        var createBeforeCreateDependencies = new List<FPackageIndex>();
 
         switch (variableDeclaration.Type.Text)
         {
+            case "byte":
+                propertyType = "ByteProperty";
+                serialSize = 37;
+                property = new UByteProperty()
+                {
+                    Enum = new FPackageIndex(0),
+                    ArrayDim = EArrayDim.TArray,
+                    ElementSize = 0,
+                    PropertyFlags = EPropertyFlags.CPF_None,
+                    RepNotifyFunc = new FName(_asset, "None"),
+                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                    RawValue = null,
+                    Next = null,
+                };
+                break;
             case "bool":
                 propertyType = "BoolProperty";
                 serialSize = 35;
@@ -748,13 +961,73 @@ public partial class KismetScriptCompiler
                     Next = null,
                 };
                 break;
+            case "Interface":
+                propertyType = "InterfaceProperty";
+                serialSize = 37;
+                var interfaceClassIndex = FindPackageIndexInAsset(variableDeclaration.Type.TypeParameter.Text);
+                property = new UInterfaceProperty()
+                {
+                    InterfaceClass = interfaceClassIndex,
+                    ArrayDim = EArrayDim.TArray,
+                    ElementSize = 0,
+                    PropertyFlags = EPropertyFlags.CPF_None,
+                    RepNotifyFunc = new FName(_asset, "None"),
+                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                    RawValue = null,
+                    Next = null
+                };
+                createBeforeSerializationDependencies.Add(interfaceClassIndex);
+                break;
+            case "Struct":
+                propertyType = "StructProperty";
+                serialSize = 37;
+                var structClassIndex = FindPackageIndexInAsset(variableDeclaration.Type.TypeParameter.Text);
+                property = new UStructProperty()
+                {
+                    Struct = structClassIndex,
+                    ArrayDim = EArrayDim.TArray,
+                    ElementSize = 0,
+                    PropertyFlags = EPropertyFlags.CPF_None,
+                    RepNotifyFunc = new FName(_asset, "None"),
+                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                    RawValue = null,
+                    Next = null
+                };
+                serializationBeforeSerializationDependencies.Add(structClassIndex);
+                break;
             default:
                 throw new NotImplementedException();
         }
         var classIndex = GetExportPackageIndexByExport(_class) ?? throw new NotImplementedException();
         var functionIndex = GetExportPackageIndexByObjectName(functionName);
-        var propertyClassImportIndex = GetImportPackageIndexByObjectName(propertyType);
         var coreUObjectIndex = GetImportPackageIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
+        var propertyClassImportIndex = EnsureCoreUObjectClassImported(coreUObjectIndex, propertyType);
+        var propertyTemplateImportIndex = EnsureCoreUObjectClassDefaultObjectImported(coreUObjectIndex, propertyType);
+
+        var propertyOwnerIndex = isLocal ?
+            functionIndex :
+            classIndex;
+
+        createBeforeCreateDependencies.Insert(0, propertyOwnerIndex);
+
+        var propertyExport = CreatePropertyExport(
+            property: property,
+            name: variableDeclaration.Identifier.Text,
+            serialSize: serialSize.Value,
+            serializationBeforeSerializationDependencies: serializationBeforeSerializationDependencies,
+            createBeforeSerializationDependencies: createBeforeSerializationDependencies,
+            createBeforeCreateDependencies: createBeforeCreateDependencies,
+            outerIndex: propertyOwnerIndex,
+            classIndex: propertyClassImportIndex,
+            templateIndex: propertyTemplateImportIndex);
+
+        _asset.Exports.Add(propertyExport);
+        return (GetExportPackageIndexByExport(propertyExport), propertyExport);
+    }
+
+    private FPackageIndex EnsureCoreUObjectClassImported(FPackageIndex coreUObjectIndex, string propertyType)
+    {
+        var propertyClassImportIndex = GetImportPackageIndexByObjectName(propertyType);
         if (propertyClassImportIndex == null)
         {
             if (_asset is UAsset uasset)
@@ -774,6 +1047,11 @@ public partial class KismetScriptCompiler
             }
         }
 
+        return propertyClassImportIndex;
+    }
+
+    private FPackageIndex EnsureCoreUObjectClassDefaultObjectImported(FPackageIndex coreUObjectIndex, string propertyType)
+    {
         var propertyTemplateImportIndex = GetImportPackageIndexByObjectName($"Default__{propertyType}");
         if (propertyTemplateImportIndex == null)
         {
@@ -794,69 +1072,20 @@ public partial class KismetScriptCompiler
             }
         }
 
-        var propertyOwnerIndex = isLocal ?
-            functionIndex :
-            classIndex;
-
-        var propertyExport = new PropertyExport()
-        {
-            Asset = _asset,
-            Property = property,
-            Data = new(),
-            ObjectName = new FName(_asset, variableDeclaration.Identifier.Text),
-            ObjectFlags = EObjectFlags.RF_Public,
-            SerialSize = serialSize.Value,
-            SerialOffset = 0,
-            bForcedExport = false,
-            bNotForClient = false,
-            bNotForServer = false,
-            PackageGuid = Guid.Empty,
-            IsInheritedInstance = false,
-            PackageFlags = EPackageFlags.PKG_None,
-            bNotAlwaysLoadedForEditorGame = false,
-            bIsAsset = false,
-            GeneratePublicHash = false,
-            SerializationBeforeSerializationDependencies = new(),
-            CreateBeforeSerializationDependencies = new(),
-            SerializationBeforeCreateDependencies = new(),
-            CreateBeforeCreateDependencies = new() { classIndex },
-            PublicExportHash = 0,
-            Padding = null,
-            Extras = new byte[0],
-            OuterIndex = propertyOwnerIndex,
-            ClassIndex = propertyClassImportIndex,
-            SuperIndex = new FPackageIndex(0),
-            TemplateIndex = propertyTemplateImportIndex,
-        };
-
-        _asset.Exports.Add(propertyExport);
-        return (GetExportPackageIndexByExport(propertyExport), propertyExport);
+        return propertyTemplateImportIndex;
     }
 
     private void ProcessDeclaration(Declaration declaration)
     {
         if (declaration is LabelDeclaration labelDeclaration)
         {
-            var label = GetSymbol<LabelSymbol>(labelDeclaration.Identifier.Text);
+            var label = GetSymbol<LabelSymbol>(labelDeclaration);
             label.CodeOffset = _functionContext.CodeOffset;
             label.IsResolved = true;
         }
         else if (declaration is VariableDeclaration variableDeclaration)
         {
-            if (!TryFindPackageIndexInAsset(variableDeclaration.Identifier.Text, out var variablePackageIndex))
-            {
-                (variablePackageIndex, var export) = CreateVariable(variableDeclaration, _functionContext.Name, true);
-            }
-
-            var variableSymbol = new VariableSymbol()
-            {
-                Declaration = variableDeclaration,
-                PackageIndex = variablePackageIndex,
-                IsExternal = false,
-                Name = declaration.Identifier.Text,
-                DeclaringSymbol = _functionContext.Symbol,
-                FieldPath = null, // TODO
-            };
+            var variableSymbol = GetSymbol<VariableSymbol>(variableDeclaration);
             DeclareSymbol(variableSymbol);
 
             if (variableDeclaration.Initializer != null)
@@ -974,35 +1203,71 @@ public partial class KismetScriptCompiler
 
     private CompiledExpressionContext CompileCallOperator(CallOperator callOperator)
     {
-        if (IsIntrinsicFunction(callOperator.Identifier.Text))
+        // Reset context so it doesn't keep propagating until another member access pops up
+        // TODO: solve this properly by isolating the context to the member part of the expression only (without its sub expressions)
+        var callContext = Context;
+        PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
+        try
         {
-            // Hardcoded intrinsic function call
-            return CompileIntrinsicCall(callOperator);
-        }
-        else
-        {
-            var procedureSymbol = GetSymbol<ProcedureSymbol>(callOperator.Identifier.Text);
-            if (procedureSymbol == null)
+            if (IsIntrinsicFunction(callOperator.Identifier.Text))
             {
-                return Emit(callOperator, new EX_LocalVirtualFunction()
-                {
-                    VirtualFunctionName = GetName(callOperator.Identifier),
-                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                });
+                // Hardcoded intrinsic function call
+                return CompileIntrinsicCall(callOperator);
             }
             else
             {
-                if (Context != null)
+                var procedureSymbol = GetSymbol<ProcedureSymbol>(callOperator.Identifier.Text);
+                if (procedureSymbol == null)
                 {
-                    if (Context.Type == ContextType.This ||
-                        Context.Type == ContextType.Base)
+                    return Emit(callOperator, new EX_LocalVirtualFunction()
                     {
-                        if (Context.SymbolExists(procedureSymbol.Name, procedureSymbol.SymbolCategory))
+                        VirtualFunctionName = GetName(callOperator.Identifier),
+                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                    });
+                }
+                else
+                {
+                    if (callContext != null)
+                    {
+                        if (callContext.Type == ContextType.This ||
+                            callContext.Type == ContextType.Base)
                         {
-                            // Procedure is local to class
-                            if (procedureSymbol.IsVirtual && !Context.CallVirtualFunctionAsFinal)
+                            if (callContext.SymbolExists(procedureSymbol.Name, procedureSymbol.SymbolCategory))
                             {
-                                return Emit(callOperator, new EX_LocalVirtualFunction()
+                                // Procedure is local to class
+                                if (procedureSymbol.IsVirtual && !callContext.CallVirtualFunctionAsFinal)
+                                {
+                                    return Emit(callOperator, new EX_LocalVirtualFunction()
+                                    {
+                                        VirtualFunctionName = GetName(callOperator.Identifier),
+                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                    });
+                                }
+                                else
+                                {
+                                    return Emit(callOperator, new EX_LocalFinalFunction()
+                                    {
+                                        StackNode = GetPackageIndex(callOperator.Identifier),
+                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                // Static function
+                                return Emit(callOperator, new EX_CallMath()
+                                {
+                                    StackNode = GetPackageIndex(callOperator.Identifier),
+                                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                });
+                            }
+                        }
+                        else if (callContext.Type == ContextType.ObjectConst ||
+                                callContext.Type == ContextType.Class)
+                        {
+                            if (procedureSymbol.IsVirtual)
+                            {
+                                return Emit(callOperator, new EX_VirtualFunction()
                                 {
                                     VirtualFunctionName = GetName(callOperator.Identifier),
                                     Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1010,7 +1275,7 @@ public partial class KismetScriptCompiler
                             }
                             else
                             {
-                                return Emit(callOperator, new EX_LocalFinalFunction()
+                                return Emit(callOperator, new EX_FinalFunction()
                                 {
                                     StackNode = GetPackageIndex(callOperator.Identifier),
                                     Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1019,32 +1284,7 @@ public partial class KismetScriptCompiler
                         }
                         else
                         {
-                            // Static function
-                            return Emit(callOperator, new EX_CallMath()
-                            {
-                                StackNode = GetPackageIndex(callOperator.Identifier),
-                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                            });
-                        }
-                    }
-                    else if (Context.Type == ContextType.ObjectConst ||
-                            Context.Type == ContextType.Class)
-                    {
-                        if (procedureSymbol.IsVirtual)
-                        {
-                            return Emit(callOperator, new EX_VirtualFunction()
-                            {
-                                VirtualFunctionName = GetName(callOperator.Identifier),
-                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                            });
-                        }
-                        else
-                        {
-                            return Emit(callOperator, new EX_FinalFunction()
-                            {
-                                StackNode = GetPackageIndex(callOperator.Identifier),
-                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                            });
+                            throw new NotImplementedException();
                         }
                     }
                     else
@@ -1052,11 +1292,11 @@ public partial class KismetScriptCompiler
                         throw new NotImplementedException();
                     }
                 }
-                else
-                {
-                    throw new NotImplementedException();
-                }
             }
+        }
+        finally
+        {
+            PopContext();
         }
     }
 
@@ -1413,7 +1653,7 @@ public partial class KismetScriptCompiler
         };
 
         if (memberExpression.Context is Identifier contextIdentifier &&
-            contextIdentifier.Text == _class.ObjectName.ToString())
+            contextIdentifier.Text == _classContext.Symbol.Name)
         {
             // TODO: make more flexible
             // Explicit virtual method call
@@ -1630,9 +1870,8 @@ public partial class KismetScriptCompiler
         if (expression is IntLiteral literal)
         {
             // TODO fix properly
-            label = new LabelSymbol()
+            label = new LabelSymbol(null)
             {
-                Declaration = null,
                 DeclaringSymbol = null,
                 IsExternal = false,
                 Name = $"_{literal.Value}",
@@ -1943,7 +2182,7 @@ public partial class KismetScriptCompiler
     }
 
     private bool TryFindPackageIndexInAsset(string name, out FPackageIndex? index)
-        => TryFindPackageIndexInAsset(null, _class.ObjectName.ToString(), _functionContext?.Name, name, out index);
+        => TryFindPackageIndexInAsset(null, _classContext?.Symbol?.Name, _functionContext?.Name, name, out index);
 
     private FPackageIndex? FindPackageIndexInAsset(string name)
     {

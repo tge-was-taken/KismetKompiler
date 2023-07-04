@@ -12,6 +12,6 @@ public class RedefinitionError : CompilationError
     }
 
     public RedefinitionError(Symbol symbol)
-        : this(symbol.GetSyntaxNode()) { }
+        : this(symbol.Declaration) { }
 
 }
