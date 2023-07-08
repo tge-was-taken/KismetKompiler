@@ -5,11 +5,6 @@ using System.Text;
 
 namespace KismetKompiler.Library.Syntax.Statements.Declarations;
 
-public class Attribute : SyntaxNode
-{
-    public Identifier Identifier { get; set; }
-}
-
 public enum ProcedureModifier
 {
     Public = 1 << 0,
@@ -23,7 +18,7 @@ public enum ProcedureModifier
 
 public class ProcedureDeclaration : Declaration, IBlockStatement
 {
-    public List<Attribute> Attributes { get; init; } = new();
+    public List<AttributeDeclaration> Attributes { get; init; } = new();
 
     public ProcedureModifier Modifiers { get; set; } = 0;
 

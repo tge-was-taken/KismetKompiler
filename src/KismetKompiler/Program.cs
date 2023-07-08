@@ -70,16 +70,30 @@ if (!File.Exists(path))
 //    .Build();
 //DumpOldAndNew(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e000.uasset", asset, script);
 
-PackageCustomAI();
+//DecompileOne(@"C:\Users\cweer\Documents\Unreal Projects\MyProject2\Saved\Cooked\WindowsNoEditor\MyProject2\Content\ThirdPersonBP\Blueprints\NewBlueprint.uasset", ver);
+//PackageCustomAI();
+RunTest();
 
 Console.WriteLine("Done");
 Console.ReadKey();
+
+static void RunTest()
+{
+    var ver = EngineVersion.VER_UE4_23;
+    var script = CompileClass(@"Test.kms");
+    var newAsset = new UAssetLinker()
+        .LinkCompiledScript(script)
+        .Build();
+
+    newAsset.Write(@"Test.uasset");
+    DecompileOne(@"Test.uasset", ver);
+}
 
 static void PackageCustomAI()
 {
     var ver = EngineVersion.VER_UE4_23;
     var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
-    var script = CompileClass(asset, @"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
+    var script = CompileClass(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
     var newAsset = new UAssetLinker(asset)
         .LinkCompiledScript(script)
         .Build();
@@ -105,7 +119,7 @@ static void DecompileOne(string path, EngineVersion ver, string? usmapPath = def
     }
 
     DecompileClass(asset, "old_out.c");
-    var script = CompileClass(asset, "old_out.c");
+    var script = CompileClass("old_out.c");
     var newAsset = new UAssetLinker((UAsset)asset)
         .LinkCompiledScript(script)
         .Build();
@@ -147,7 +161,7 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
                 return;
             try
             {
-                var script = CompileClass(asset, kmsPath);
+                var script = CompileClass(kmsPath);
                 DumpOldAndNew(path, asset, script);
                 Console.WriteLine($"Success");
             }
@@ -176,7 +190,7 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
                 return;
             try
             {
-                var script = CompileClass(asset, kmsPath);
+                var script = CompileClass(kmsPath);
                 DumpOldAndNew(path, asset, script);
                 Console.WriteLine($"Success: {path}");
             }
@@ -228,7 +242,7 @@ static void DecompileClass(UnrealPackage asset, string outPath)
 {
     using var outWriter = new StreamWriter(outPath, false, Encoding.Unicode);
     var decompiler = new KismetDecompiler(outWriter);
-    decompiler.DecompileClass(asset);
+    decompiler.Decompile(asset);
 }
 
 static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, string[] lines)
@@ -255,7 +269,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileClass(UnrealPackage asset, string inPath)
+static CompiledScriptContext CompileClass(string inPath)
 {
     try
     {
@@ -302,7 +316,7 @@ static void DumpOldAndNew(string fileName, UnrealPackage asset, CompiledScriptCo
     var oldJsons = asset.Exports
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()
-        .OrderBy(x => asset.GetClassExport().FuncMap.IndexOf(x.ObjectName))
+        .OrderBy(x => asset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
         .Select(x => (x.ObjectName.ToString(), JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Formatting.Indented)));
 
     var newJsons = script.Classes

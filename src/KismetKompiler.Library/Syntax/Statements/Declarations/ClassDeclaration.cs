@@ -16,7 +16,7 @@ namespace KismetKompiler.Library.Syntax.Statements.Declarations
         {
         }
 
-        public List<Attribute> Attributes { get; set; } = new();
+        public List<AttributeDeclaration> Attributes { get; set; } = new();
         public ClassModifiers Modifiers { get; set; } = 0;
         public List<Identifier> InheritedTypeIdentifiers { get; init; } = new();
         public List<Declaration> Declarations { get; init; } = new();

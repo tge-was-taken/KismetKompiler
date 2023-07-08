@@ -46,7 +46,7 @@ public partial class KismetDecompiler
         _writer = new IndentedWriter(writer);
     }
 
-    public void DecompileClass(UnrealPackage asset)
+    public void Decompile(UnrealPackage asset)
     {
         _asset = asset;
         _class = _asset.GetClassExport();
@@ -632,17 +632,19 @@ public partial class KismetDecompiler
                 return "byte";
             case "ArrayProperty":
                 {
-                    var export = ((UArrayProperty)prop.Property).Inner.ToExport(_asset);
-                    if (export is PropertyExport propertyExport)
+                    var inner = ((UArrayProperty)prop.Property).Inner;
+                    if (inner.IsExport())
                     {
-                        var innerProp = (PropertyExport)export;
-                        return $"Array<{GetDecompiledType(innerProp)}>";
+                        var export = inner.ToExport(_asset);
+                        if (export is PropertyExport propertyExport)
+                        {
+                            var innerProp = (PropertyExport)export;
+                            return $"Array<{GetDecompiledType(innerProp)}>";
+                        }
                     }
-                    else
-                    {
-                        // TODO
-                        return $"Array";
-                    }
+
+                    // TODO
+                    return $"Array";
                 }
             default:
                 if (classType != "Property" &&

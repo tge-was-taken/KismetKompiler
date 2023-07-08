@@ -1,10 +1,11 @@
-﻿using System.Diagnostics;
-using UAssetAPI.ExportTypes;
-using KismetKompiler.Library.Syntax;
-using KismetKompiler.Library.Syntax.Statements.Expressions;
+﻿using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Syntax.Statements;
-using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Declarations;
+using KismetKompiler.Library.Syntax.Statements.Expressions;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
+using System.Diagnostics;
+using UAssetAPI.ExportTypes;
 
 namespace KismetKompiler.Library.Compiler.Processing;
 
@@ -71,6 +72,7 @@ public class TypeResolver
 
     private Stack<DeclarationScope> _scopes;
     private DeclarationScope _rootScope;
+    private Declaration _context;
     private DeclarationScope Scope => _scopes.Peek();
 
     public TypeResolver()
@@ -258,7 +260,17 @@ public class TypeResolver
         else if (expression is MemberExpression memberExpression)
         {
             ResolveTypesInExpression(memberExpression.Context);
+
+            var contextIdentifier = memberExpression.Context as Identifier;
+            if (contextIdentifier != null)
+            {
+                Scope.TryGetDeclaration(contextIdentifier, out var declaration);
+                _context = declaration;
+            }
+
             ResolveTypesInExpression(memberExpression.Member);
+            memberExpression.ExpressionValueKind = memberExpression.Member.ExpressionValueKind;
+            _context = null;
         }
         else if (expression is CallOperator callExpression)
         {
@@ -288,13 +300,20 @@ public class TypeResolver
                 binaryExpression.ExpressionValueKind = binaryExpression.Left.ExpressionValueKind;
             }
         }
+        else if (expression is ConditionalExpression conditionalExpression)
+        {
+            conditionalExpression.Condition.ExpressionValueKind = ValueKind.Bool;
+            ResolveTypesInExpression(conditionalExpression.ValueIfTrue);
+            ResolveTypesInExpression(conditionalExpression.ValueIfFalse);
+            conditionalExpression.ExpressionValueKind = conditionalExpression.ValueIfTrue.ExpressionValueKind;
+        }
         else if (expression is Identifier identifier)
         {
             ResolveTypesInIdentifier(identifier);
         }
         else if (expression is Literal literal)
         {
-            // 
+            // No processing necessary
         }
         else
         {
@@ -404,16 +423,76 @@ public class TypeResolver
 
     private void ResolveTypesInVariableDeclaration(VariableDeclaration declaration)
     {
-        // Nothing to resolve if there's no initializer
-        if (declaration.Initializer == null)
-            return;
+        ResolveTypesInTypeIdentifier(declaration.Type);
+        if (declaration.Initializer != null)
+            ResolveTypesInExpression(declaration.Initializer);
 
-        ResolveTypesInExpression(declaration.Initializer);
+    }
 
-        //if ( declaration.IsArray && declaration.Initializer is InitializerList initializerList )
-        //{
-        //    initializerList.ExpressionValueKind = ValueKind.Array;
-        //}
+    private void ResolveTypesInTypeIdentifier(TypeIdentifier typeIdentifier)
+    {
+        switch (typeIdentifier.Text)
+        {
+            case "byte":
+                typeIdentifier.ValueKind = ValueKind.Byte;
+                break;
+            case "bool":
+                typeIdentifier.ValueKind = ValueKind.Bool;
+                break;
+            case "int":
+                typeIdentifier.ValueKind = ValueKind.Int;
+                break;
+            case "float":
+                typeIdentifier.ValueKind = ValueKind.Float;
+                break;
+            case "double":
+                typeIdentifier.ValueKind = ValueKind.Double;
+                break;
+            case "string":
+                typeIdentifier.ValueKind = ValueKind.String;
+                break;
+            case "Enum":
+                typeIdentifier.ValueKind = ValueKind.Int;
+                break;
+            case "Interface":
+                typeIdentifier.ValueKind = ValueKind.Interface;
+                break;
+            case "Struct":
+                typeIdentifier.ValueKind = ValueKind.Struct;
+                break;
+            case "Vector2D":
+                typeIdentifier.ValueKind = ValueKind.Vector2D;
+                break;
+            case "TimeSpan":
+                typeIdentifier.ValueKind = ValueKind.TimeSpan;
+                break;
+            case "DateTime":
+                typeIdentifier.ValueKind = ValueKind.DateTime;
+                break;
+            case "Vector":
+                typeIdentifier.ValueKind = ValueKind.Vector;
+                break;
+            case "LinearColor":
+                typeIdentifier.ValueKind = ValueKind.LinearColor;
+                break;
+            case "Rotator":
+                typeIdentifier.ValueKind = ValueKind.Rotator;
+                break;
+            case "Transform":
+                typeIdentifier.ValueKind = ValueKind.Transform;
+                break;
+            case "Name":
+                typeIdentifier.ValueKind = ValueKind.Name;
+                break;
+            case "Class":
+                typeIdentifier.ValueKind = ValueKind.Class;
+                break;
+            case "Object":
+                typeIdentifier.ValueKind = ValueKind.Object;
+                break;
+            default:
+                break;
+        }
 
     }
 
@@ -456,6 +535,18 @@ public class TypeResolver
         bool isUndeclared = false;
         if (!Scope.TryGetDeclaration(identifier, out var declaration))
         {
+            if (_context != null)
+            {
+                if (_context is EnumDeclaration enumContext)
+                {
+                    identifier.ExpressionValueKind = ValueKind.Int;
+                }
+                else
+                {
+                    // TODO
+                }
+            }
+
             LogInfo(identifier, $"Identifiers references undeclared identifier '{identifier.Text}'. Is this a compile time variable?");
             isUndeclared = true;
         }
@@ -479,6 +570,10 @@ public class TypeResolver
         else if (declaration is EnumDeclaration)
         {
             identifier.ExpressionValueKind = ValueKind.Void;
+        }
+        else if (declaration is ClassDeclaration)
+        {
+            identifier.ExpressionValueKind = ValueKind.Class;
         }
         else if (!isUndeclared)
         {

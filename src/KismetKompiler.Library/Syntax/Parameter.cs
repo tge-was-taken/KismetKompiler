@@ -7,7 +7,7 @@ namespace KismetKompiler.Library.Syntax;
 
 public class Parameter : SyntaxNode
 {
-    public List<Statements.Declarations.Attribute> Attributes { get; init; } = new();
+    public List<Statements.Declarations.AttributeDeclaration> Attributes { get; init; } = new();
     public ParameterModifier Modifier { get; set; }
 
     public TypeIdentifier Type { get; set; }
@@ -16,6 +16,8 @@ public class Parameter : SyntaxNode
 
     public virtual bool IsArray => false;
     public Expression DefaultVaue { get; set; }
+
+    public bool IsVarArgs { get; set; }
 
     public Parameter()
     {

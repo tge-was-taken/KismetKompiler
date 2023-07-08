@@ -4,6 +4,7 @@ using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Syntax.Statements.Declarations;
 using System.Collections;
 using UAssetAPI.Kismet.Bytecode;
+using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Library.Compiler.Context
 {
@@ -14,7 +15,9 @@ namespace KismetKompiler.Library.Compiler.Context
         Class,
         Procedure,
         Label,
-        Any
+        Any,
+        Enum,
+        EnumValue
     }
 
     public interface IExportSymbol
@@ -226,6 +229,7 @@ namespace KismetKompiler.Library.Compiler.Context
         public bool AllowShadowing { get; set; } = false;
         public bool IsReadOnly { get; set; } = false;
         public bool IsReturnParameter { get; set; } = false;
+        public EPropertyFlags Flags { get; set; }
     }
 
     public class PackageSymbol : DeclaredSymbol<PackageDeclaration>
@@ -245,6 +249,26 @@ namespace KismetKompiler.Library.Compiler.Context
         }
 
         public override SymbolCategory SymbolCategory => SymbolCategory.Class;
+    }
+
+    public class EnumSymbol : DeclaredSymbol<EnumDeclaration>, IExportSymbol
+    {
+        public EnumSymbol(EnumDeclaration declaration) : base(declaration)
+        {
+        }
+
+        public override SymbolCategory SymbolCategory => SymbolCategory.Enum;
+    }
+
+    public class EnumValueSymbol : DeclaredSymbol<EnumValueDeclaration>, IExportSymbol
+    {
+        public EnumValueSymbol(EnumValueDeclaration declaration) : base(declaration)
+        {
+        }
+
+        public int Value { get; init; }
+
+        public override SymbolCategory SymbolCategory => SymbolCategory.EnumValue;
     }
 
     public class ProcedureSymbol : DeclaredSymbol<ProcedureDeclaration>, IExportSymbol
@@ -334,6 +358,7 @@ namespace KismetKompiler.Library.Compiler.Context
         Package,
         Procedure,
         Base,
+        Enum,
     }
 
     public class MemberContext : SymbolTableBase
@@ -372,6 +397,7 @@ namespace KismetKompiler.Library.Compiler.Context
         public ISymbolTable SymbolTable { get; set; }
         public LabelSymbol? BreakLabel { get; set; }
         public LabelSymbol? ContinueLabel { get; set; }
+        public Dictionary<Expression, LabelSymbol> SwitchLabels { get; set; } = new();
 
         public Scope(Scope parent, Symbol? declaringSymbol)
         {
@@ -407,5 +433,6 @@ namespace KismetKompiler.Library.Compiler.Context
         public ProcedureSymbol Symbol { get; set; }
         public ProcedureDeclaration Declaration { get; set; }
         public CompiledFunctionContext CompiledFunctionContext { get; set; }
+        public VariableSymbol? ReturnVariable { get; set; }
     }
 }

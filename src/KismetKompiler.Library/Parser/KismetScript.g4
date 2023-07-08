@@ -69,7 +69,7 @@ arraySignifier
 	;
 
 enumTypeDeclarationStatement
-	: Enum Identifier enumValueList
+	: Enum Identifier enumValueList ';'?
 	;
 
 enumValueDeclaration
@@ -80,8 +80,12 @@ enumValueList
 	: '{' enumValueDeclaration? ( enumValueDeclaration ',' )* ( enumValueDeclaration ','? )? '}'
 	;
 
+attributeDeclaration
+	: Identifier argumentList?
+	;
+
 attributeList
-	: '[' Identifier (',' Identifier)* ']'
+	: '[' attributeDeclaration (',' attributeDeclaration)* ']'
 	;
 
 labelDeclarationStatement
@@ -108,11 +112,11 @@ modifier
 //
 parameterList
 	: '(' parameter? (',' parameter)* ')'
-	| '(' Elipsis ')'
 	;
 
 parameter
 	: attributeList? modifier* typeIdentifier Identifier arraySignifier?
+	| Elipsis
 	;
 
 //
@@ -130,10 +134,6 @@ argument
 //
 // Expressions
 //
-expressionList
-	: '(' (expression)? (',' expression)* ')'
-	;
-
 expression
 	: ';'																	# nullExpression
 	| '(' expression ')'													# compoundExpression
@@ -141,17 +141,22 @@ expression
 	| '[' (expression)? (',' expression)* (',')? ']'						# bracketInitializerListExpression
 	| Identifier '[' expression ']'											# subscriptExpression
 	| expression Op=('.'|'->') expression									# memberExpression
-	| '(' typeIdentifier ')' '(' expression ')'								# castExpression				// precedence 2
+	| '(' typeIdentifier ')' expression										# castExpression				// precedence 2
 	| Identifier argumentList												# callExpression				// precedence 2
 	| expression Op=( '--' | '++' )											# unaryPostfixExpression		// precedence 2
 	| Op=( '!' | '-' | '--' | '++' ) expression								# unaryPrefixExpression			// precedence 3
 	| expression Op=( '*' | '/' | '%' ) expression							# multiplicationExpression		// precedence 5
 	| expression Op=( '+' | '-' ) expression								# additionExpression			// precedence 6
-	| expression Op=( '<' | '>' | '<=' | '>=' ) expression					# relationalExpression			// precedence 8
-	| expression Op=( '==' | '!=' ) expression								# equalityExpression			// precedence 9	
-	| expression '&&' expression											# logicalAndExpression			// precedence 13
-	| expression '||' expression											# logicalOrExpression			// precedence 14
-	| expression Op=( '=' | '+=' | '-=' | '*=' | '/=' | '%=') expression	# assignmentExpression			// precedence 15
+	| expression Op=( '<<' | '>>' ) expression								# bitwiseShiftExpression		// precedence 7
+	| expression Op=( '<' | '>' | '<=' | '>=' ) expression					# relationalExpression			// precedence 9
+	| expression Op=( '==' | '!=' ) expression								# equalityExpression			// precedence 10	
+	| expression '&' expression												# bitwiseAndExpression			// precedence 11
+	| expression '^' expression												# bitwiseXorExpression			// precedence 12
+	| expression '|' expression												# bitwiseOrExpression			// precedence 13
+	| expression '&&' expression											# logicalAndExpression			// precedence 14
+	| expression '||' expression											# logicalOrExpression			// precedence 15
+	| expression '?' expression ':' expression								# conditionalExpression			// precedence 16
+	| expression Op=( '=' | '+=' | '-=' | '*=' | '/=' | '%=') expression	# assignmentExpression			// precedence 16
 	| primary																# primaryExpression
 	;
 
@@ -165,6 +170,7 @@ constant
 	| IntLiteral
 	| FloatLiteral
 	| StringLiteral
+	| CharLiteral
 	;
 
 //
@@ -313,6 +319,10 @@ FloatLiteralExponent
 // String constant
 StringLiteral
 	: '"' ( StringEscapeSequence | ~( '\\' | '"' ) )* '"'
+	;
+
+CharLiteral
+	: '"' ( StringEscapeSequence | ~( '\\' | '"' ) ) '"'
 	;
 
 fragment

@@ -1,12 +1,9 @@
 ﻿using KismetKompiler.Library.Compiler.Exceptions;
-using KismetKompiler.Library;
-using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Compiler.Context;
 using KismetKompiler.Library.Syntax;
 using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Syntax.Statements.Declarations;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
-using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
@@ -16,13 +13,9 @@ using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Compiler.Intermediate;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 
-namespace KismetKompiler.Compiler;
-
-public class ClassContext
-{
-    public required ClassSymbol Symbol { get; init; }
-}
+namespace KismetKompiler.Library.Compiler;
 
 public partial class KismetScriptCompiler
 {
@@ -35,7 +28,9 @@ public partial class KismetScriptCompiler
     private readonly Stack<KismetPropertyPointer?> _rvalueStack;
     private readonly Stack<MemberContext> _contextStack;
     private readonly Stack<Scope> _scopeStack;
+    private readonly Scope _rootScope;
 
+    private Scope RootScope => _rootScope;
     private Scope Scope => _scopeStack.Peek()!;
     private MemberContext? Context => _contextStack.Peek();
     private KismetPropertyPointer? RValue => _rvalueStack.Peek();
@@ -45,7 +40,8 @@ public partial class KismetScriptCompiler
         _contextStack = new();
         _contextStack.Push(null);
         _scopeStack = new();
-        _scopeStack.Push(new(null, null));
+        _rootScope = new(null, null);
+        _scopeStack.Push(_rootScope);
         _rvalueStack = new();
         _rvalueStack.Push(null);
     }
@@ -105,9 +101,9 @@ public partial class KismetScriptCompiler
     {
         var symbol = _functionContext?.Symbol.GetSymbol<T>(declaration);
         if (symbol == null)
-        {
             symbol = _classContext?.Symbol.GetSymbol<T>(declaration);
-        }
+        if (symbol == null)
+            symbol = Scope.GetSymbol<T>(declaration);
 
         return symbol ?? throw new UnknownSymbolError(declaration.Identifier);
     }
@@ -158,6 +154,10 @@ public partial class KismetScriptCompiler
             {
                 script.Classes.Add(CompileClass(classDeclaration));
             }
+            else if (declaration is EnumDeclaration enumDeclaration)
+            {
+                //
+            }
             else
             {
                 throw new UnexpectedSyntaxError(declaration);
@@ -180,6 +180,12 @@ public partial class KismetScriptCompiler
             if (statement is Declaration declaration)
             {
                 CreateDeclarationSymbol(declaration, parent, isExternal);
+            }
+            else if (statement is ForStatement forStatement)
+            {
+                ScanStatement(forStatement.Initializer, parent, isExternal);
+                if (forStatement.Body != null)
+                    ScanCompoundStatement(forStatement.Body, parent, isExternal);
             }
             else if (statement is IBlockStatement blockStatement)
             {
@@ -242,6 +248,30 @@ public partial class KismetScriptCompiler
                 {
                     foreach (var subDeclaration in classDeclaration.Declarations)
                         ScanStatement(subDeclaration, symbol, isExternal);
+                }
+                return symbol;
+            }
+            else if (declaration is EnumDeclaration enumDeclaration)
+            {
+                var symbol = new EnumSymbol(enumDeclaration)
+                {
+                    Name = enumDeclaration.Identifier.Text,
+                    DeclaringSymbol = parent,
+                    IsExternal = isExternal,
+                };
+                var lastValue = 0;
+                foreach (var enumValueDeclaration in enumDeclaration.Values)
+                {
+                    var value = (enumValueDeclaration.Value as IntLiteral)?.Value ?? lastValue + 1;
+                    lastValue = value;
+
+                    var valueSymbol = new EnumValueSymbol(enumValueDeclaration)
+                    {
+                        Name = enumValueDeclaration.Identifier.Text,
+                        Value = value,
+                        DeclaringSymbol = symbol,
+                        IsExternal = isExternal,
+                    };
                 }
                 return symbol;
             }
@@ -395,7 +425,7 @@ public partial class KismetScriptCompiler
         var functions = new List<CompiledFunctionContext>();
         var properties = new List<CompiledVariableContext>();
 
-        PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
+        //PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
         try
         {
             PushScope(_classContext.Symbol);
@@ -443,7 +473,7 @@ public partial class KismetScriptCompiler
         }
         finally
         {
-            PopContext();
+            //PopContext();
         }
 
         return new CompiledClassContext(classSymbol)
@@ -511,9 +541,28 @@ public partial class KismetScriptCompiler
         if (!procedureDeclaration.IsExternal)
         {
             _functionContext.ReturnLabel = CreateCompilerLabel("ReturnLabel");
-
             PushScope(_functionContext.Symbol);
             ForwardDeclareProcedureSymbols();
+
+            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => x.Attributes.Any(y => y.Identifier.Text == "Return"));
+            if (returnVar != null)
+                _functionContext.ReturnVariable = GetRequiredSymbol<VariableSymbol>(returnVar.Identifier.Text);
+            else if (_functionContext.Declaration.ReturnType.ValueKind != ValueKind.Void)
+            {
+                const string returnVariableName = "<>__ReturnValue";
+                var variableSymbol = new VariableSymbol(null)
+                {
+                    Parameter = new Parameter() { Identifier = new(returnVariableName), Type = _functionContext.Declaration.ReturnType },
+                    IsExternal = false,
+                    Name = returnVariableName,
+                    DeclaringSymbol = _functionContext.Symbol,
+                    IsReturnParameter = true,
+                };
+                _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
+                _functionContext.ReturnVariable = variableSymbol;
+                DeclareSymbol(variableSymbol);
+            }
+
             if (procedureDeclaration.Body != null)
             {
                 CompileCompoundStatement(procedureDeclaration.Body);
@@ -539,6 +588,7 @@ public partial class KismetScriptCompiler
                 IsExternal = false,
                 Name = param.Identifier.Text,
                 DeclaringSymbol = _functionContext.Symbol,
+                IsReturnParameter = param.Attributes.Any(x => x.Identifier.Text == "Return")
             };
             _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
             DeclareSymbol(variableSymbol);
@@ -559,95 +609,298 @@ public partial class KismetScriptCompiler
 
         foreach (var statement in compoundStatement)
         {
-            if (statement is Declaration declaration)
-            {
-                ProcessDeclaration(declaration);
-            }
-            else if (statement is Expression expression)
-            {
-                EmitPrimaryExpression(expression, CompileExpression(expression));
-            }
-            else if (statement is ReturnStatement returnStatement)
-            {
-                CompileReturnStatement(returnStatement);
-            }
-            else if (statement is GotoStatement gotoStatement)
-            {
-                if (gotoStatement.Label == null)
-                    throw new CompilationError(gotoStatement, "Missing goto statement label");
+            CompileStatement(statement);
+        }
 
-                if (TryGetLabel(gotoStatement.Label, out var label))
+        PopScope();
+    }
+
+    private void CompileStatement(Statement statement)
+    {
+        if (statement is Declaration declaration)
+        {
+            ProcessDeclaration(declaration);
+        }
+        else if (statement is Expression expression)
+        {
+            EmitPrimaryExpression(expression, CompileExpression(expression));
+        }
+        else if (statement is ReturnStatement returnStatement)
+        {
+            CompileReturnStatement(returnStatement);
+        }
+        else if (statement is GotoStatement gotoStatement)
+        {
+            CompileGotoStatement(gotoStatement);
+        }
+        else if (statement is IfStatement ifStatement)
+        {
+            CompileIfStatement(statement, ifStatement);
+        }
+        else if (statement is WhileStatement whileStatement)
+        {
+            CompileWhileStatement(whileStatement);
+        }
+        else if (statement is ForStatement forStatement)
+        {
+            CompileForStatement(forStatement);
+        }
+        else if (statement is SwitchStatement switchStatement)
+        {
+            CompileSwitchStatement(switchStatement);
+        }
+        else if (statement is BreakStatement breakStatement)
+        {
+            CompileBreakStatement(breakStatement);
+        }
+        else if (statement is ContinueStatement continueStatement)
+        {
+            CompileContinueStatement(continueStatement);
+        }
+        else
+        {
+            throw new UnexpectedSyntaxError(statement);
+        }
+    }
+
+    private void CompileContinueStatement(ContinueStatement continueStatement)
+    {
+        if (Scope.ContinueLabel == null)
+            throw new CompilationError(continueStatement, "continue is not valid in this context");
+
+        EmitPrimaryExpression(continueStatement, new EX_Jump(), new[] { Scope.ContinueLabel });
+    }
+
+    private void CompileBreakStatement(BreakStatement breakStatement)
+    {
+        if (Scope.BreakLabel == null)
+            throw new CompilationError(breakStatement, "break is not valid in this context");
+
+        EmitPrimaryExpression(breakStatement, new EX_Jump(), new[] { Scope.BreakLabel });
+    }
+
+    private void CompileSwitchStatement(SwitchStatement switchStatement)
+    {
+        PushScope(null);
+        try
+        {
+            var defaultLabel = switchStatement.Labels.SingleOrDefault(x => x is DefaultSwitchLabel);
+            if (switchStatement.Labels.Last() != defaultLabel)
+            {
+                switchStatement.Labels.Remove(defaultLabel);
+                switchStatement.Labels.Add(defaultLabel);
+            }
+
+            // Set up switch labels in the context for gotos
+            Scope.SwitchLabels = switchStatement.Labels
+                                                .Where(x => x is ConditionSwitchLabel)
+                                                .Select(x => ((ConditionSwitchLabel)x).Condition)
+                                                .ToDictionary(x => x, y => CreateCompilerLabel("SwitchConditionCaseBody"));
+
+            var conditionCaseBodyLabels = Scope.SwitchLabels.Values.ToList();
+
+            var defaultCaseBodyLabel = defaultLabel != null ? CreateCompilerLabel("SwitchDefaultCaseBody") : null;
+            Scope.SwitchLabels.Add(new NullExpression(), defaultCaseBodyLabel);
+
+            var switchEndLabel = CreateCompilerLabel("SwitchStatementEndLabel");
+            for (var i = 0; i < switchStatement.Labels.Count; i++)
+            {
+                var label = switchStatement.Labels[i];
+                if (label is ConditionSwitchLabel conditionLabel)
                 {
-                    EmitPrimaryExpression(gotoStatement, new EX_Jump(), new[] { label });
-                }
-                else
-                {
-                    EmitPrimaryExpression(gotoStatement, new EX_ComputedJump()
+                    // Jump to next label if condition is not met
+                    var nextSwitchCaseLabel = CreateCompilerLabel("SwitchStatementNextLabel");
+                    EmitPrimaryExpression(conditionLabel, new EX_JumpIfNot()
                     {
-                        CodeOffsetExpression = CompileSubExpression(gotoStatement.Label)
-                    });
+                        BooleanExpression = CompileSubExpression(
+                            new EqualityOperator() 
+                            {
+                                Left = switchStatement.SwitchOn,
+                                Right = conditionLabel.Condition,
+                                ExpressionValueKind = ValueKind.Bool,
+                            }
+                        )
+                    }, new[] { nextSwitchCaseLabel });
+
+                    var labelBodyLabel = Scope.SwitchLabels[conditionLabel.Condition];
+                    ResolveLabel(labelBodyLabel);
+
+                    // Emit body
+                    Scope.BreakLabel = switchEndLabel;
+                    foreach (var statement in label.Body)
+                        CompileStatement(statement);
+
+                    // Jump to end of switch
+                    EmitPrimaryExpression(conditionLabel, new EX_Jump(), new[] { switchEndLabel });
+                    ResolveLabel(nextSwitchCaseLabel);
                 }
             }
-            else if (statement is IfStatement ifStatement)
+
+            if (defaultLabel != null)
             {
-                if (ifStatement.Condition is LogicalNotOperator notOperator)
-                {
-                    if (ifStatement.Body?.FirstOrDefault() is GotoStatement ifStatementBodyGotoStatement)
-                    {
-                        // Match 'if (!(K2Node_SwitchInteger_CmpSuccess)) goto _674;'
-                        EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
-                        {
-                            BooleanExpression = CompileSubExpression(notOperator.Operand)
-                        }, new[] { GetLabel(ifStatementBodyGotoStatement.Label) });
-                    }
-                    else if (ifStatement.Body?.FirstOrDefault() is ReturnStatement ifStatementReturnStatement)
-                    {
-                        // Match 'if (!CallFunc_BI_TempFlagCheck_retValue) return;'
-                        EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
-                        {
-                            BooleanExpression = CompileSubExpression(notOperator.Operand)
-                        }, new[] { _functionContext.ReturnLabel });
-                    }
-                    else
-                    {
-                        throw new UnexpectedSyntaxError(statement);
-                    }
-                }
-                else
-                {
-                    var endLabel = CreateCompilerLabel("IfStatementEndLabel");
-                    if (ifStatement.ElseBody == null)
-                    {
-                        EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
-                        {
-                            BooleanExpression = CompileSubExpression(ifStatement.Condition),
-                        }, new[] { endLabel });
-                        CompileCompoundStatement(ifStatement.Body);
+                // Emit body of default case first
+                Scope.BreakLabel = switchEndLabel;
 
-                    }
-                    else
-                    {
-                        var elseLabel = CreateCompilerLabel("IfStatementElseLabel");
-                        EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
-                        {
-                            BooleanExpression = CompileSubExpression(ifStatement.Condition),
-                        }, new[] { elseLabel });
-                        CompileCompoundStatement(ifStatement.Body);
-                        EmitPrimaryExpression(null, new EX_Jump(), new[] { endLabel });
-                        ResolveLabel(elseLabel);
-                        CompileCompoundStatement(ifStatement.ElseBody);
-                    }
+                // Resolve label that jumps to the default case body
+                ResolveLabel(defaultCaseBodyLabel);
 
-                    ResolveLabel(endLabel);
-                }
+                // Emit default case body
+                foreach (var statement in defaultLabel.Body)
+                    CompileStatement(statement);
+            }
+
+            ResolveLabel(switchEndLabel);
+        }
+        finally
+        {
+            PopScope();
+        }
+    }
+
+    private void CompileGotoStatement(GotoStatement gotoStatement)
+    {
+        if (gotoStatement.Label == null)
+            throw new CompilationError(gotoStatement, "Missing goto statement label");
+
+        if (TryGetLabel(gotoStatement.Label, out var label))
+        {
+            EmitPrimaryExpression(gotoStatement, new EX_Jump(), new[] { label });
+        }
+        else
+        {
+            EmitPrimaryExpression(gotoStatement, new EX_ComputedJump()
+            {
+                CodeOffsetExpression = CompileSubExpression(gotoStatement.Label)
+            });
+        }
+    }
+
+    private void CompileIfStatement(Statement statement, IfStatement ifStatement)
+    {
+        if (ifStatement.Condition is LogicalNotOperator notOperator)
+        {
+            if (ifStatement.Body?.FirstOrDefault() is GotoStatement ifStatementBodyGotoStatement)
+            {
+                // Match 'if (!(K2Node_SwitchInteger_CmpSuccess)) goto _674;'
+                EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
+                {
+                    BooleanExpression = CompileSubExpression(notOperator.Operand)
+                }, new[] { GetLabel(ifStatementBodyGotoStatement.Label) });
+            }
+            else if (ifStatement.Body?.FirstOrDefault() is ReturnStatement ifStatementReturnStatement)
+            {
+                // Match 'if (!CallFunc_BI_TempFlagCheck_retValue) return;'
+                EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
+                {
+                    BooleanExpression = CompileSubExpression(notOperator.Operand)
+                }, new[] { _functionContext.ReturnLabel });
             }
             else
             {
                 throw new UnexpectedSyntaxError(statement);
             }
         }
+        else
+        {
+            var endLabel = CreateCompilerLabel("IfStatementEndLabel");
+            if (ifStatement.ElseBody == null)
+            {
+                EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
+                {
+                    BooleanExpression = CompileSubExpression(ifStatement.Condition),
+                }, new[] { endLabel });
+                CompileCompoundStatement(ifStatement.Body);
 
-        PopScope();
+            }
+            else
+            {
+                var elseLabel = CreateCompilerLabel("IfStatementElseLabel");
+                EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
+                {
+                    BooleanExpression = CompileSubExpression(ifStatement.Condition),
+                }, new[] { elseLabel });
+                CompileCompoundStatement(ifStatement.Body);
+                EmitPrimaryExpression(null, new EX_Jump(), new[] { endLabel });
+                ResolveLabel(elseLabel);
+                CompileCompoundStatement(ifStatement.ElseBody);
+            }
+
+            ResolveLabel(endLabel);
+        }
+    }
+
+    private void CompileWhileStatement(WhileStatement whileStatement)
+    {
+        PushScope(null);
+        try
+        {
+            var endLabel = CreateCompilerLabel("WhileStatement_EndLabel");
+            var conditionLabel = CreateCompilerLabel("WhileStatement_ConditionLabel");
+
+            // Condition
+            ResolveLabel(conditionLabel);
+            EmitPrimaryExpression(whileStatement, new EX_JumpIfNot()
+            {
+                BooleanExpression = CompileSubExpression(whileStatement.Condition),
+            }, new[] { endLabel });
+
+            // Body
+            if (whileStatement.Body != null)
+            {
+                Scope.BreakLabel = endLabel;
+                Scope.ContinueLabel = conditionLabel;
+                CompileCompoundStatement(whileStatement.Body);
+            }
+
+            // Jump to condition
+            EmitPrimaryExpression(whileStatement, new EX_Jump(), new[] { conditionLabel });
+
+            // End
+            ResolveLabel(endLabel);
+        }
+        finally
+        {
+            PopScope();
+        }
+    }
+
+    private void CompileForStatement(ForStatement forStatement)
+    {
+        var endLabel = CreateCompilerLabel("ForStatement_EndLabel");
+        var conditionLabel = CreateCompilerLabel("ForStatement_ConditionLabel");
+
+        PushScope(null);
+        try
+        {
+            // Initialize i
+            CompileStatement(forStatement.Initializer);
+
+            // Condition
+            ResolveLabel(conditionLabel);
+            EmitPrimaryExpression(forStatement, new EX_JumpIfNot()
+            {
+                BooleanExpression = CompileSubExpression(forStatement.Condition),
+            }, new[] { endLabel });
+
+            // Body
+            if (forStatement.Body != null)
+            {
+                Scope.BreakLabel = endLabel;
+                Scope.ContinueLabel = conditionLabel;
+                CompileCompoundStatement(forStatement.Body);
+            }
+
+            // Increment & jump to condition
+            CompileExpression(forStatement.AfterLoop);
+            EmitPrimaryExpression(forStatement, new EX_Jump(), new[] { conditionLabel });
+
+            // End
+            ResolveLabel(endLabel);
+        }
+        finally
+        {
+            PopScope();
+        }
     }
 
     private void CompileReturnStatement(ReturnStatement returnStatement)
@@ -703,12 +956,21 @@ public partial class KismetScriptCompiler
 
             if (variableDeclaration.Initializer != null)
             {
-                EmitPrimaryExpression(variableDeclaration, new EX_Let()
-                {
-                    Value = GetPropertyPointer(variableDeclaration.Identifier),
-                    Variable = CompileSubExpression(variableDeclaration.Identifier),
-                    Expression = CompileSubExpression(variableDeclaration.Initializer)
-                });
+                EmitPrimaryExpression(variableDeclaration, 
+                    CompileAssignmentOperator(new Syntax.Statements.Expressions.Binary.AssignmentOperator()
+                    {
+                        Left = new Identifier(variableSymbol.Name),
+                        Right = variableDeclaration.Initializer,
+                        ExpressionValueKind = variableDeclaration.Type.ValueKind,
+                        SourceInfo = variableDeclaration.SourceInfo,
+                    }));
+
+                //EmitPrimaryExpression(variableDeclaration, new EX_Let()
+                //{
+                //    Value = GetPropertyPointer(variableDeclaration.Identifier),
+                //    Variable = CompileSubExpression(variableDeclaration.Identifier),
+                //    Expression = CompileSubExpression(variableDeclaration.Initializer)
+                //});
             }
 
             _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
@@ -729,14 +991,13 @@ public partial class KismetScriptCompiler
         if (beforeLastExpr?.CompiledExpressions.Single() is not EX_Return &&
             lastExpr?.CompiledExpressions.Single() is not EX_Return)
         {
-            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => x.Attributes.Any(y => y.Identifier.Text == "Return"));
-            if (returnVar != null)
+            if (_functionContext.ReturnVariable != null)
             {
                 EmitPrimaryExpression(null, new EX_Return()
                 {
                     ReturnExpression = Emit(null, new EX_LocalOutVariable()
                     {
-                        Variable = GetPropertyPointer(returnVar.Identifier)
+                        Variable = GetPropertyPointer(_functionContext.ReturnVariable.Name)
                     }).CompiledExpressions.Single(),
                 });
             }
@@ -821,7 +1082,8 @@ public partial class KismetScriptCompiler
         // Reset context so it doesn't keep propagating until another member access pops up
         // TODO: solve this properly by isolating the context to the member part of the expression only (without its sub expressions)
         var callContext = Context;
-        PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
+        //PushContext(new MemberContext() { Type = ContextType.This, Symbol = _classContext.Symbol, IsImplicit = true });
+        PushContext(null);
         try
         {
             if (IsIntrinsicFunction(callOperator.Identifier.Text))
@@ -869,12 +1131,7 @@ public partial class KismetScriptCompiler
                             }
                             else
                             {
-                                // Static function
-                                return Emit(callOperator, new EX_CallMath()
-                                {
-                                    StackNode = GetPackageIndex(callOperator.Identifier),
-                                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                                });
+                                throw new NotImplementedException();
                             }
                         }
                         else if (callContext.Type == ContextType.ObjectConst ||
@@ -904,7 +1161,12 @@ public partial class KismetScriptCompiler
                     }
                     else
                     {
-                        throw new NotImplementedException();
+                        // CallMath requires no context
+                        return Emit(callOperator, new EX_CallMath()
+                        {
+                            StackNode = GetPackageIndex(callOperator.Identifier),
+                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                        });
                     }
                 }
             }
@@ -919,66 +1181,49 @@ public partial class KismetScriptCompiler
     {
         CompiledExpressionContext CompileExpressionInner()
         {
-            if (expression is CallOperator callOperator)
+            if (expression is NullExpression nullExpression)
             {
-                return CompileCallOperator(callOperator);
+                return Emit(nullExpression, new EX_Nothing());
             }
-            else if (expression is Identifier identifier)
+            else if (expression is InitializerList initializerListExpression)
             {
-                return CompileIdentifierExpression(identifier);
+                return CompileInitializerList(initializerListExpression);
             }
-            else if (expression is Literal literal)
+            else if (expression is SubscriptOperator subscriptOperator)
             {
-                return CompileLiteralExpression(literal);
+                return CompileSubscriptOperator(subscriptOperator);
             }
-            else if (expression is AssignmentOperator assignmentOperator)
+            else if (expression is MemberExpression memberExpression)
             {
-                // TODO find a better solution, EX_Context needs this in Expression
-                TryGetPropertyPointer(assignmentOperator.Left, out var rvalue);
-
-                PushRValue(rvalue);
-                try
-                {
-                    if (assignmentOperator.Right.ExpressionValueKind == ValueKind.Bool)
-                    {
-                        return Emit(expression, new EX_LetBool()
-                        {
-                            VariableExpression = CompileSubExpression(assignmentOperator.Left),
-                            AssignmentExpression = CompileSubExpression(assignmentOperator.Right),
-                        });
-                    }
-                    else if (assignmentOperator.Right is InitializerList initializerList)
-                    {
-                        return Emit(expression, new EX_SetArray()
-                        {
-                            ArrayInnerProp = GetPackageIndex(assignmentOperator.Left),
-                            AssigningProperty = CompileSubExpression(assignmentOperator.Left),
-                            Elements = initializerList.Expressions.Select(x => CompileSubExpression(x)).ToArray()
-                        });
-                    }
-                    else
-                    {
-                        TryGetPropertyPointer(assignmentOperator.Left, out var pointer);
-                        return Emit(expression, new EX_Let()
-                        {
-                            Value = pointer ?? new KismetPropertyPointer() { Old = new() },
-                            Variable = CompileSubExpression(assignmentOperator.Left),
-                            Expression = CompileSubExpression(assignmentOperator.Right),
-                        });
-                    }
-                }
-                finally
-                {
-                    PopRValue();
-                }
+                return CompileMemberExpression(memberExpression);
             }
             else if (expression is CastOperator castOperator)
             {
                 return CompileCastExpression(castOperator);
             }
-            else if (expression is MemberExpression memberExpression)
+            else if (expression is CallOperator callOperator)
             {
-                return CompileMemberExpression(memberExpression);
+                return CompileCallOperator(callOperator);
+            }
+            else if (expression is UnaryExpression unaryExpression)
+            {
+                return CompileUnaryExpression(unaryExpression);
+            }
+            else if (expression is BinaryExpression binaryExpression)
+            {
+                return CompileBinaryExpression(binaryExpression);
+            }
+            else if (expression is ConditionalExpression conditionalExpression)
+            {
+                return CompileConditionalExpression(conditionalExpression);
+            }
+            else if (expression is Literal literal)
+            {
+                return CompileLiteralExpression(literal);
+            }
+            else if (expression is Identifier identifier)
+            {
+                return CompileIdentifierExpression(identifier);
             }
             else
             {
@@ -994,6 +1239,60 @@ public partial class KismetScriptCompiler
         }
         return expressionContext;
     }
+
+    private CompiledExpressionContext EmitLibraryCall(Expression expression, string library, string name, IEnumerable<KismetExpression> arguments)
+    {
+        var librarySymbol = RootScope.GetSymbol<ClassSymbol>(library);
+        if (librarySymbol == null)
+        {
+            librarySymbol = new ClassSymbol(null)
+            {
+                DeclaringSymbol = new PackageSymbol(null)
+                {
+                    DeclaringSymbol = null,
+                    IsExternal = true,
+                    Name = "/Script/Engine"
+                },
+                IsExternal = true,
+                Name = library,
+            };
+        }
+
+        var functionSymbol = librarySymbol.GetSymbol<ProcedureSymbol>(name);
+        if (functionSymbol == null)
+        {
+            functionSymbol = new ProcedureSymbol(null)
+            {
+                DeclaringSymbol = librarySymbol,
+                IsExternal = true,
+                Name = name
+            };
+        }
+
+        return Emit(expression, new EX_CallMath()
+        {
+            StackNode = new IntermediatePackageIndex(functionSymbol),
+            Parameters = arguments.ToArray()
+        });
+    }
+
+    private CompiledExpressionContext EmitArrayLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitLibraryCall(expression, "KismetArrayLibrary", name, arguments);
+
+    private CompiledExpressionContext EmitStringLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitLibraryCall(expression, "KismetStringLibrary", name, arguments);
+
+    private CompiledExpressionContext EmitMathLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitLibraryCall(expression, "KismetMathLibrary", name, arguments);
+
+    private CompiledExpressionContext EmitMathLibraryCall(UnaryExpression expression, string name)
+        => EmitLibraryCall(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Operand) });
+
+    private CompiledExpressionContext EmitMathLibraryCall(BinaryExpression expression, string name)
+        => EmitLibraryCall(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Left), CompileSubExpression(expression.Right) });
+
+    private CompiledExpressionContext EmitTextLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitLibraryCall(expression, "KismetTextLibrary", name, arguments);
 
     private CompiledExpressionContext CompileIdentifierExpression(Identifier identifier)
     {
@@ -1056,56 +1355,16 @@ public partial class KismetScriptCompiler
                 Value = GetPackageIndex(identifier)
             });
         }
+        else if (symbol is EnumValueSymbol enumValueSymbol)
+        {
+            return Emit(identifier, new EX_IntConst()
+            {
+                Value = enumValueSymbol.Value
+            });
+        }
         else
         {
             throw new NotImplementedException();
-        }
-    }
-
-    private CompiledExpressionContext CompileCastExpression(CastOperator castOperator)
-    {
-        if (castOperator.Operand is Literal literal)
-        {
-            if (literal is IntLiteral intLiteral)
-            {
-                switch (castOperator.TypeIdentifier.ValueKind)
-                {
-                    case ValueKind.Byte:
-                        return Emit(intLiteral, new EX_ByteConst() { Value = (byte)intLiteral.Value });
-                    case ValueKind.Bool:
-                        return Emit(intLiteral, intLiteral.Value > 0 ? new EX_True() : new EX_False());
-                    case ValueKind.Int:
-                        return Emit(intLiteral, new EX_IntConst() { Value = intLiteral.Value });
-                    case ValueKind.Float:
-                        return Emit(intLiteral, new EX_FloatConst() { Value = intLiteral.Value });
-                    default:
-                        throw new UnexpectedSyntaxError(literal);
-                }
-            }
-            else if (literal is BoolLiteral boolLiteral)
-            {
-                switch (castOperator.TypeIdentifier.ValueKind)
-                {
-                    case ValueKind.Bool:
-                        return Emit(boolLiteral, boolLiteral.Value ? new EX_True() : new EX_False());
-                    case ValueKind.Int:
-                        return Emit(boolLiteral, boolLiteral.Value ? new EX_IntConst() { Value = 1 } : new EX_IntConst() { Value = 0 });
-                    case ValueKind.Float:
-                        return Emit(boolLiteral, boolLiteral.Value ? new EX_FloatConst() { Value = 1 } : new EX_FloatConst() { Value = 0 });
-                    case ValueKind.Byte:
-                        return Emit(boolLiteral, boolLiteral.Value ? new EX_ByteConst() { Value = 1 } : new EX_ByteConst() { Value = 0 });
-                    default:
-                        throw new UnexpectedSyntaxError(literal);
-                }
-            }
-            else
-            {
-                throw new UnexpectedSyntaxError(literal);
-            }
-        }
-        else
-        {
-            return CompileExpression(castOperator.Operand);
         }
     }
 
@@ -1242,6 +1501,10 @@ public partial class KismetScriptCompiler
                 contextType = ContextType.Class;
             }
         }
+        else if (contextSymbol is EnumSymbol enumSymbol)
+        {
+            contextType = ContextType.Enum;
+        }
 
         if (contextSymbol == null)
         {
@@ -1259,7 +1522,7 @@ public partial class KismetScriptCompiler
             }
         }
 
-        Debug.Assert(contextSymbol is ClassSymbol);
+        Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol);
 
         var context = new MemberContext()
         {
@@ -1268,7 +1531,7 @@ public partial class KismetScriptCompiler
         };
 
         if (memberExpression.Context is Identifier contextIdentifier &&
-            contextIdentifier.Text == _classContext.Symbol.Name)
+            contextIdentifier.Text == _classContext?.Symbol.Name)
         {
             // TODO: make more flexible
             // Explicit virtual method call
@@ -1334,6 +1597,10 @@ public partial class KismetScriptCompiler
                     ContextExpression = CompileSubExpression(memberExpression.Member),
                     RValuePointer = pointer ?? new() { Old = new() },
                 }); ;
+            }
+            else if (Context.Type == ContextType.Enum)
+            {
+                return Emit(memberExpression, CompileSubExpression(memberExpression.Member));
             }
             else
             {

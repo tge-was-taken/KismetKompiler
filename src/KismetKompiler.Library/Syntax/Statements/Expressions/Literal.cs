@@ -1,6 +1,6 @@
 ﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions;
 
-public abstract class Literal : Expression
+public abstract class Literal : PrimaryExpression
 {
     protected Literal(ValueKind kind) : base(kind)
     {

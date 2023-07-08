@@ -10,7 +10,7 @@ public static class KeywordDictionary
         { ValueKind.Bool, "bool" },
         { ValueKind.Int, "int" },
         { ValueKind.Float, "float" },
-        { ValueKind.String, "string" }
+        { ValueKind.String, "string" },
     };
 
     public static Dictionary<string, ValueKind> KeywordToValueType { get; } = ValueTypeToKeyword.Reverse();

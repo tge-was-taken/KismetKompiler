@@ -1,6 +1,6 @@
 ﻿namespace KismetKompiler.Library.Syntax.Statements.Expressions;
 
-public class Identifier : Expression
+public class Identifier : PrimaryExpression
 {
     public string Text { get; set; }
 

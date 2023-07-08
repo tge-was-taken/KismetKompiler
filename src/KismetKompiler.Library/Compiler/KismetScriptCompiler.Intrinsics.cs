@@ -10,7 +10,7 @@ using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
 using KismetKompiler.Library.Compiler.Intermediate;
 
-namespace KismetKompiler.Compiler;
+namespace KismetKompiler.Library.Compiler;
 
 public partial class KismetScriptCompiler
 {
@@ -467,9 +467,9 @@ public partial class KismetScriptCompiler
                 });
             case EExprToken.EX_SwitchValue:
                 var referencedLabels = new List<LabelSymbol>()
-            {
-                GetLabel(callOperator.Arguments[0])
-            };
+        {
+            GetLabel(callOperator.Arguments[0])
+        };
 
                 return new CompiledExpressionContext(callOperator, offset, new EX_SwitchValue()
                 {

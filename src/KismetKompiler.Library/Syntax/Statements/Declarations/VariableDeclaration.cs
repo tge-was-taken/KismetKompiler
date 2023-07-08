@@ -7,7 +7,7 @@ namespace KismetKompiler.Library.Syntax.Statements.Declarations;
 
 public class VariableDeclaration : Declaration
 {
-    public List<Attribute> Attributes { get; init; } = new();
+    public List<AttributeDeclaration> Attributes { get; init; } = new();
 
     public VariableModifier Modifiers { get; set; }
 

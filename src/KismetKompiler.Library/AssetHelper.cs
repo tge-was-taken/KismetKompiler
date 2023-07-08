@@ -56,6 +56,10 @@ public static class AssetHelper
         {
             return index.ToExport(asset).ObjectName.ToString();
         }
+        else if (index.IsNull())
+        {
+            return "<null>";
+        }
         else
         {
             return index.ToImport(asset).ObjectName.ToString();
@@ -183,6 +187,15 @@ public static class AssetHelper
             .Where(x => x is ClassExport)
             .Where(x => x.ObjectName.ToString() == name)
             .Cast<ClassExport>()
+            .SingleOrDefault();
+    }
+
+    public static PropertyExport? FindPropertyExportByName(this UnrealPackage asset, string name)
+    {
+        return asset.Exports
+            .Where(x => x is PropertyExport)
+            .Where(x => x.ObjectName.ToString() == name)
+            .Cast<PropertyExport>()
             .SingleOrDefault();
     }
 

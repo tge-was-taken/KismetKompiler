@@ -516,7 +516,7 @@ public class KismetScriptASTParser
         {
             foreach (var mod in modifiers)
             {
-                if (!Enum.TryParse<ProcedureModifier>(mod.GetText(), true, out var modValue))
+                if (!System.Enum.TryParse<ProcedureModifier>(mod.GetText(), true, out var modValue))
                 {
                     LogError(mod, $"Invalid procedure modifier: {mod.GetText()}");
                     return false;
@@ -576,16 +576,25 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseAttributeList(KismetScriptParser.AttributeListContext context, out List<Syntax.Statements.Declarations.Attribute> attributes)
+    private bool TryParseAttributeList(KismetScriptParser.AttributeListContext context, out List<Syntax.Statements.Declarations.AttributeDeclaration> attributes)
     {
-        attributes = new List<Syntax.Statements.Declarations.Attribute>();
-        foreach (var identifierNode in context.Identifier())
+        attributes = new List<Syntax.Statements.Declarations.AttributeDeclaration>();
+        foreach (var attributeDeclarationNode in context.attributeDeclaration())
         {
-            if (!TryParseIdentifier(identifierNode, out var identifier))
+            var attribute = CreateAstNode<Syntax.Statements.Declarations.AttributeDeclaration>(attributeDeclarationNode);
+            if (!TryParseIdentifier(attributeDeclarationNode.Identifier(), out var identifier))
                 return false;
 
-            var attribute = CreateAstNode<Syntax.Statements.Declarations.Attribute>(identifierNode);
             attribute.Identifier = identifier;
+
+            var argumentListContext = attributeDeclarationNode.argumentList();
+            if (argumentListContext != null)
+            {
+                if (!TryParseArgumentList(argumentListContext, out var arguments))
+                    return false;
+                attribute.Arguments.AddRange(arguments);
+            }
+
             attributes.Add(attribute);
         }
         return true;
@@ -608,7 +617,7 @@ public class KismetScriptASTParser
         {
             foreach (var modifierContext in variableModifierContext)
             {
-                if (!Enum.TryParse<VariableModifier>(modifierContext.GetText(), true, out var modValue))
+                if (!System.Enum.TryParse<VariableModifier>(modifierContext.GetText(), true, out var modValue))
                 {
                     LogError(modifierContext, $"Invalid variable modifier: {modifierContext.GetText()}");
                     return false;
@@ -830,14 +839,6 @@ public class KismetScriptASTParser
             subscriptOperator.Index = indexExpression;
             expression = subscriptOperator;
         }
-        else if (TryCast<KismetScriptParser.CastExpressionContext>(context, out var castExpressionContext))
-        {
-            CastOperator castExpression = null;
-            if (!TryFunc(castExpressionContext, "Failed to parse cast operator", () => TryParseCastExpression(castExpressionContext, out castExpression)))
-                return false;
-
-            expression = castExpression;
-        }
         else if (TryCast<KismetScriptParser.MemberExpressionContext>(context, out var memberExpressionContext))
         {
             MemberExpression memberExpression = null;
@@ -845,6 +846,14 @@ public class KismetScriptASTParser
                 return false;
 
             expression = memberExpression;
+        }
+        else if (TryCast<KismetScriptParser.CastExpressionContext>(context, out var castExpressionContext))
+        {
+            CastOperator castExpression = null;
+            if (!TryFunc(castExpressionContext, "Failed to parse cast operator", () => TryParseCastExpression(castExpressionContext, out castExpression)))
+                return false;
+
+            expression = castExpression;
         }
         else if (TryCast<KismetScriptParser.CallExpressionContext>(context, out var callExpressionContext))
         {
@@ -886,6 +895,14 @@ public class KismetScriptASTParser
 
             expression = binaryExpression;
         }
+        else if (TryCast<KismetScriptParser.BitwiseShiftExpressionContext>(context, out var bitwistShiftExpressionContext))
+        {
+            BinaryExpression binaryExpression = null;
+            if (!TryFunc(additionExpressionContext, "Failed to parse bitwise shift expression", () => TryParseBitwiseShiftExpression(bitwistShiftExpressionContext, out binaryExpression)))
+                return false;
+
+            expression = binaryExpression;
+        }
         else if (TryCast<KismetScriptParser.RelationalExpressionContext>(context, out var relationalExpressionContext))
         {
             BinaryExpression binaryExpression = null;
@@ -902,6 +919,30 @@ public class KismetScriptASTParser
 
             expression = equalityExpression;
         }
+        else if (TryCast<KismetScriptParser.BitwiseAndExpressionContext>(context, out var bitwiseAndExpressionContext))
+        {
+            BinaryExpression binaryExpression = null;
+            if (!TryFunc(bitwiseAndExpressionContext, "Failed to parse bitwise and expression", () => TryParseBitwiseAndExpression(bitwiseAndExpressionContext, out binaryExpression)))
+                return false;
+
+            expression = binaryExpression;
+        }
+        else if (TryCast<KismetScriptParser.BitwiseXorExpressionContext>(context, out var bitwiseXorExpressionContext))
+        {
+            BinaryExpression binaryExpression = null;
+            if (!TryFunc(bitwiseXorExpressionContext, "Failed to parse bitwise xor expression", () => TryParseBitwiseXorExpression(bitwiseXorExpressionContext, out binaryExpression)))
+                return false;
+
+            expression = binaryExpression;
+        }
+        else if (TryCast<KismetScriptParser.BitwiseOrExpressionContext>(context, out var bitwiseOrExpressionContext))
+        {
+            BinaryExpression binaryExpression = null;
+            if (!TryFunc(bitwiseOrExpressionContext, "Failed to parse bitwise or expression", () => TryParseBitwiseOrExpression(bitwiseOrExpressionContext, out binaryExpression)))
+                return false;
+
+            expression = binaryExpression;
+        }
         else if (TryCast<KismetScriptParser.LogicalAndExpressionContext>(context, out var logicalAndExpressionContext))
         {
             BinaryExpression binaryExpression = null;
@@ -917,6 +958,14 @@ public class KismetScriptASTParser
                 return false;
 
             expression = binaryExpression;
+        }
+        else if (TryCast<KismetScriptParser.ConditionalExpressionContext>(context, out var conditionalExpressionContext))
+        {
+            ConditionalExpression conditionalExpression = null;
+            if (!TryFunc(conditionalExpressionContext, "Failed to parse conditional expression", () => TryParseConditionalExpression(conditionalExpressionContext, out conditionalExpression)))
+                return false;
+
+            expression = conditionalExpression;
         }
         else if (TryCast<KismetScriptParser.AssignmentExpressionContext>(context, out var assignmentExpressionContext))
         {
@@ -1020,20 +1069,30 @@ public class KismetScriptASTParser
 
         if (TryGet(context, context.argumentList, out var argumentListContext))
         {
-            if (!TryGet(argumentListContext, "Expected arguments(s)", () => argumentListContext.argument(), out var argumentContexts))
+            if (!TryParseArgumentList(argumentListContext, out var arguments))
                 return false;
-
-            foreach (var argumentContext in argumentContexts)
-            {
-                Argument argument = null;
-                if (!TryFunc(argumentContext, "Failed to parse argument", () => TryParseArgument(argumentContext, out argument)))
-                    return false;
-
-                callExpression.Arguments.Add(argument);
-            }
+            callExpression.Arguments.AddRange(arguments);
         }
 
         LogTrace($"Parsed call expression: {callExpression}");
+
+        return true;
+    }
+    private bool TryParseArgumentList(KismetScriptParser.ArgumentListContext context, out List<Argument> arguments)
+    {
+        arguments = new();
+
+        if (!TryGet(context, "Expected arguments(s)", () => context.argument(), out var argumentContexts))
+            return false;
+
+        foreach (var argumentContext in argumentContexts)
+        {
+            Argument argument = null;
+            if (!TryFunc(argumentContext, "Failed to parse argument", () => TryParseArgument(argumentContext, out argument)))
+                return false;
+
+            arguments.Add(argument);
+        }
 
         return true;
     }
@@ -1186,6 +1245,46 @@ public class KismetScriptASTParser
         return true;
     }
 
+    private bool TryParseBitwiseShiftExpression(KismetScriptParser.BitwiseShiftExpressionContext context, out BinaryExpression binaryExpression)
+    {
+        LogContextInfo(context);
+
+        if (context.Op.Text == "<<")
+        {
+            binaryExpression = CreateAstNode<BitwiseShiftLeftOperator>(context);
+        }
+        else if (context.Op.Text == ">>")
+        {
+            binaryExpression = CreateAstNode<BitwiseShiftRightOperator>(context);
+        }
+        else
+        {
+            binaryExpression = null;
+            LogError(context, $"Invalid op for bitwise shift expression: ${context.Op}");
+            return false;
+        }
+
+        // Left
+        {
+            if (!TryParseExpression(context.expression(0), out var leftExpression))
+                return false;
+
+            binaryExpression.Left = leftExpression;
+        }
+
+        // Right
+        {
+            if (!TryParseExpression(context.expression(1), out var rightExpression))
+                return false;
+
+            binaryExpression.Right = rightExpression;
+        }
+
+        LogTrace($"Parsed bitwise shift expression: {binaryExpression}");
+
+        return true;
+    }
+
     private bool TryParseRelationalExpression(KismetScriptParser.RelationalExpressionContext context, out BinaryExpression binaryExpression)
     {
         LogContextInfo(context);
@@ -1270,6 +1369,87 @@ public class KismetScriptASTParser
         return true;
     }
 
+    private bool TryParseBitwiseAndExpression(KismetScriptParser.BitwiseAndExpressionContext context, out BinaryExpression binaryExpression)
+    {
+        LogContextInfo(context);
+
+        binaryExpression = CreateAstNode<BitwiseAndOperator>(context);
+
+        // Left
+        {
+            if (!TryParseExpression(context.expression(0), out var leftExpression))
+                return false;
+
+            binaryExpression.Left = leftExpression;
+        }
+
+        // Right
+        {
+            if (!TryParseExpression(context.expression(1), out var rightExpression))
+                return false;
+
+            binaryExpression.Right = rightExpression;
+        }
+
+        LogTrace($"Parsed bitwise and expression: {binaryExpression}");
+
+        return true;
+    }
+
+    private bool TryParseBitwiseXorExpression(KismetScriptParser.BitwiseXorExpressionContext context, out BinaryExpression binaryExpression)
+    {
+        LogContextInfo(context);
+
+        binaryExpression = CreateAstNode<BitwiseXorOperator>(context);
+
+        // Left
+        {
+            if (!TryParseExpression(context.expression(0), out var leftExpression))
+                return false;
+
+            binaryExpression.Left = leftExpression;
+        }
+
+        // Right
+        {
+            if (!TryParseExpression(context.expression(1), out var rightExpression))
+                return false;
+
+            binaryExpression.Right = rightExpression;
+        }
+
+        LogTrace($"Parsed bitwise xor expression: {binaryExpression}");
+
+        return true;
+    }
+
+    private bool TryParseBitwiseOrExpression(KismetScriptParser.BitwiseOrExpressionContext context, out BinaryExpression binaryExpression)
+    {
+        LogContextInfo(context);
+
+        binaryExpression = CreateAstNode<BitwiseOrOperator>(context);
+
+        // Left
+        {
+            if (!TryParseExpression(context.expression(0), out var leftExpression))
+                return false;
+
+            binaryExpression.Left = leftExpression;
+        }
+
+        // Right
+        {
+            if (!TryParseExpression(context.expression(1), out var rightExpression))
+                return false;
+
+            binaryExpression.Right = rightExpression;
+        }
+
+        LogTrace($"Parsed bitwise or expression: {binaryExpression}");
+
+        return true;
+    }
+
     private bool TryParseLogicalAndExpression(KismetScriptParser.LogicalAndExpressionContext context, out BinaryExpression binaryExpression)
     {
         LogContextInfo(context);
@@ -1320,6 +1500,41 @@ public class KismetScriptASTParser
         }
 
         LogTrace($"Parsed relational expression: {binaryExpression}");
+
+        return true;
+    }
+
+    private bool TryParseConditionalExpression(KismetScriptParser.ConditionalExpressionContext context, out ConditionalExpression expression)
+    {
+        LogContextInfo(context);
+
+        expression = CreateAstNode<ConditionalExpression>(context);
+
+        // Condition
+        {
+            if (!TryParseExpression(context.expression(0), out var conditionExpression))
+                return false;
+
+            expression.Condition = conditionExpression;
+        }
+
+        // Left
+        {
+            if (!TryParseExpression(context.expression(1), out var leftExpression))
+                return false;
+
+            expression.ValueIfTrue = leftExpression;
+        }
+
+        // Right
+        {
+            if (!TryParseExpression(context.expression(2), out var rightExpression))
+                return false;
+
+            expression.ValueIfFalse = rightExpression;
+        }
+
+        LogTrace($"Parsed conditional expression: {expression}");
 
         return true;
     }
@@ -1614,87 +1829,95 @@ public class KismetScriptASTParser
     {
         LogContextInfo(context);
 
-        var isArray = context.arraySignifier() != null;
-        if (!isArray)
-            parameter = CreateAstNode<Parameter>(context);
-        else
-            parameter = CreateAstNode<ArrayParameter>(context);
-
-        if (context.attributeList() != null)
+        if (context.Elipsis() != null)
         {
-            if (!TryParseAttributeList(context.attributeList(), out var attributes))
+            parameter = CreateAstNode<Parameter>(context);
+            parameter.IsVarArgs = true;
+        }
+        else
+        {
+            var isArray = context.arraySignifier() != null;
+            if (!isArray)
+                parameter = CreateAstNode<Parameter>(context);
+            else
+                parameter = CreateAstNode<ArrayParameter>(context);
+
+            if (context.attributeList() != null)
             {
-                LogError(context.attributeList(), "Failed to parse parameter attribute list");
+                if (!TryParseAttributeList(context.attributeList(), out var attributes))
+                {
+                    LogError(context.attributeList(), "Failed to parse parameter attribute list");
+                    return false;
+                }
+
+                parameter.Attributes.AddRange(attributes);
+            }
+
+            if (context.modifier()?.Length > 0)
+            {
+                foreach (var modifierContext in context.modifier())
+                {
+                    var modifier = modifierContext.GetText();
+                    switch (modifier)
+                    {
+                        case "out":
+                            parameter.Modifier |= ParameterModifier.Out;
+                            break;
+                        case "ref":
+                            parameter.Modifier |= ParameterModifier.Ref;
+                            break;
+                        case "const":
+                            parameter.Modifier |= ParameterModifier.Const;
+                            break;
+
+                        default:
+                            LogError(modifierContext, "Invalid parameter modifier");
+                            return false;
+                    }
+                }
+            }
+
+            // Parse type identifier
+            if (!TryGet(context, "Expected function return type", () => context.typeIdentifier(), out var typeIdentifierNode))
+            {
                 return false;
             }
 
-            parameter.Attributes.AddRange(attributes);
+            TypeIdentifier typeIdentifier = null;
+            if (!TryFunc(typeIdentifierNode, "Failed to parse parameter type", () => TryParseTypeIdentifier(typeIdentifierNode, out typeIdentifier)))
+                return false;
+
+            parameter.Type = typeIdentifier;
+
+            // Parse identifier
+            if (!TryGet(context, "Expected parameter identifier", () => context.Identifier(), out var identifierNode))
+                return false;
+
+            Identifier identifier = null;
+            if (!TryFunc(identifierNode, "Failed to parse parameter identifier", () => TryParseIdentifier(identifierNode, out identifier)))
+                return false;
+
+            parameter.Identifier = identifier;
+            identifier.ExpressionValueKind = parameter.Type.ValueKind;
+
+            //if (!isArray)
+            //{
+            //    identifier.ExpressionValueKind = parameter.Type.ValueKind;
+            //}
+            //else
+            //{
+            //    var sizeLiteral = context.arraySignifier().IntLiteral();
+            //    if (!(sizeLiteral != null && TryParseIntLiteral(sizeLiteral, out var size)))
+            //    {
+            //        LogError(context, "Array parameter must have array size specified");
+            //        return false;
+            //    }
+
+            //    ((ArrayParameter)parameter).Size = size;
+            //}
+
+            LogTrace($"Parsed parameter: {parameter}");
         }
-
-        if (context.modifier()?.Length > 0)
-        {
-            foreach (var modifierContext in context.modifier())
-            {
-                var modifier = modifierContext.GetText();
-                switch (modifier)
-                {
-                    case "out":
-                        parameter.Modifier |= ParameterModifier.Out;
-                        break;
-                    case "ref":
-                        parameter.Modifier |= ParameterModifier.Ref;
-                        break;
-                    case "const":
-                        parameter.Modifier |= ParameterModifier.Const;
-                        break;
-
-                    default:
-                        LogError(modifierContext, "Invalid parameter modifier");
-                        return false;
-                }
-            }
-        }
-
-        // Parse type identifier
-        if (!TryGet(context, "Expected function return type", () => context.typeIdentifier(), out var typeIdentifierNode))
-        {
-            return false;
-        }
-
-        TypeIdentifier typeIdentifier = null;
-        if (!TryFunc(typeIdentifierNode, "Failed to parse parameter type", () => TryParseTypeIdentifier(typeIdentifierNode, out typeIdentifier)))
-            return false;
-
-        parameter.Type = typeIdentifier;
-
-        // Parse identifier
-        if (!TryGet(context, "Expected parameter identifier", () => context.Identifier(), out var identifierNode))
-            return false;
-
-        Identifier identifier = null;
-        if (!TryFunc(identifierNode, "Failed to parse parameter identifier", () => TryParseIdentifier(identifierNode, out identifier)))
-            return false;
-
-        parameter.Identifier = identifier;
-        identifier.ExpressionValueKind = parameter.Type.ValueKind;
-
-        //if (!isArray)
-        //{
-        //    identifier.ExpressionValueKind = parameter.Type.ValueKind;
-        //}
-        //else
-        //{
-        //    var sizeLiteral = context.arraySignifier().IntLiteral();
-        //    if (!(sizeLiteral != null && TryParseIntLiteral(sizeLiteral, out var size)))
-        //    {
-        //        LogError(context, "Array parameter must have array size specified");
-        //        return false;
-        //    }
-
-        //    ((ArrayParameter)parameter).Size = size;
-        //}
-
-        LogTrace($"Parsed parameter: {parameter}");
 
         return true;
     }
@@ -1746,7 +1969,7 @@ public class KismetScriptASTParser
             identifier.Text = node.GetText();
         }
 
-        if (!Enum.TryParse<ValueKind>(identifier.Text, true, out var primitiveType))
+        if (!System.Enum.TryParse<ValueKind>(identifier.Text, true, out var primitiveType))
         {
             primitiveType = ValueKind.Unresolved;
             //LogError( node.Symbol, $"Unknown value type: {identifier.Value }" );

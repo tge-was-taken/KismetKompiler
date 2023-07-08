@@ -65,7 +65,20 @@ public enum ValueKind
     /// <summary>
     /// Byte primitive data type.
     /// </summary>
-    Byte
+    Byte,
+    Vector2D,
+    TimeSpan,
+    DateTime,
+    Vector,
+    LinearColor,
+    Rotator,
+    Transform,
+    Name,
+    Class,
+    Object,
+    Double,
+    Interface,
+    Struct
 }
 
 public static class ValueKindExtensions
