@@ -225,6 +225,7 @@ namespace KismetKompiler.Library.Compiler.Context
                 return VariableCategory.Global;
             }
         }
+        public Argument? Argument { get; set; }
         public Parameter? Parameter { get; set; }
         public bool AllowShadowing { get; set; } = false;
         public bool IsReadOnly { get; set; } = false;

@@ -525,6 +525,18 @@ public class TypeResolver
 
         foreach (var arg in callExpression.Arguments)
         {
+            if (arg is OutDeclarationArgument outArg)
+            {
+                var decl = new VariableDeclaration()
+                {
+                    Identifier = outArg.Identifier,
+                    SourceInfo = outArg.SourceInfo,
+                    Type = outArg.Type
+                };
+                ResolveTypesInDeclaration(decl);
+                Scope.TryRegisterDeclaration(decl);
+            }
+
             ResolveTypesInExpression(arg.Expression);
         }
 

@@ -33,6 +33,8 @@ public static class KismetScriptParserHelper
         parser.ErrorHandler = new BailErrorStrategy();
         //parser.ErrorHandler = new DefaultErrorStrategy();
 
+        //errorListener = new CustomErrorListener(parser.Vocabulary);
+
         if (errorListener != null)
         {
             parser.RemoveErrorListeners();

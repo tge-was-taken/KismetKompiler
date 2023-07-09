@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "KismetKompiler": {
+      "commandName": "Project",
+      //"commandLineArgs": "compile --input \"E:\\Projects\\smtv_ai\\pakchunk0-Switch\\Project\\Content\\Blueprints\\DLC\\BPL_DlcCheck_TestEdit.kms\" --version 4.23 --overwrite --asset \"E:\\Projects\\smtv_ai\\pakchunk0-Switch\\Project\\Content\\Blueprints\\DLC\\BPL_DlcCheck.uasset\""
+    }
+  }
+}

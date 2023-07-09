@@ -119,8 +119,11 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_LocalVirtualFunction expr:
                     {
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
                         var context = _context == null ? "this" : _context.Expression;
+                        var callContext = context;
+                        _context = null;
+
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
                         var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -130,12 +133,15 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_LocalFinalFunction expr:
                     {
+                        var context = _context == null ? "this" : _context.Expression;
+                        var callContext = _context;
+                        _context = null;
+
                         var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
                         var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
                         .FirstOrDefault();
 
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
-                        var context = _context == null ? "this" : _context.Expression;
 
                         if (function != null &&
                             function.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction) &&
@@ -149,7 +155,7 @@ namespace KismetKompiler.Decompiler
                         {
                             var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
                             var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
-                            if (!isFinalFunction && isClassMemberFunction && _context == null)
+                            if (!isFinalFunction && isClassMemberFunction && callContext == null)
                             {
                                 context = _class.ObjectName.ToString();
                             }
@@ -190,7 +196,6 @@ namespace KismetKompiler.Decompiler
                 case EX_InstanceVariable expr:
                     {
                         var variable = FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
-                        //var context = _context == null ? "this" : _context;
                         var context = "this";
                         return $"{context}.{variable}";
                     }
@@ -270,9 +275,12 @@ namespace KismetKompiler.Decompiler
                 case EX_CallMulticastDelegate expr:
                     {
                         // TODO: validate context
+                        var context = _context == null ? "this" : _context.Expression;
+                        var callContext = context;
+                        _context = null;
+
                         var stackNode = FormatIdentifier(GetFunctionName(expr.StackNode));
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
-                        var context = _context == null ? "this" : _context.Expression;
                         var @delegate = FormatExpression(expr.Delegate);
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -282,9 +290,12 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_FinalFunction expr:
                     {
+                        var context = _context == null ? "this" : _context.Expression;
+                        var callContext = context;
+                        _context = null;
+
                         var stackNode = GetFunctionName(expr.StackNode);
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
-                        var context = _context == null ? "this" : _context.Expression;
 
                         if (true)
                         {
@@ -305,8 +316,11 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_VirtualFunction expr:
                     {
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
                         var context = _context == null ? "this" : _context.Expression;
+                        var callContext = context;
+                        _context = null;
+
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
                         var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -584,7 +598,7 @@ namespace KismetKompiler.Decompiler
                         return $"EX_ArrayGetByRef({FormatExpression(expr.ArrayVariable)}, {FormatExpression(expr.ArrayIndex)})";
                     }
                 default:
-                    throw new NotImplementedException(kismetExpression.Inst);
+                    throw new NotImplementedException($"Kismet instruction {kismetExpression.Inst} not implemented");
             }
         }
     }

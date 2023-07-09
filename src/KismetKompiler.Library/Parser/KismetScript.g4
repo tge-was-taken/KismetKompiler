@@ -15,7 +15,7 @@ statement
 	: nullStatement
 	| compoundStatement
 	| declarationStatement
-	| expression ';'
+	| expression Semicolon
 	| ifStatement
 	| forStatement
 	| whileStatement
@@ -27,7 +27,7 @@ statement
 	;
 
 nullStatement
-	: ';'
+	: Semicolon
 	;
 
 compoundStatement
@@ -47,21 +47,21 @@ declarationStatement
 
 importStatement
 	: From StringLiteral Import '{' declarationStatement* '}'
-	| Import typeIdentifier StringLiteral ';'
+	| Import typeIdentifier StringLiteral Semicolon
 	;
 
 classDeclarationStatement
 	: attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
-	| attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? ';'
+	| attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? Semicolon
 	;
 
 procedureDeclarationStatement
 	: attributeList? modifier* typeIdentifier Identifier parameterList compoundStatement
-	| attributeList? modifier* typeIdentifier Identifier parameterList ';'
+	| attributeList? modifier* typeIdentifier Identifier parameterList Semicolon
 	;
 
 variableDeclarationStatement
-	: attributeList? modifier* typeIdentifier Identifier ('=' expression)? ';'
+	: attributeList? modifier* typeIdentifier Identifier ('=' expression)? Semicolon
 	;
 
 arraySignifier
@@ -69,7 +69,7 @@ arraySignifier
 	;
 
 enumTypeDeclarationStatement
-	: Enum Identifier enumValueList ';'?
+	: Enum Identifier enumValueList Semicolon?
 	;
 
 enumValueDeclaration
@@ -128,14 +128,14 @@ argumentList
 
 argument
 	: expression
-	| Out Identifier
+	| Out typeIdentifier? Identifier
 	;
 
 //
 // Expressions
 //
 expression
-	: ';'																	# nullExpression
+	: Semicolon																# nullExpression
 	| '(' expression ')'													# compoundExpression
 	| '{' (expression)? (',' expression)* (',')? '}'						# braceInitializerListExpression
 	| '[' (expression)? (',' expression)* (',')? ']'						# bracketInitializerListExpression
@@ -147,7 +147,8 @@ expression
 	| Op=( '!' | '-' | '--' | '++' ) expression								# unaryPrefixExpression			// precedence 3
 	| expression Op=( '*' | '/' | '%' ) expression							# multiplicationExpression		// precedence 5
 	| expression Op=( '+' | '-' ) expression								# additionExpression			// precedence 6
-	| expression Op=( '<<' | '>>' ) expression								# bitwiseShiftExpression		// precedence 7
+// TODO figure out why bitwise shift >> conflicts with constructed generic type A<B<C>>
+//	| expression Op=( '<<' | '>>' ) expression								# bitwiseShiftExpression		// precedence 7
 	| expression Op=( '<' | '>' | '<=' | '>=' ) expression					# relationalExpression			// precedence 9
 	| expression Op=( '==' | '!=' ) expression								# equalityExpression			// precedence 10	
 	| expression '&' expression												# bitwiseAndExpression			// precedence 11
@@ -182,7 +183,7 @@ ifStatement
 
 // not perfect
 forStatement
-	: For '(' statement expression ';' expression ')' statement
+	: For '(' statement expression Semicolon expression ')' statement
 	;
 
 whileStatement
@@ -190,21 +191,21 @@ whileStatement
 	;
 
 breakStatement
-	: Break ';'
+	: Break Semicolon
 	;
 
 continueStatement
-	: Continue ';'
+	: Continue Semicolon
 	;
 
 returnStatement
-	: Return expression? ';'
+	: Return expression? Semicolon
 	;
 
 gotoStatement
-	: Goto Identifier ';'
-	| Goto Case expression ';'
-	| Goto Case Default ';'
+	: Goto Identifier Semicolon
+	| Goto Case expression Semicolon
+	| Goto Case Default Semicolon
 	;
 
 switchStatement
@@ -271,6 +272,7 @@ Case:		'case';
 Default:	'default';
 
 Elipsis:	'...';
+Semicolon:	';';
 
 
 // Literals

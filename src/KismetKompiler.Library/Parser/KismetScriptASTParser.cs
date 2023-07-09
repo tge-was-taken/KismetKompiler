@@ -112,7 +112,7 @@ public class KismetScriptASTParser
     //
     // Parsing
     //
-    private bool TryParseCompilationUnit(KismetScriptParser.CompilationUnitContext context, out CompilationUnit compilationUnit)
+    public bool TryParseCompilationUnit(KismetScriptParser.CompilationUnitContext context, out CompilationUnit compilationUnit)
     {
         LogInfo("Parsing compilation unit");
         LogContextInfo(context);
@@ -895,14 +895,14 @@ public class KismetScriptASTParser
 
             expression = binaryExpression;
         }
-        else if (TryCast<KismetScriptParser.BitwiseShiftExpressionContext>(context, out var bitwistShiftExpressionContext))
-        {
-            BinaryExpression binaryExpression = null;
-            if (!TryFunc(additionExpressionContext, "Failed to parse bitwise shift expression", () => TryParseBitwiseShiftExpression(bitwistShiftExpressionContext, out binaryExpression)))
-                return false;
+        //else if (TryCast<KismetScriptParser.BitwiseShiftExpressionContext>(context, out var bitwistShiftExpressionContext))
+        //{
+        //    BinaryExpression binaryExpression = null;
+        //    if (!TryFunc(additionExpressionContext, "Failed to parse bitwise shift expression", () => TryParseBitwiseShiftExpression(bitwistShiftExpressionContext, out binaryExpression)))
+        //        return false;
 
-            expression = binaryExpression;
-        }
+        //    expression = binaryExpression;
+        //}
         else if (TryCast<KismetScriptParser.RelationalExpressionContext>(context, out var relationalExpressionContext))
         {
             BinaryExpression binaryExpression = null;
@@ -1245,45 +1245,45 @@ public class KismetScriptASTParser
         return true;
     }
 
-    private bool TryParseBitwiseShiftExpression(KismetScriptParser.BitwiseShiftExpressionContext context, out BinaryExpression binaryExpression)
-    {
-        LogContextInfo(context);
+    //private bool TryParseBitwiseShiftExpression(KismetScriptParser.BitwiseShiftExpressionContext context, out BinaryExpression binaryExpression)
+    //{
+    //    LogContextInfo(context);
 
-        if (context.Op.Text == "<<")
-        {
-            binaryExpression = CreateAstNode<BitwiseShiftLeftOperator>(context);
-        }
-        else if (context.Op.Text == ">>")
-        {
-            binaryExpression = CreateAstNode<BitwiseShiftRightOperator>(context);
-        }
-        else
-        {
-            binaryExpression = null;
-            LogError(context, $"Invalid op for bitwise shift expression: ${context.Op}");
-            return false;
-        }
+    //    if (context.Op.Text == "<<")
+    //    {
+    //        binaryExpression = CreateAstNode<BitwiseShiftLeftOperator>(context);
+    //    }
+    //    else if (context.Op.Text == ">>")
+    //    {
+    //        binaryExpression = CreateAstNode<BitwiseShiftRightOperator>(context);
+    //    }
+    //    else
+    //    {
+    //        binaryExpression = null;
+    //        LogError(context, $"Invalid op for bitwise shift expression: ${context.Op}");
+    //        return false;
+    //    }
 
-        // Left
-        {
-            if (!TryParseExpression(context.expression(0), out var leftExpression))
-                return false;
+    //    // Left
+    //    {
+    //        if (!TryParseExpression(context.expression(0), out var leftExpression))
+    //            return false;
 
-            binaryExpression.Left = leftExpression;
-        }
+    //        binaryExpression.Left = leftExpression;
+    //    }
 
-        // Right
-        {
-            if (!TryParseExpression(context.expression(1), out var rightExpression))
-                return false;
+    //    // Right
+    //    {
+    //        if (!TryParseExpression(context.expression(1), out var rightExpression))
+    //            return false;
 
-            binaryExpression.Right = rightExpression;
-        }
+    //        binaryExpression.Right = rightExpression;
+    //    }
 
-        LogTrace($"Parsed bitwise shift expression: {binaryExpression}");
+    //    LogTrace($"Parsed bitwise shift expression: {binaryExpression}");
 
-        return true;
-    }
+    //    return true;
+    //}
 
     private bool TryParseRelationalExpression(KismetScriptParser.RelationalExpressionContext context, out BinaryExpression binaryExpression)
     {
@@ -1926,25 +1926,42 @@ public class KismetScriptASTParser
     {
         LogContextInfo(context);
 
-        argument = CreateAstNode<Argument>(context);
-
-        if (context.expression() != null)
+        if (context.Out() != null)
         {
+            if (context.typeIdentifier() != null)
+            {
+                OutDeclarationArgument outArgument = CreateAstNode<OutDeclarationArgument>(context);
+                argument = outArgument;
+
+                Identifier identifier = null;
+                if (!TryFunc(context, "Failed to parse expression", () => TryParseIdentifier(context.Identifier(), out identifier)))
+                    return false;
+                outArgument.Identifier = identifier;
+
+                if (!TryParseTypeIdentifier(context.typeIdentifier(), out var typeIdentifier))
+                    return false;
+                outArgument.Type = typeIdentifier;
+            }
+            else
+            {
+                OutArgument outArgument = CreateAstNode<OutArgument>(context);
+                argument = outArgument;
+
+                Identifier identifier = null;
+                if (!TryFunc(context, "Failed to parse expression", () => TryParseIdentifier(context.Identifier(), out identifier)))
+                    return false;
+                outArgument.Identifier = identifier;
+            }
+        }
+        else
+        {
+            argument = CreateAstNode<Argument>(context);
+
             Expression expression = null;
             if (!TryFunc(context, "Failed to parse expression", () => TryParseExpression(context.expression(), out expression)))
                 return false;
 
             argument.Expression = expression;
-        }
-        else
-        {
-            Identifier identifier = null;
-            if (!TryFunc(context, "Failed to parse expression", () => TryParseIdentifier(context.Identifier(), out identifier)))
-                return false;
-
-            argument.Expression = identifier;
-            if (context.Out() != null)
-                argument.Modifier = ArgumentModifier.Out;
         }
 
         return true;

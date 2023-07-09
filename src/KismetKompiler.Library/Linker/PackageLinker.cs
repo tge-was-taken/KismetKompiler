@@ -354,7 +354,7 @@ public class UAssetLinker : PackageLinker
                 };
                 break;
             default:
-                throw new NotImplementedException();
+                throw new NotImplementedException($"Creating new property of type {type} is not implemented");
         }
 
         if (symbol.IsParameter)
@@ -366,6 +366,7 @@ public class UAssetLinker : PackageLinker
             }
             if (symbol.IsReturnParameter)
             {
+                property.PropertyFlags |= EPropertyFlags.CPF_OutParm;
                 property.PropertyFlags |= EPropertyFlags.CPF_ReturnParm;
             }
         }

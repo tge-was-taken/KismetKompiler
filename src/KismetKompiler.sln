@@ -9,7 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UAssetAPI", "..\external\UA
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "external", "external", "{AE0A8EF9-FF8E-4ACF-B611-B6E6D317E188}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KismetKompiler.Library", "KismetKompiler.Library\KismetKompiler.Library.csproj", "{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KismetKompiler.Library", "KismetKompiler.Library\KismetKompiler.Library.csproj", "{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KismetKompiler.Test", "KismetKompiler.Test\KismetKompiler.Test.csproj", "{74370A51-8581-40FB-B360-7998518FD0BC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,6 +38,12 @@ Global
 		{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

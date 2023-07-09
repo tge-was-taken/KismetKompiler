@@ -1,12 +1,12 @@
 using KismetKompiler.Library.Syntax.Statements;
+using KismetKompiler.Library.Syntax.Statements.Expressions;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 
 namespace KismetKompiler.Library.Syntax;
 
 public class Argument : SyntaxNode
 {
-    public ArgumentModifier Modifier { get; set; }
-
-    public Expression Expression { get; set; }
+    public virtual Expression Expression { get; set; }
 
     public Argument()
     {
@@ -14,18 +14,28 @@ public class Argument : SyntaxNode
 
     public Argument(Expression expression)
     {
-        Modifier = ArgumentModifier.None;
-        Expression = expression;
-    }
-
-    public Argument(ArgumentModifier modifier, Expression expression)
-    {
-        Modifier = modifier;
         Expression = expression;
     }
 
     public override string ToString()
     {
-        return $"{Modifier} {Expression}";
+        return $"{Expression}";
     }
+}
+
+public class OutArgument : Argument
+{
+    public Identifier Identifier { get; set; }
+
+    public override Expression Expression
+        => Identifier;
+
+    public OutArgument()
+    {
+    }
+}
+
+public class OutDeclarationArgument : OutArgument
+{
+    public TypeIdentifier Type { get; set; }
 }

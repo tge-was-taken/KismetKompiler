@@ -14,6 +14,7 @@ using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Compiler.Intermediate;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
+using System.Xml.Linq;
 
 namespace KismetKompiler.Library.Compiler;
 
@@ -29,9 +30,11 @@ public partial class KismetScriptCompiler
     private readonly Stack<MemberContext> _contextStack;
     private readonly Stack<Scope> _scopeStack;
     private readonly Scope _rootScope;
+    private Scope _blockScope;
 
     private Scope RootScope => _rootScope;
-    private Scope Scope => _scopeStack.Peek()!;
+    private Scope BlockScope => _blockScope;
+    private Scope CurrentScope => _scopeStack.Peek()!;
     private MemberContext? Context => _contextStack.Peek();
     private KismetPropertyPointer? RValue => _rvalueStack.Peek();
 
@@ -70,7 +73,7 @@ public partial class KismetScriptCompiler
     private Symbol? GetSymbol(string name)
     {
         var contextSymbol = Context?.GetSymbol(name);
-        var scopeSymbol = Scope.GetSymbol(name);
+        var scopeSymbol = CurrentScope.GetSymbol(name);
         if (IsDefaultClassContext())
         {
             // Implicit this context has less priority
@@ -85,7 +88,7 @@ public partial class KismetScriptCompiler
     private T? GetSymbol<T>(string name) where T : Symbol
     {
         var contextSymbol = Context?.GetSymbol<T>(name);
-        var scopeSymbol = Scope.GetSymbol<T>(name);
+        var scopeSymbol = CurrentScope.GetSymbol<T>(name);
         if (IsDefaultClassContext())
         {
             // Implicit this context has less priority
@@ -103,7 +106,7 @@ public partial class KismetScriptCompiler
         if (symbol == null)
             symbol = _classContext?.Symbol.GetSymbol<T>(declaration);
         if (symbol == null)
-            symbol = Scope.GetSymbol<T>(declaration);
+            symbol = CurrentScope.GetSymbol<T>(declaration);
 
         return symbol ?? throw new UnknownSymbolError(declaration.Identifier);
     }
@@ -121,7 +124,7 @@ public partial class KismetScriptCompiler
         => GetSymbol<T>(name) ?? throw new UnknownSymbolError(name);
 
     private void DeclareSymbol(Symbol symbol)
-        => Scope.DeclareSymbol(symbol);
+        => CurrentScope.DeclareSymbol(symbol);
 
 
     public CompiledScriptContext CompileCompilationUnit(CompilationUnit compilationUnit)
@@ -386,7 +389,7 @@ public partial class KismetScriptCompiler
             }
         }
 
-        foreach (var item in Scope)
+        foreach (var item in CurrentScope)
         {
             ResolveSymbolReferences(item);
         }
@@ -544,7 +547,7 @@ public partial class KismetScriptCompiler
             PushScope(_functionContext.Symbol);
             ForwardDeclareProcedureSymbols();
 
-            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => x.Attributes.Any(y => y.Identifier.Text == "Return"));
+            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => x.Attributes.Any(y => y.Identifier.Text == "Return" || y.Identifier.Text == "ReturnParm"));
             if (returnVar != null)
                 _functionContext.ReturnVariable = GetRequiredSymbol<VariableSymbol>(returnVar.Identifier.Text);
             else if (_functionContext.Declaration.ReturnType.ValueKind != ValueKind.Void)
@@ -606,12 +609,14 @@ public partial class KismetScriptCompiler
     private void CompileCompoundStatement(CompoundStatement compoundStatement)
     {
         PushScope(null);
+        _blockScope = CurrentScope;
 
         foreach (var statement in compoundStatement)
         {
             CompileStatement(statement);
         }
 
+        _blockScope = null;
         PopScope();
     }
 
@@ -665,18 +670,18 @@ public partial class KismetScriptCompiler
 
     private void CompileContinueStatement(ContinueStatement continueStatement)
     {
-        if (Scope.ContinueLabel == null)
+        if (CurrentScope.ContinueLabel == null)
             throw new CompilationError(continueStatement, "continue is not valid in this context");
 
-        EmitPrimaryExpression(continueStatement, new EX_Jump(), new[] { Scope.ContinueLabel });
+        EmitPrimaryExpression(continueStatement, new EX_Jump(), new[] { CurrentScope.ContinueLabel });
     }
 
     private void CompileBreakStatement(BreakStatement breakStatement)
     {
-        if (Scope.BreakLabel == null)
+        if (CurrentScope.BreakLabel == null)
             throw new CompilationError(breakStatement, "break is not valid in this context");
 
-        EmitPrimaryExpression(breakStatement, new EX_Jump(), new[] { Scope.BreakLabel });
+        EmitPrimaryExpression(breakStatement, new EX_Jump(), new[] { CurrentScope.BreakLabel });
     }
 
     private void CompileSwitchStatement(SwitchStatement switchStatement)
@@ -692,15 +697,15 @@ public partial class KismetScriptCompiler
             }
 
             // Set up switch labels in the context for gotos
-            Scope.SwitchLabels = switchStatement.Labels
+            CurrentScope.SwitchLabels = switchStatement.Labels
                                                 .Where(x => x is ConditionSwitchLabel)
                                                 .Select(x => ((ConditionSwitchLabel)x).Condition)
                                                 .ToDictionary(x => x, y => CreateCompilerLabel("SwitchConditionCaseBody"));
 
-            var conditionCaseBodyLabels = Scope.SwitchLabels.Values.ToList();
+            var conditionCaseBodyLabels = CurrentScope.SwitchLabels.Values.ToList();
 
             var defaultCaseBodyLabel = defaultLabel != null ? CreateCompilerLabel("SwitchDefaultCaseBody") : null;
-            Scope.SwitchLabels.Add(new NullExpression(), defaultCaseBodyLabel);
+            CurrentScope.SwitchLabels.Add(new NullExpression(), defaultCaseBodyLabel);
 
             var switchEndLabel = CreateCompilerLabel("SwitchStatementEndLabel");
             for (var i = 0; i < switchStatement.Labels.Count; i++)
@@ -722,11 +727,11 @@ public partial class KismetScriptCompiler
                         )
                     }, new[] { nextSwitchCaseLabel });
 
-                    var labelBodyLabel = Scope.SwitchLabels[conditionLabel.Condition];
+                    var labelBodyLabel = CurrentScope.SwitchLabels[conditionLabel.Condition];
                     ResolveLabel(labelBodyLabel);
 
                     // Emit body
-                    Scope.BreakLabel = switchEndLabel;
+                    CurrentScope.BreakLabel = switchEndLabel;
                     foreach (var statement in label.Body)
                         CompileStatement(statement);
 
@@ -739,7 +744,7 @@ public partial class KismetScriptCompiler
             if (defaultLabel != null)
             {
                 // Emit body of default case first
-                Scope.BreakLabel = switchEndLabel;
+                CurrentScope.BreakLabel = switchEndLabel;
 
                 // Resolve label that jumps to the default case body
                 ResolveLabel(defaultCaseBodyLabel);
@@ -777,28 +782,23 @@ public partial class KismetScriptCompiler
 
     private void CompileIfStatement(Statement statement, IfStatement ifStatement)
     {
-        if (ifStatement.Condition is LogicalNotOperator notOperator)
+        // Match 'if (!(K2Node_SwitchInteger_CmpSuccess)) goto _674;'
+        if (ifStatement.Condition is LogicalNotOperator notOperator &&
+            ifStatement.Body?.FirstOrDefault() is GotoStatement ifStatementBodyGotoStatement)
         {
-            if (ifStatement.Body?.FirstOrDefault() is GotoStatement ifStatementBodyGotoStatement)
+            EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
             {
-                // Match 'if (!(K2Node_SwitchInteger_CmpSuccess)) goto _674;'
-                EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
-                {
-                    BooleanExpression = CompileSubExpression(notOperator.Operand)
-                }, new[] { GetLabel(ifStatementBodyGotoStatement.Label) });
-            }
-            else if (ifStatement.Body?.FirstOrDefault() is ReturnStatement ifStatementReturnStatement)
+                BooleanExpression = CompileSubExpression(notOperator.Operand)
+            }, new[] { GetLabel(ifStatementBodyGotoStatement.Label) });
+        }
+        // Match 'if (!CallFunc_BI_TempFlagCheck_retValue) return;'
+        else if (ifStatement.Condition is LogicalNotOperator notOperator2 &&
+            ifStatement.Body?.FirstOrDefault() is ReturnStatement)
+        {
+            EmitPrimaryExpression(ifStatement, new EX_JumpIfNot()
             {
-                // Match 'if (!CallFunc_BI_TempFlagCheck_retValue) return;'
-                EmitPrimaryExpression(notOperator, new EX_JumpIfNot()
-                {
-                    BooleanExpression = CompileSubExpression(notOperator.Operand)
-                }, new[] { _functionContext.ReturnLabel });
-            }
-            else
-            {
-                throw new UnexpectedSyntaxError(statement);
-            }
+                BooleanExpression = CompileSubExpression(notOperator2.Operand)
+            }, new[] { _functionContext.ReturnLabel });
         }
         else
         {
@@ -847,8 +847,8 @@ public partial class KismetScriptCompiler
             // Body
             if (whileStatement.Body != null)
             {
-                Scope.BreakLabel = endLabel;
-                Scope.ContinueLabel = conditionLabel;
+                CurrentScope.BreakLabel = endLabel;
+                CurrentScope.ContinueLabel = conditionLabel;
                 CompileCompoundStatement(whileStatement.Body);
             }
 
@@ -885,8 +885,8 @@ public partial class KismetScriptCompiler
             // Body
             if (forStatement.Body != null)
             {
-                Scope.BreakLabel = endLabel;
-                Scope.ContinueLabel = conditionLabel;
+                CurrentScope.BreakLabel = endLabel;
+                CurrentScope.ContinueLabel = conditionLabel;
                 CompileCompoundStatement(forStatement.Body);
             }
 
@@ -905,6 +905,21 @@ public partial class KismetScriptCompiler
 
     private void CompileReturnStatement(ReturnStatement returnStatement)
     {
+        if (returnStatement.Value != null)
+        {
+            EmitPrimaryExpression(returnStatement,
+                CompileAssignmentOperator(
+                    new AssignmentOperator()
+                    {
+                        Left = new Identifier(_functionContext.ReturnVariable.Name),
+                        Right = returnStatement.Value,
+                        ExpressionValueKind = returnStatement.Value.ExpressionValueKind,
+                        SourceInfo = returnStatement.SourceInfo
+                    }
+                 )
+            );
+        }
+
         var isLastStatement = _functionContext.Declaration.Body.Last() == returnStatement;
         if (isLastStatement)
         {
@@ -957,20 +972,13 @@ public partial class KismetScriptCompiler
             if (variableDeclaration.Initializer != null)
             {
                 EmitPrimaryExpression(variableDeclaration, 
-                    CompileAssignmentOperator(new Syntax.Statements.Expressions.Binary.AssignmentOperator()
+                    CompileAssignmentOperator(new AssignmentOperator()
                     {
                         Left = new Identifier(variableSymbol.Name),
                         Right = variableDeclaration.Initializer,
                         ExpressionValueKind = variableDeclaration.Type.ValueKind,
                         SourceInfo = variableDeclaration.SourceInfo,
                     }));
-
-                //EmitPrimaryExpression(variableDeclaration, new EX_Let()
-                //{
-                //    Value = GetPropertyPointer(variableDeclaration.Identifier),
-                //    Variable = CompileSubExpression(variableDeclaration.Identifier),
-                //    Expression = CompileSubExpression(variableDeclaration.Initializer)
-                //});
             }
 
             _functionContext.CompiledFunctionContext.Variables.Add(new(variableSymbol));
@@ -1077,8 +1085,35 @@ public partial class KismetScriptCompiler
         }
     }
 
+    private void ForwardDeclareCallOutParameters(CallOperator callOperator)
+    {
+        foreach (var outArgument in callOperator.Arguments
+            .Where(x => x is OutDeclarationArgument)
+            .Cast<OutDeclarationArgument>())
+        {
+            // TODO do this someplace better
+            var decl = new VariableDeclaration()
+            {
+                Identifier = outArgument.Identifier,
+                SourceInfo = outArgument.SourceInfo,
+                Type = outArgument.Type,
+            };
+            var symbol = new VariableSymbol(decl)
+            {
+                DeclaringSymbol = _functionContext.Symbol,
+                IsExternal = false,
+                Name = outArgument.Identifier.Text,
+                Argument = outArgument
+            };
+            _functionContext.CompiledFunctionContext.Variables.Add(new(symbol));
+            _blockScope.DeclareSymbol(symbol);
+        }
+    }
+
     private CompiledExpressionContext CompileCallOperator(CallOperator callOperator)
     {
+        ForwardDeclareCallOutParameters(callOperator);
+
         // Reset context so it doesn't keep propagating until another member access pops up
         // TODO: solve this properly by isolating the context to the member part of the expression only (without its sub expressions)
         var callContext = Context;
@@ -1513,7 +1548,7 @@ public partial class KismetScriptCompiler
             if (!_strictMode)
             {
                 var memberIdentifier = GetIdentifier(memberExpression.Member);
-                contextSymbol = Scope
+                contextSymbol = CurrentScope
                      .Where(x => x is ClassSymbol)
                      .SelectMany(x => x.Members)
                      .Where(x => x.Name == memberIdentifier.Text)
