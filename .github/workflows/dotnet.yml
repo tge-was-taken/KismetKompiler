@@ -8,8 +8,8 @@ on:
 
 env:
   PROJECT_PATH: src/KismetKompiler/KismetKompiler.csproj
-  ZIP_PATH: src/KismetKompiler/bin/Release/net7.0-windows/win-x64/publish/KismetKompiler-Portable.zip
-  EXE_PATH: src/KismetKompiler/bin/Release/net7.0-windows/win-x64/publish/KismetKompiler.exe
+  BIN_PATH: src/KismetKompiler/bin/Release/net7.0/win-x64/publish
+  ZIP_PATH: src/KismetKompiler/bin/Release/net7.0/win-x64/publish/KismetKompiler-Portable.zip
   
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
       - name: Create Zip File
         uses: papeloto/action-zip@v1
         with:
-          files: ${{ env.EXE_PATH }}
+          files: ${{ env.BIN_PATH }}
           dest: ${{ env.ZIP_PATH }}
           
       - name: Initialize Release
