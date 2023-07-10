@@ -46,7 +46,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          prerelease: true
       
       - name: Add release asset    
         uses: csexton/release-asset-action@v2
