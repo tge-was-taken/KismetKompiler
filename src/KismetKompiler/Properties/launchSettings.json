@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      //"commandLineArgs": "compile --input \"E:\\Projects\\smtv_ai\\pakchunk0-Switch\\Project\\Content\\Blueprints\\DLC\\BPL_DlcCheck_TestEdit.kms\" --version 4.23 --overwrite --asset \"E:\\Projects\\smtv_ai\\pakchunk0-Switch\\Project\\Content\\Blueprints\\DLC\\BPL_DlcCheck.uasset\""
+      "commandLineArgs": "decompile --input \"D:\\Users\\smart\\Downloads\\dq11s_tools_pack_1\\quickbms\\JackGame\\Content\\Blueprints\\Action\\ActionExec\\BP_ActionExec_KingSlime.uasset\" --version 4.18 -f --no-strict"
     }
   }
 }

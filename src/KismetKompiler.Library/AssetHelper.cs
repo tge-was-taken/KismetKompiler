@@ -240,7 +240,16 @@ public static class AssetHelper
         return asset.Exports
             .Where(x => x is FunctionExport)
             .Cast<FunctionExport>()
-            .Where(x => x.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction))
+            .Where(x => x.IsUbergraphFunction())
             .SingleOrDefault();
+    }
+}
+
+public static class FunctionExportExtensions
+{
+    public static bool IsUbergraphFunction(this FunctionExport functionExport)
+    {
+        return functionExport.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction) ||
+               functionExport.ObjectName.ToString().StartsWith("ExecuteUbergraph_"); // DQXIS doesn't use the flag
     }
 }

@@ -356,7 +356,7 @@ public partial class KismetDecompiler
         var functionParameterText =
             string.Join(", ", functionParams.Select(GetDecompiledPropertyText));
 
-        var isUbergraphFunction = (function.FunctionFlags & EFunctionFlags.FUNC_UbergraphFunction) != 0;
+        var isUbergraphFunction = function.IsUbergraphFunction();
 
         var functionAttributeText = string.Join(", ", functionAttributes);
 
@@ -493,7 +493,7 @@ public partial class KismetDecompiler
 
     private void WriteFunctionVerbose(FunctionExport function, Node root)
     {
-        var isUbergraphFunction = (function.FunctionFlags & EFunctionFlags.FUNC_UbergraphFunction) != 0;
+        var isUbergraphFunction = function.IsUbergraphFunction();
         _writer.WriteLine($"void {function.ObjectName}() {{");
         var result = string.Empty;
         var nextBlockIndex = 1;
@@ -646,6 +646,11 @@ public partial class KismetDecompiler
                     // TODO
                     return $"Array";
                 }
+            case "ObjectProperty":
+                {
+                    var propData = (UObjectProperty)prop.Property;
+                    return $"Object<{_asset.GetName(propData.PropertyClass)}>";
+                }
             default:
                 if (classType != "Property" &&
                     classType.EndsWith("Property"))
@@ -748,7 +753,7 @@ public partial class KismetDecompiler
             .SelectMany(x => x.ScriptBytecode)
             .Where(x => x.Token == EExprToken.EX_LocalFinalFunction)
             .Cast<EX_LocalFinalFunction>()
-            .Where(x => x.StackNode.IsExport() && _asset.GetFunctionExport(x.StackNode).FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction))
+            .Where(x => x.StackNode.IsExport() && _asset.GetFunctionExport(x.StackNode).IsUbergraphFunction())
             .Select(x => x.Parameters[0] as EX_IntConst)
             .Select(x => x.Value);
         return entryPoints.Contains(codeOffset);

@@ -144,7 +144,7 @@ namespace KismetKompiler.Decompiler
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
 
                         if (function != null &&
-                            function.FunctionFlags.HasFlag(EFunctionFlags.FUNC_UbergraphFunction) &&
+                            function.IsUbergraphFunction() &&
                             expr.Parameters.Length == 1 &&
                             expr.Parameters[0] is EX_IntConst firstParamInt)
                         {
@@ -196,7 +196,9 @@ namespace KismetKompiler.Decompiler
                 case EX_InstanceVariable expr:
                     {
                         var variable = FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
-                        var context = "this";
+                        var context = _context == null ? "this" : _context.Expression;
+                        var callContext = _context;
+                        _context = null;
                         return $"{context}.{variable}";
                     }
                 case EX_LocalOutVariable expr:

@@ -15,6 +15,7 @@ using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Compiler.Intermediate;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using System.Xml.Linq;
+using System.Reflection;
 
 namespace KismetKompiler.Library.Compiler;
 
@@ -24,7 +25,6 @@ public partial class KismetScriptCompiler
     private CompilationUnit _compilationUnit;
     private ClassContext _classContext;
     private FunctionContext _functionContext;
-    private bool _strictMode = true;
 
     private readonly Stack<KismetPropertyPointer?> _rvalueStack;
     private readonly Stack<MemberContext> _contextStack;
@@ -37,6 +37,8 @@ public partial class KismetScriptCompiler
     private Scope CurrentScope => _scopeStack.Peek()!;
     private MemberContext? Context => _contextStack.Peek();
     private KismetPropertyPointer? RValue => _rvalueStack.Peek();
+
+    public bool StrictMode { get; set; }
 
     public KismetScriptCompiler()
     {
@@ -553,9 +555,14 @@ public partial class KismetScriptCompiler
             else if (_functionContext.Declaration.ReturnType.ValueKind != ValueKind.Void)
             {
                 const string returnVariableName = "<>__ReturnValue";
-                var variableSymbol = new VariableSymbol(null)
+                var variableDeclaration = new VariableDeclaration()
                 {
-                    Parameter = new Parameter() { Identifier = new(returnVariableName), Type = _functionContext.Declaration.ReturnType },
+                    Identifier = new(returnVariableName),
+                    Type = _functionContext.Declaration.ReturnType,
+                };
+
+                var variableSymbol = new VariableSymbol(variableDeclaration)
+                {
                     IsExternal = false,
                     Name = returnVariableName,
                     DeclaringSymbol = _functionContext.Symbol,
@@ -585,7 +592,12 @@ public partial class KismetScriptCompiler
     {
         foreach (var param in _functionContext.Declaration.Parameters)
         {
-            var variableSymbol = new VariableSymbol(null)
+            var variableDeclaration = new VariableDeclaration()
+            {
+                Identifier = param.Identifier,
+                Type = param.Type
+            };
+            var variableSymbol = new VariableSymbol(variableDeclaration)
             {
                 Parameter = param,
                 IsExternal = false,
@@ -1169,7 +1181,9 @@ public partial class KismetScriptCompiler
                                 throw new NotImplementedException();
                             }
                         }
-                        else if (callContext.Type == ContextType.ObjectConst ||
+                        else if (
+                                callContext.Type == ContextType.Object ||
+                                callContext.Type == ContextType.ObjectConst ||
                                 callContext.Type == ContextType.Class)
                         {
                             if (procedureSymbol.IsVirtual)
@@ -1448,6 +1462,9 @@ public partial class KismetScriptCompiler
         {
             if (variableSymbol.Declaration.Type.IsConstructedType)
             {
+                var typeSymbol = GetSymbol<ClassSymbol>(variableSymbol.Declaration.Type.TypeParameter.Text);
+                if (typeSymbol != null)
+                    return typeSymbol;
                 var symbol = GetSymbol(variableSymbol.Declaration.Type.TypeParameter!);
                 if (symbol is VariableSymbol typeVariableSymbol)
                     return GetVariableTypeSymbol(typeVariableSymbol);
@@ -1455,6 +1472,9 @@ public partial class KismetScriptCompiler
             }
             else
             {
+                var typeSymbol = GetSymbol<ClassSymbol>(variableSymbol.Declaration.Type.Text);
+                if (typeSymbol != null)
+                    return typeSymbol;
                 var symbol = GetSymbol(variableSymbol.Declaration.Type);
                 if (symbol is VariableSymbol typeVariableSymbol)
                     return GetVariableTypeSymbol(typeVariableSymbol);
@@ -1501,6 +1521,7 @@ public partial class KismetScriptCompiler
                         "Struct" => ContextType.Struct,
                         "Interface" => ContextType.Interface,
                         "Class" => ContextType.Class,
+                        "Object" => ContextType.Object,
                         _ => throw new NotImplementedException()
                     };
                 }
@@ -1541,13 +1562,17 @@ public partial class KismetScriptCompiler
             contextType = ContextType.Enum;
         }
 
-        if (contextSymbol == null)
+        if (!StrictMode)
         {
-            // TODO fix this in the decompiler
-            // Fuzzy match
-            if (!_strictMode)
+            (var memberIdentifier, bool isVirtual) = GetMemberIdentifier(memberExpression.Member);
+
+            if (memberIdentifier != null &&
+                !isVirtual &&
+                (contextSymbol == null ||
+                !contextSymbol.SymbolExists(memberIdentifier.Text)))
             {
-                var memberIdentifier = GetIdentifier(memberExpression.Member);
+                // TODO fix this in the decompiler
+                // Fuzzy match
                 contextSymbol = CurrentScope
                      .Where(x => x is ClassSymbol)
                      .SelectMany(x => x.Members)
@@ -1576,13 +1601,53 @@ public partial class KismetScriptCompiler
         return context;
     }
 
-    private Identifier GetIdentifier(Expression expression)
+    private (Identifier Identifier, bool IsLookup) GetMemberIdentifier(Expression expression, bool? isVirtual = null)
     {
-        if (expression is Identifier identifier)
-            return identifier;
-        if (expression is CallOperator callOperator)
-            return callOperator.Identifier;
-        throw new NotImplementedException();
+        if (expression is StringLiteral stringLiteral)
+        {
+            return (new(stringLiteral.Value), isVirtual ?? false);
+        }
+        else if (expression is Identifier identifier)
+        {
+            return (identifier, isVirtual ?? false);
+        }
+        else if (expression is CallOperator callOperator)
+        {
+            if (IsIntrinsicFunction(callOperator.Identifier.Text))
+            {
+                var token = GetInstrinsicFunctionToken(callOperator.Identifier.Text);
+                if (token == EExprToken.EX_LocalVariable ||
+                    token == EExprToken.EX_InstanceVariable ||
+                    token == EExprToken.EX_LocalOutVariable ||
+                    token ==  EExprToken.EX_CallMath ||
+                    token == EExprToken.EX_FinalFunction ||
+                    token == EExprToken.EX_LocalFinalFunction ||
+                    token == EExprToken.EX_StructMemberContext)
+                {
+                    return GetMemberIdentifier(callOperator.Arguments[0].Expression, isVirtual ?? false);
+                }
+                if (token == EExprToken.EX_VirtualFunction ||
+                    token == EExprToken.EX_LocalVirtualFunction)
+                {
+                    return GetMemberIdentifier(callOperator.Arguments[0].Expression, true);
+                }
+            }
+        }
+        else if (expression is MemberExpression memberAccessExpression)
+        {
+            var context = GetContextForMemberExpression(memberAccessExpression);
+            PushContext(context);
+            try
+            {
+                return GetMemberIdentifier(memberAccessExpression.Member);
+            }
+            finally
+            {
+                PopContext();
+            }
+        }
+
+        return (null, false);
     }
 
     private CompiledExpressionContext CompileMemberExpression(MemberExpression memberExpression)

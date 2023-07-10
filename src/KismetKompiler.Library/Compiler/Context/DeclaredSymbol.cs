@@ -281,7 +281,8 @@ namespace KismetKompiler.Library.Compiler.Context
         public override SymbolCategory SymbolCategory => SymbolCategory.Procedure;
 
         public bool IsUbergraphFunction
-            => Declaration?.Attributes.Any(x => x.Identifier.Text == "UbergraphFunction") ?? false;
+            => (Declaration?.Attributes.Any(x => x.Identifier.Text == "UbergraphFunction") ?? false) ||
+               (Declaration?.Identifier?.Text.StartsWith("ExecuteUbergraph_") ?? false);
 
         public bool IsVirtual
             => Declaration?.IsVirtual ?? false;
@@ -360,6 +361,7 @@ namespace KismetKompiler.Library.Compiler.Context
         Procedure,
         Base,
         Enum,
+        Object,
     }
 
     public class MemberContext : SymbolTableBase

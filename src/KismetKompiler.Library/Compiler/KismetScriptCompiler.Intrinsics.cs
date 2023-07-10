@@ -9,6 +9,7 @@ using KismetKompiler.Library.Syntax.Statements;
 using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
 using KismetKompiler.Library.Compiler.Intermediate;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 
 namespace KismetKompiler.Library.Compiler;
 
@@ -61,12 +62,23 @@ public partial class KismetScriptCompiler
             case EExprToken.EX_Nothing:
                 return new CompiledExpressionContext(callOperator, offset, new EX_Nothing());
             case EExprToken.EX_Let:
-                return new CompiledExpressionContext(callOperator, offset, new EX_Let()
                 {
-                    Value = GetPropertyPointer(callOperator.Arguments[0]),
-                    Variable = CompileSubExpression(callOperator.Arguments[1]),
-                    Expression = CompileSubExpression(callOperator.Arguments[2])
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_Let()
+                        {
+                            Value = GetPropertyPointer(callOperator.Arguments[0]),
+                            Variable = CompileSubExpression(callOperator.Arguments[1]),
+                            Expression = CompileSubExpression(callOperator.Arguments[2])
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_ClassContext:
                 return new CompiledExpressionContext(callOperator, offset, new EX_ClassContext()
                 {
@@ -81,11 +93,22 @@ public partial class KismetScriptCompiler
                     TargetExpression = CompileSubExpression(callOperator.Arguments[1]),
                 });
             case EExprToken.EX_LetBool:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetBool()
                 {
-                    VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetBool()
+                        {
+                            VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_EndParmValue:
                 return new CompiledExpressionContext(callOperator, offset, new EX_EndParmValue());
             case EExprToken.EX_EndFunctionParms:
@@ -311,17 +334,39 @@ public partial class KismetScriptCompiler
                     StructExpression = CompileSubExpression(callOperator.Arguments[1]),
                 });
             case EExprToken.EX_LetMulticastDelegate:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetMulticastDelegate()
                 {
-                    VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetMulticastDelegate()
+                        {
+                            VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_LetDelegate:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetDelegate()
                 {
-                    VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetDelegate()
+                        {
+                            VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1]),
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_LocalVirtualFunction:
                 return new CompiledExpressionContext(callOperator, offset, new EX_LocalVirtualFunction()
                 {
@@ -409,17 +454,39 @@ public partial class KismetScriptCompiler
             case EExprToken.EX_Tracepoint:
                 return new CompiledExpressionContext(callOperator, offset, new EX_Tracepoint());
             case EExprToken.EX_LetObj:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetObj()
                 {
-                    VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetObj()
+                        {
+                            VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_LetWeakObjPtr:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetWeakObjPtr()
                 {
-                    VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetWeakObjPtr()
+                        {
+                            VariableExpression = CompileSubExpression(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_BindDelegate:
                 return new CompiledExpressionContext(callOperator, offset, new EX_BindDelegate()
                 {
@@ -441,11 +508,22 @@ public partial class KismetScriptCompiler
                     Delegate = CompileSubExpression(callOperator.Arguments.Last())
                 });
             case EExprToken.EX_LetValueOnPersistentFrame:
-                return new CompiledExpressionContext(callOperator, offset, new EX_LetValueOnPersistentFrame()
                 {
-                    DestinationProperty = GetPropertyPointer(callOperator.Arguments[0]),
-                    AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
-                });
+                    TryGetPropertyPointer(callOperator.Arguments[0].Expression, out var rvalue);
+                    PushRValue(rvalue);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_LetValueOnPersistentFrame()
+                        {
+                            DestinationProperty = GetPropertyPointer(callOperator.Arguments[0]),
+                            AssignmentExpression = CompileSubExpression(callOperator.Arguments[1])
+                        });
+                    }
+                    finally
+                    {
+                        PopRValue();
+                    }
+                }
             case EExprToken.EX_ArrayConst:
                 return new CompiledExpressionContext(callOperator, offset, new EX_ArrayConst()
                 {
@@ -467,9 +545,9 @@ public partial class KismetScriptCompiler
                 });
             case EExprToken.EX_SwitchValue:
                 var referencedLabels = new List<LabelSymbol>()
-        {
-            GetLabel(callOperator.Arguments[0])
-        };
+                {
+                    GetLabel(callOperator.Arguments[0])
+                };
 
                 return new CompiledExpressionContext(callOperator, offset, new EX_SwitchValue()
                 {

@@ -29,13 +29,13 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args
     .WithParsed<CompileOptions>(o =>
     {
         var version = ParseVersion(o.Version);
-        Compile(o.InAssetFilePath, o.ScriptFilePath, version, o.UsmapFilePath, o.OutAssetFilePath, o.Overwrite);
+        Compile(o.InAssetFilePath, o.ScriptFilePath, version, o.UsmapFilePath, o.OutAssetFilePath, o.Overwrite, o.NoStrict);
         Console.WriteLine($"Done.");
     })
     .WithParsed<DecompileOptions>(o =>
      {
          var version = ParseVersion(o.Version);
-         Decompile(o.InAssetFilePath, version, o.UsmapFilePath, o.OutScriptFilePath, o.Overwrite, o.NoVerification);
+         Decompile(o.InAssetFilePath, version, o.UsmapFilePath, o.OutScriptFilePath, o.Overwrite, o.NoVerification, o.NoStrict);
          Console.WriteLine($"Done.");
      });
 
@@ -74,7 +74,7 @@ static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath
     return asset;
 }
 
-static void Decompile(string path, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false)
+static void Decompile(string path, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false, bool noStrict = false)
 { 
 
     var asset = LoadAsset(path, ver, usmapPath);
@@ -102,7 +102,7 @@ static void Decompile(string path, EngineVersion ver, string? usmapPath = defaul
     if (!noVerification)
     {
         Console.WriteLine($"Verifying equality...");
-        var script = CompileScript(outPath);
+        var script = CompileScript(outPath, noStrict);
         var tempAsset = LoadAsset(path, ver, usmapPath);
         var newAsset = new UAssetLinker((UAsset)tempAsset)
             .LinkCompiledScript(script)
@@ -111,7 +111,7 @@ static void Decompile(string path, EngineVersion ver, string? usmapPath = defaul
     }
 }
 
-static void Compile(string? assetPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false)
+static void Compile(string? assetPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false)
 {
     var assetFilePath = assetPath;
     if (assetFilePath != null &&
@@ -135,7 +135,7 @@ static void Compile(string? assetPath, string scriptPath, EngineVersion ver, str
     }
 
     Console.WriteLine($"Compiling {scriptPath}");
-    var script = CompileScript(scriptPath);
+    var script = CompileScript(scriptPath, noStrict);
 
     UAsset newAsset;
     if (assetFilePath != null)
@@ -180,7 +180,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileScript(string inPath)
+static CompiledScriptContext CompileScript(string inPath, bool noStrict)
 {
     using var textStream = new StreamReader(inPath);
     var inputStream = new AntlrInputStream(textStream);
@@ -204,6 +204,7 @@ static CompiledScriptContext CompileScript(string inPath)
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler();
+        compiler.StrictMode = !noStrict;
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;
     }
@@ -250,21 +251,35 @@ static void VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()
         .OrderBy(x => oldAsset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
-        .Select(x => (x.ObjectName.ToString(), JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Newtonsoft.Json.Formatting.Indented)));
+        .Select(x => new { Function = x.ObjectName.ToString(), Instructions = KismetSerializer.SerializeScript(x.ScriptBytecode) });
 
     var newJsons = newAsset.Exports
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()
         .OrderBy(x => newAsset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
-        .Select(x => (x.ObjectName.ToString(), JsonConvert.SerializeObject(KismetSerializer.SerializeScript(x.ScriptBytecode), Newtonsoft.Json.Formatting.Indented)));
+        .Select(x => new { Function=x.ObjectName.ToString(), Instructions=KismetSerializer.SerializeScript(x.ScriptBytecode) });
 
-    var oldJsonText = string.Join("\n", oldJsons);
-    var newJsonText = string.Join("\n", newJsons);
+    var oldJsonText = JsonConvert.SerializeObject(oldJsons, Formatting.Indented);
+    var newJsonText = JsonConvert.SerializeObject(newJsons, Formatting.Indented);
 
     if (oldJsonText != newJsonText)
+    {
         Console.WriteLine("Verification failed");
+        var outDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        try
+        {
+            File.WriteAllText(Path.Combine(outDirectory, "old.json"), oldJsonText);
+            File.WriteAllText(Path.Combine(outDirectory, "new.json"), newJsonText);
+        }
+        catch (Exception)
+        {
+            Console.WriteLine($"Failed to write verification dumps to {outDirectory}");
+        }
+    }
     else
+    {
         Console.WriteLine("Verification succeeded");
+    }
 }
 
 class OptionsBase
@@ -289,6 +304,9 @@ class CompileOptions : OptionsBase
 
     [Option("asset", Required = false, HelpText = "Path to an input .uasset file.")]
     public string InAssetFilePath { get; set; }
+
+    [Option("no-strict", Required = false, HelpText = "Allow the compiler to be less strict when evaluating scoping rules as a workaround for unknown symbol errors.")]
+    public bool NoStrict { get; set; } = false;
 }
 
 [Verb("decompile", HelpText = "Decompile a blueprint asset")]
@@ -302,4 +320,7 @@ class DecompileOptions : OptionsBase
 
     [Option("no-verify", Required = false, HelpText = "Skip verifying equality of decompiled code")]
     public bool NoVerification { get; set; } = false;
+
+    [Option("no-strict", Required = false, HelpText = "Allow the compiler to be less strict when evaluating scoping rules as a workaround for unknown symbol errors.")]
+    public bool NoStrict { get; set; } = false;
 }
