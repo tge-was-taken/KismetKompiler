@@ -43,7 +43,6 @@ Compiles a script into a new or existing blueprint asset.
 - `-f, --overwrite`: (Optional) Overwrite existing files.
 - `--usmap`: (Optional) Path to a .usmap file.
 - `--help`: Display the help screen.
-- `--version`: Display version information.
 
 ### ``decompile`` Command
 
@@ -58,7 +57,6 @@ Decompiles a blueprint asset into a .kms file.
 - `-f, --overwrite`: (Optional) Overwrite existing files.
 - `--usmap`: (Optional) Path to a .usmap file.
 - `--help`: Display the help screen.
-- `--version`: Display version information.
 
 ## Known Limitations
 
@@ -67,6 +65,10 @@ While KismetKompiler provides significant functionality for decompiling and comp
 - Not all blueprint constructs are currently supported during decompilation, and will be expressed using so called intrinsic functions (prefixed with EX_...).
 - The editing functionality is limited and does not support certain operations, such as creating a class from scratch or modifying existing variable or function definitions.
 - Error messages may not be as descriptive as desired due to limited error detection capabilities.
+
+Moreover, as the code compiles down to blueprint expressions, some things you would expect to work in other programming languages don't work, or don't work yet due to insufficient knowledge about how the code is executed:
+- Reusing an interface object is not possible (eg. GetBPAICommand in SMTV needs to be called before every usage of the interface, otherwise the game will freeze)
+- Returning values from local script functions does not seem to be possible. Only out parameters can be used.
 
 ## Contributing
 
