@@ -8,46 +8,48 @@ on:
 
 env:
   PROJECT_PATH: src/KismetKompiler/KismetKompiler.csproj
-  ZIP_PATH: src/KismetKompiler/bin/Release/net7.0-windows/win-x64/publish/KismetKompiler-Portable.zip
-  EXE_PATH: src/KismetKompiler/bin/Release/net7.0-windows/win-x64/publish/KismetKompiler.exe
+  BIN_PATH: src/KismetKompiler/bin/Release/net7.0/win-x64/publish
+  ZIP_PATH: src/KismetKompiler/bin/Release/net7.0/win-x64/publish/KismetKompiler-Portable.zip
   
 
 jobs:
   deploy:
+    permissions: write-all
     runs-on: windows-latest
     steps:
-      - name: Initialize Actions
+      - name: Checkout
         uses: actions/checkout@v3
         with:
           submodules: true
 
-      - name: Initialize .Net
+      - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 7.0.x
       
-      - name: Restore Project
+      - name: Restore
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
-      - name: Publish Project
+      - name: Publish
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release --self-contained -r win-x64 -p:PublishSingleFile=true --no-restore
 
-      - name: Create Zip File
+      - name: Create zip
         uses: papeloto/action-zip@v1
         with:
-          files: ${{ env.EXE_PATH }}
+          files: ${{ env.BIN_PATH }}
           dest: ${{ env.ZIP_PATH }}
           
-      - name: Initialize Release
+      - name: Create release
         uses: actions/create-release@v1
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          prerelease: true
       
-      - name: Create Release    
+      - name: Add release asset    
         uses: csexton/release-asset-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
