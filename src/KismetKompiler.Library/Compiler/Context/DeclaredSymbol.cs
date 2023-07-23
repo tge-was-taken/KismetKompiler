@@ -66,7 +66,10 @@ namespace KismetKompiler.Library.Compiler.Context
             => GetSymbol(name, SymbolCategory.Any);
 
         public T? GetSymbol<T>(string name) where T : Symbol
-            => (T)GetSymbol(name, _typeToCategory[typeof(T)]);
+        {
+            if (typeof(T) == typeof(Symbol)) return (T?)GetSymbol(name, SymbolCategory.Any);
+            return (T?)GetSymbol(name, _typeToCategory[typeof(T)]);
+        }
 
         public Symbol? GetRequiredSymbol(string name)
             => GetSymbol(name, SymbolCategory.Any) ?? throw new UnknownSymbolError(name);
@@ -362,12 +365,14 @@ namespace KismetKompiler.Library.Compiler.Context
         Base,
         Enum,
         Object,
+        SubContext
     }
 
     public class MemberContext : SymbolTableBase
     {
         public required ContextType Type { get; init; }
         public required Symbol Symbol { get; init; }
+        public MemberContext? SubContext { get; set; }
         public bool CallVirtualFunctionAsFinal { get; internal set; }
         public bool IsImplicit { get; set; }
 
@@ -378,19 +383,19 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override Symbol? GetSymbol(string name, SymbolCategory category)
         {
-            return Symbol?.GetSymbol(name, category);
+            return SubContext?.GetSymbol(name, category) ?? Symbol?.GetSymbol(name, category);
         }
 
         public override bool SymbolExists(string name, SymbolCategory category)
         {
-            return Symbol?.SymbolExists(name, category) ?? false;
+            return SubContext?.SymbolExists(name, category) ?? Symbol?.SymbolExists(name, category) ?? false;
         }
 
         public override IEnumerator<Symbol> GetEnumerator()
-            => Symbol?.GetEnumerator() ?? Enumerable.Empty<Symbol>().GetEnumerator();
+            => SubContext?.GetEnumerator() ?? Symbol?.GetEnumerator() ?? Enumerable.Empty<Symbol>().GetEnumerator();
 
         public override Symbol? GetSymbol(Declaration declaration)
-            => Symbol?.GetSymbol(declaration);
+            => SubContext?.GetSymbol(declaration) ?? Symbol?.GetSymbol(declaration);
     }
 
     public class Scope : SymbolTableBase

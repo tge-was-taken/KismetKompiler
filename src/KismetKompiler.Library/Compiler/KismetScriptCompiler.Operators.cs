@@ -6,6 +6,7 @@ using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
+using KismetKompiler.Library.Compiler.Context;
 
 namespace KismetKompiler.Library.Compiler;
 
@@ -871,10 +872,23 @@ public partial class KismetScriptCompiler
         {
             return CompilePostfixOperator(postfixOperator);
         }
+        else if (unaryExpression is TypeofOperator typeofOperator)
+        {
+            return CompileTypeofExpression(typeofOperator);
+        }
         else
         {
             throw new NotImplementedException();
         }
+    }
+
+    private CompiledExpressionContext CompileTypeofExpression(TypeofOperator typeofOperator)
+    {
+        var typeSymbol = GetSymbol<ClassSymbol>(typeofOperator.Operand);
+        return Emit(typeofOperator, new EX_ObjectConst()
+        {
+            Value = GetPackageIndex(typeSymbol),
+        });
     }
 
     private CompiledExpressionContext CompilePrefixOperator(PrefixOperator prefixOperator)

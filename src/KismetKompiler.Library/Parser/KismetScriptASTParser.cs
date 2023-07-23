@@ -983,12 +983,37 @@ public class KismetScriptASTParser
 
             expression = primaryExpression;
         }
+        else if (TryCast<KismetScriptParser.TypeofExpressionContext>(context, out var typeofExpressionContext))
+        {
+            TypeofOperator typeofExpression = null;
+            if (!TryFunc(typeofExpressionContext, "Failed to parse typeof expression", () => TryParseTypeofExpression(typeofExpressionContext, out typeofExpression)))
+                return false;
+
+            expression = typeofExpression;
+        }
         else
         {
             LogError(context, "Unknown expression");
             return false;
         }
 
+        return true;
+    }
+
+    private bool TryParseTypeofExpression(KismetScriptParser.TypeofExpressionContext context, out TypeofOperator typeofExpression)
+    {
+        LogContextInfo(context);
+
+        typeofExpression = CreateAstNode<TypeofOperator>(context);
+
+        if (!TryGet(context, "Expected type identifier", context.typeIdentifier, out var typeIdentifierNode))
+            return false;
+
+        TypeIdentifier identifier = null;
+        if (!TryFunc(typeIdentifierNode, "Failed to parse type identifier", () => TryParseTypeIdentifier(typeIdentifierNode, out identifier)))
+            return false;
+
+        typeofExpression.Operand = identifier;
         return true;
     }
 

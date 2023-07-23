@@ -1167,9 +1167,19 @@ public partial class KismetScriptCompiler
                                         Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
                                     });
                                 }
+                                else if (!procedureSymbol.IsExternal)
+                                {
+                                    // Function is declared locally, so we can call it as such
+                                    return Emit(callOperator, new EX_LocalFinalFunction()
+                                    {
+                                        StackNode = GetPackageIndex(callOperator.Identifier),
+                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                    });
+                                }
                                 else
                                 {
-                                    return Emit(callOperator, new EX_LocalFinalFunction()
+                                    // Function is declared externally
+                                    return Emit(callOperator, new EX_FinalFunction()
                                     {
                                         StackNode = GetPackageIndex(callOperator.Identifier),
                                         Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1201,6 +1211,18 @@ public partial class KismetScriptCompiler
                                     StackNode = GetPackageIndex(callOperator.Identifier),
                                     Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
                                 });
+                            }
+                        }
+                        else if (callContext.Type == ContextType.SubContext)
+                        {
+                            PushContext(callContext.SubContext);
+                            try
+                            {
+                                return CompileCallOperator(callOperator);
+                            }
+                            finally
+                            {
+                                PopContext();
                             }
                         }
                         else
@@ -1465,7 +1487,7 @@ public partial class KismetScriptCompiler
                 var typeSymbol = GetSymbol<ClassSymbol>(variableSymbol.Declaration.Type.TypeParameter.Text);
                 if (typeSymbol != null)
                     return typeSymbol;
-                var symbol = GetSymbol(variableSymbol.Declaration.Type.TypeParameter!);
+                var symbol = GetSymbol<Symbol>(variableSymbol.Declaration.Type.TypeParameter!);
                 if (symbol is VariableSymbol typeVariableSymbol)
                     return GetVariableTypeSymbol(typeVariableSymbol);
                 return symbol!;
@@ -1475,7 +1497,7 @@ public partial class KismetScriptCompiler
                 var typeSymbol = GetSymbol<ClassSymbol>(variableSymbol.Declaration.Type.Text);
                 if (typeSymbol != null)
                     return typeSymbol;
-                var symbol = GetSymbol(variableSymbol.Declaration.Type);
+                var symbol = GetSymbol<Symbol>(variableSymbol.Declaration.Type);
                 if (symbol is VariableSymbol typeVariableSymbol)
                     return GetVariableTypeSymbol(typeVariableSymbol);
                 return symbol!;
@@ -1490,10 +1512,16 @@ public partial class KismetScriptCompiler
 
     private MemberContext GetContextForMemberExpression(MemberExpression memberExpression)
     {
-        var contextSymbol = GetSymbol(memberExpression.Context);
+        var contextSymbol = GetSymbol<Symbol>(memberExpression.Context);
         var contextSymbolTemp = contextSymbol;
         var contextType = ContextType.Class;
-        if (contextSymbol is VariableSymbol variableSymbol)
+        MemberContext subContext = default;
+        if (contextSymbol == null)
+        {
+            contextType = ContextType.SubContext;
+            subContext = GetContextForMemberExpression((MemberExpression)memberExpression.Context);
+        }
+        else if (contextSymbol is VariableSymbol variableSymbol)
         {
             if (variableSymbol.VariableCategory == VariableCategory.This)
             {
@@ -1582,10 +1610,11 @@ public partial class KismetScriptCompiler
             }
         }
 
-        Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol);
+        Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol || (contextSymbol is null && subContext != null));
 
         var context = new MemberContext()
         {
+            SubContext = subContext,
             Symbol = contextSymbol,
             Type = contextType,
         };
@@ -1665,6 +1694,16 @@ public partial class KismetScriptCompiler
             {
                 // These are handled through different opcodes rather than context
                 return CompileExpression(memberExpression.Member);
+            }
+            else if (Context.Type == ContextType.SubContext)
+            {
+                // Special case for nested context expressions
+                return Emit(memberExpression, new EX_Context()
+                {
+                    ObjectExpression = CompileExpression(memberExpression.Context).CompiledExpressions.Single(),
+                    ContextExpression = CompileSubExpression(memberExpression.Member),
+                    RValuePointer = pointer ?? new() { Old = new() },
+                });
             }
             else if (Context.Type == ContextType.Interface)
             {
@@ -1758,6 +1797,11 @@ public partial class KismetScriptCompiler
         }
     }
 
+    private FPackageIndex? GetPackageIndex(Symbol symbol)
+    {
+        return new IntermediatePackageIndex(symbol);
+    }
+
     private FPackageIndex? GetPackageIndex(string name)
     {
         // TODO fix
@@ -1840,30 +1884,39 @@ public partial class KismetScriptCompiler
         return CompileExpression(right).CompiledExpressions.Single();
     }
 
-    private Symbol? GetSymbol(Expression expression)
+    private Symbol? GetSymbol<T>(Expression expression) where T : Symbol
     {
         if (expression is TypeIdentifier typeIdentifier)
         {
             if (typeIdentifier.IsConstructedType)
             {
                 // TODO handle base type info (Struct<>, Array<>, etc)
-                return GetSymbol(typeIdentifier.TypeParameter!);
+                return GetSymbol<T>(typeIdentifier.TypeParameter!);
             }
             else
             {
-                return GetSymbol(typeIdentifier.Text);
+                return GetSymbol<T>(typeIdentifier.Text);
             }
         }
         else if (expression is Identifier identifier)
         {
-            return GetSymbol(identifier.Text);
+            return GetSymbol<T>(identifier.Text);
         }
         else if (expression is MemberExpression memberExpression)
         {
             PushContext(GetContextForMemberExpression(memberExpression));
             try
             {
-                return GetSymbol(memberExpression.Member);
+                if (Context.Type != ContextType.This &&
+                    Context.Type != ContextType.Base)
+                {
+                    // Context is not a symbol, but a sub-context
+                    return null;
+                }
+                else
+                {
+                    return GetSymbol<T>(memberExpression.Member);
+                }
             }
             finally
             {
@@ -1876,7 +1929,7 @@ public partial class KismetScriptCompiler
             {
                 // 0: Array, 1: Index
                 var arrayObject = callOperator.Arguments.First();
-                return GetSymbol(arrayObject.Expression);
+                return GetSymbol<T>(arrayObject.Expression);
             }
             else
             {

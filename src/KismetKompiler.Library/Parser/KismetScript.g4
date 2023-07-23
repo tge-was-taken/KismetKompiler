@@ -142,6 +142,7 @@ expression
 	| Identifier '[' expression ']'											# subscriptExpression
 	| expression Op=('.'|'->') expression									# memberExpression
 	| '(' typeIdentifier ')' expression										# castExpression				// precedence 2
+	| Typeof '(' typeIdentifier ')'											# typeofExpression				// precedence 2
 	| Identifier argumentList												# callExpression				// precedence 2
 	| expression Op=( '--' | '++' )											# unaryPostfixExpression		// precedence 2
 	| Op=( '!' | '-' | '--' | '++' ) expression								# unaryPrefixExpression			// precedence 3
@@ -234,6 +235,7 @@ typeIdentifier
 Import:	'import';
 Package: 'package';
 From: 'from';
+Typeof: 'typeof';
 
 //	Storage types
 Function:	'function';

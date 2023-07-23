@@ -1,6 +1,7 @@
 ﻿using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
+using UAssetAPI.IO;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 
@@ -170,13 +171,13 @@ public static class AssetHelper
         {
             parent = uasset.Imports.Where(x => x.ObjectName == import.ClassName).FirstOrDefault();
         }
-        else
+        else if (asset is ZenAsset zenAsset)
         {
-            throw new NotImplementedException("Zen import");
+            parent = zenAsset.Imports.Select(x => x.ToImport(zenAsset)).Where(x => x.ObjectName == import.ClassName).FirstOrDefault();
         }
         if (parent == null)
             return false;
-        if (parent == import)
+        if (parent == import || (parent.OuterIndex.Index == import.OuterIndex.Index && parent.ObjectName == import.ObjectName))
             return true;
         return asset.ImportInheritsType(parent, type);
     }

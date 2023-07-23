@@ -35,9 +35,18 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args
     .WithParsed<DecompileOptions>(o =>
      {
          var version = ParseVersion(o.Version);
-         Decompile(o.InAssetFilePath, version, o.UsmapFilePath, o.OutScriptFilePath, o.Overwrite, o.NoVerification, o.NoStrict);
+         Decompile(o.InAssetFilePath, version, o.UsmapFilePath, o.OutScriptFilePath, o.Overwrite, o.NoVerification, o.NoStrict, o.GlobalFilePath);
          Console.WriteLine($"Done.");
      });
+
+static string NormalizeAssetPath(string? path)
+{
+    if (path != null && Path.GetExtension(path).Equals(".uexp", StringComparison.InvariantCultureIgnoreCase))
+    {
+        return Path.ChangeExtension(path, ".uasset");
+    }
+    return path;
+}
 
 static UAsset LoadUAsset(string path, EngineVersion ver, string? usmapPath = default)
 {
@@ -50,22 +59,32 @@ static UAsset LoadUAsset(string path, EngineVersion ver, string? usmapPath = def
     return asset;
 }
 
-static ZenAsset LoadZenAsset(string path, EngineVersion ver, string? usmapPath = default)
+static ZenAsset LoadZenAsset(string path, EngineVersion ver, string? usmapPath = default, string? globalPath = default)
 {
     Usmap usmap = default;
     if (!string.IsNullOrWhiteSpace(usmapPath))
         usmap = new(usmapPath);
 
-    var asset = new ZenAsset(path, ver, usmap);
+    IOGlobalData globalData = default;
+    if (!string.IsNullOrWhiteSpace(globalPath))
+    {
+        var globalContainer = new IOStoreContainer(Path.ChangeExtension(globalPath, ".utoc"));
+
+        globalData = new IOGlobalData(
+            globalContainer,
+            ver);
+    }
+
+    var asset = new ZenAsset(path, ver, usmap, globalData);
     return asset;
 }
 
-static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath = default)
+static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath = default, string? globalPath = default)
 {
     UnrealPackage asset;
     if (!string.IsNullOrEmpty(usmapPath))
     {
-        asset = LoadZenAsset(path, ver, usmapPath);
+        asset = LoadZenAsset(path, ver, usmapPath, globalPath);
     }
     else
     {
@@ -74,11 +93,11 @@ static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath
     return asset;
 }
 
-static void Decompile(string path, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false, bool noStrict = false)
-{ 
-
-    var asset = LoadAsset(path, ver, usmapPath);
-    var outPath = outScriptPath ?? Path.ChangeExtension(path, ".kms");
+static void Decompile(string assetOrExpPath, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false, bool noStrict = false, string? globalPath = default)
+{
+    var assetPath = NormalizeAssetPath(assetOrExpPath);
+    var asset = LoadAsset(assetPath, ver, usmapPath, globalPath);
+    var outPath = outScriptPath ?? Path.ChangeExtension(assetPath, ".kms");
     if (File.Exists(outPath))
     {
         if (overwrite)
@@ -103,7 +122,7 @@ static void Decompile(string path, EngineVersion ver, string? usmapPath = defaul
     {
         Console.WriteLine($"Verifying equality...");
         var script = CompileScript(outPath, noStrict);
-        var tempAsset = LoadAsset(path, ver, usmapPath);
+        var tempAsset = LoadAsset(assetPath, ver, usmapPath, globalPath);
         var newAsset = new UAssetLinker((UAsset)tempAsset)
             .LinkCompiledScript(script)
             .Build();
@@ -111,14 +130,9 @@ static void Decompile(string path, EngineVersion ver, string? usmapPath = defaul
     }
 }
 
-static void Compile(string? assetPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false)
+static void Compile(string? assetOrExpPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default)
 {
-    var assetFilePath = assetPath;
-    if (assetFilePath != null &&
-        Path.GetExtension(assetFilePath).Equals(".uexp", StringComparison.InvariantCultureIgnoreCase))
-    {
-        assetFilePath = Path.ChangeExtension(assetFilePath, ".uasset");
-    }
+    var assetFilePath = NormalizeAssetPath(assetOrExpPath);
 
     outAssetPath ??= Path.ChangeExtension(scriptPath, ".uasset");
     if (File.Exists(outAssetPath))
@@ -141,7 +155,7 @@ static void Compile(string? assetPath, string scriptPath, EngineVersion ver, str
     if (assetFilePath != null)
     {
         Console.WriteLine($"Merging with {assetFilePath}");
-        var asset = LoadAsset(assetFilePath, ver, usmapPath);
+        var asset = LoadAsset(assetFilePath, ver, usmapPath, globalPath);
         newAsset = new UAssetLinker((UAsset)asset)
             .LinkCompiledScript(script)
             .Build();
@@ -291,6 +305,8 @@ class OptionsBase
     public bool Overwrite { get; set; } = false;
     [Option("usmap", Required = false, HelpText = "Path to a .usmap file")]
     public string UsmapFilePath { get; set; }
+    [Option("global", Required = false, HelpText = "Path to a global.ucas/utoc file")]
+    public string GlobalFilePath { get; set; }
 }
 
 [Verb("compile", HelpText = "Compile a script into a new or existing blueprint asset")]
