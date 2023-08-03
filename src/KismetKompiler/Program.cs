@@ -1,20 +1,22 @@
 ﻿using Antlr4.Runtime;
 using Antlr4.Runtime.Misc;
-using KismetKompiler.Library.Compiler.Processing;
+using CommandLine;
 using KismetKompiler.Decompiler;
+using KismetKompiler.Library.Compiler;
+using KismetKompiler.Library.Compiler.Processing;
+using KismetKompiler.Library.Packaging;
+using KismetKompiler.Library.Parser;
+using Newtonsoft.Json;
 using System.Globalization;
+using System.Linq.Expressions;
+using System.Runtime.ConstrainedExecution;
 using System.Text;
 using UAssetAPI;
+using UAssetAPI.ExportTypes;
 using UAssetAPI.IO;
+using UAssetAPI.Kismet;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
-using KismetKompiler.Library.Parser;
-using KismetKompiler.Library.Packaging;
-using KismetKompiler.Library.Compiler;
-using CommandLine;
-using Newtonsoft.Json;
-using UAssetAPI.ExportTypes;
-using UAssetAPI.Kismet;
 
 Console.OutputEncoding = Encoding.Unicode;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -29,14 +31,28 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args
     .WithParsed<CompileOptions>(o =>
     {
         var version = ParseVersion(o.Version);
-        Compile(o.InAssetFilePath, o.ScriptFilePath, version, o.UsmapFilePath, o.OutAssetFilePath, o.Overwrite, o.NoStrict);
-        Console.WriteLine($"Done.");
+        try
+        {
+            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict);
+            Console.WriteLine($"Done.");
+        }
+        catch (ApplicationException ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
     })
     .WithParsed<DecompileOptions>(o =>
      {
          var version = ParseVersion(o.Version);
-         Decompile(o.InAssetFilePath, version, o.UsmapFilePath, o.OutScriptFilePath, o.Overwrite, o.NoVerification, o.NoStrict, o.GlobalFilePath);
-         Console.WriteLine($"Done.");
+         try
+         {
+             Decompile(o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoVerification, o.NoStrict, o.GlobalFilePath);
+             Console.WriteLine($"Done.");
+         }
+         catch (ApplicationException ex)
+         {
+             Console.WriteLine(ex.Message);
+         }
      });
 
 static string NormalizeAssetPath(string? path)
@@ -93,9 +109,10 @@ static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath
     return asset;
 }
 
-static void Decompile(string assetOrExpPath, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false, bool noStrict = false, string? globalPath = default)
+static bool DecompileFile(string inputPath, EngineVersion ver, string? usmapPath, string outScriptPath, bool overwrite, bool noVerification, bool noStrict, string? globalPath)
 {
-    var assetPath = NormalizeAssetPath(assetOrExpPath);
+    Console.WriteLine($"Decompiling {inputPath}");
+    var assetPath = NormalizeAssetPath(inputPath);
     var asset = LoadAsset(assetPath, ver, usmapPath, globalPath);
     var outPath = outScriptPath ?? Path.ChangeExtension(assetPath, ".kms");
     if (File.Exists(outPath))
@@ -107,7 +124,7 @@ static void Decompile(string assetOrExpPath, EngineVersion ver, string? usmapPat
         else
         {
             Console.WriteLine($"File {outPath} already exists.");
-            Environment.Exit(1);
+            return false;
         }
     }
 
@@ -126,13 +143,46 @@ static void Decompile(string assetOrExpPath, EngineVersion ver, string? usmapPat
         var newAsset = new UAssetLinker((UAsset)tempAsset)
             .LinkCompiledScript(script)
             .Build();
-        VerifyEquality(outPath, asset, newAsset);
+        return VerifyEquality(outPath, asset, newAsset);
+    }
+
+    return true;
+}
+
+static void Decompile(string inputPath, EngineVersion ver, string? usmapPath = default, string outScriptPath = default, bool overwrite = false, bool noVerification = false, bool noStrict = false, string? globalPath = default)
+{
+    if (Directory.Exists(inputPath))
+    {
+        var assetFiles = Directory.EnumerateFiles(inputPath, "*.uasset", SearchOption.AllDirectories).ToList();
+        var failed = 0;
+
+        for (int i = 0; i < assetFiles.Count; i++)
+        {
+            var assetFilePath = assetFiles[i];
+            var assetScriptFilePath = Path.ChangeExtension(assetFilePath, ".kms");
+            try
+            {
+                if (!DecompileFile(assetFilePath, ver, usmapPath, assetScriptFilePath, overwrite, noVerification, noStrict, globalPath))
+                    failed++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                failed++;
+            }
+        }
+
+        Console.WriteLine($"{assetFiles.Count - failed}/{assetFiles.Count} decompiled successfully");
+    }
+    else
+    {
+        DecompileFile(inputPath, ver, usmapPath, outScriptPath, overwrite, noVerification, noStrict, globalPath);
     }
 }
 
-static void Compile(string? assetOrExpPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default)
+static void Compile(string? inputPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default)
 {
-    var assetFilePath = NormalizeAssetPath(assetOrExpPath);
+    var assetFilePath = NormalizeAssetPath(inputPath);
 
     outAssetPath ??= Path.ChangeExtension(scriptPath, ".uasset");
     if (File.Exists(outAssetPath))
@@ -211,10 +261,7 @@ static CompiledScriptContext CompileScript(string inPath, bool noStrict)
 
         var astParser = new KismetScriptASTParser();
         if (!astParser.TryParseCompilationUnit(compilationUnitContext, out var compilationUnit))
-        {
-            Console.WriteLine("Failed to parse compilation unit");
-            Environment.Exit(1);
-        }
+            throw new ApplicationException("Failed to parse compilation unit");
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler();
@@ -229,9 +276,7 @@ static CompiledScriptContext CompileScript(string inPath, bool noStrict)
             var lines = File.ReadAllLines(inPath);
             PrintSyntaxError(innerEx.OffendingToken.Line, innerEx.OffendingToken.Column, innerEx.OffendingToken.Column + innerEx.OffendingToken.Text.Length - 1,
                 lines);
-            //var expectedTokens = string.Join(", ", innerEx.GetExpectedTokens().ToList().Select(x => parser.Vocabulary.GetDisplayName(x)));
-            //Console.WriteLine($"Expected tokens: {expectedTokens}");
-            Environment.Exit(1);
+            throw new ApplicationException("Compilation failed due to syntax error.");
         }
 
         throw;
@@ -257,7 +302,7 @@ static EngineVersion ParseVersion(string version)
     return engineVersion;
 }
 
-static void VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackage newAsset)
+static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackage newAsset)
 {
     KismetSerializer.asset = oldAsset;
 
@@ -289,11 +334,14 @@ static void VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
         {
             Console.WriteLine($"Failed to write verification dumps to {outDirectory}");
         }
+        return false;
     }
     else
     {
         Console.WriteLine("Verification succeeded");
     }
+
+    return true;
 }
 
 class OptionsBase
@@ -313,13 +361,13 @@ class OptionsBase
 class CompileOptions : OptionsBase
 {
     [Option('i', "input", Required = true, HelpText = "Path to a .kms file")]
-    public string ScriptFilePath { get; set; }
+    public string InputPath { get; set; }
 
     [Option('o', "output", Required = false, HelpText = "Path to the output .uasset file")]
-    public string OutAssetFilePath { get; set; }
+    public string OutputPath { get; set; }
 
     [Option("asset", Required = false, HelpText = "Path to an input .uasset file.")]
-    public string InAssetFilePath { get; set; }
+    public string InputAssetFilePath { get; set; }
 
     [Option("no-strict", Required = false, HelpText = "Allow the compiler to be less strict when evaluating scoping rules as a workaround for unknown symbol errors.")]
     public bool NoStrict { get; set; } = false;
@@ -328,11 +376,11 @@ class CompileOptions : OptionsBase
 [Verb("decompile", HelpText = "Decompile a blueprint asset")]
 class DecompileOptions : OptionsBase
 {
-    [Option('i', "input", Required = true, HelpText = "Path to an input .uasset file")]
-    public string InAssetFilePath { get; set; }
+    [Option('i', "input", Required = true, HelpText = "Path to an input .uasset file or a folder containing .uasset files")]
+    public string InputPath { get; set; }
 
-    [Option('o', "output", Required = false, HelpText = "Path to the output .kms file")]
-    public string OutScriptFilePath { get; set; }
+    [Option('o', "output", Required = false, HelpText = "Path to the output .kms file. Not applicable if the input is a folder.")]
+    public string OutputPath { get; set; }
 
     [Option("no-verify", Required = false, HelpText = "Skip verifying equality of decompiled code")]
     public bool NoVerification { get; set; } = false;

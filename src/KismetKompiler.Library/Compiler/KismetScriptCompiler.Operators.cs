@@ -672,7 +672,7 @@ public partial class KismetScriptCompiler
                 TryGetPropertyPointer(assignmentOperator.Left, out var pointer);
                 return Emit(assignmentOperator, new EX_Let()
                 {
-                    Value = pointer ?? new KismetPropertyPointer() { Old = new() },
+                    Value = pointer ?? new KismetPropertyPointer() { Old = new(), New = new() },
                     Variable = CompileSubExpression(assignmentOperator.Left),
                     Expression = CompileSubExpression(assignmentOperator.Right),
                 });

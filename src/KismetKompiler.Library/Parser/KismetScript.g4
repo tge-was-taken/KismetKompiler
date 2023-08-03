@@ -51,7 +51,7 @@ importStatement
 	;
 
 classDeclarationStatement
-	: attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
+	: attributeList? modifier* (Class | Struct | Identifier) Identifier (':' Identifier (',' Identifier)* )? '{' declarationStatement* '}'
 	| attributeList? modifier* (Class | Struct) Identifier (':' Identifier (',' Identifier)* )? Semicolon
 	;
 

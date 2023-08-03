@@ -74,17 +74,28 @@ public partial class KismetScriptCompiler
 
     private Symbol? GetSymbol(string name)
     {
-        var contextSymbol = Context?.GetSymbol(name);
-        var scopeSymbol = CurrentScope.GetSymbol(name);
-        if (IsDefaultClassContext())
+        Symbol? GetSymbolInternal(string name)
         {
-            // Implicit this context has less priority
-            return scopeSymbol ?? contextSymbol;
+            var contextSymbol = Context?.GetSymbol(name);
+            var scopeSymbol = CurrentScope.GetSymbol(name);
+            if (IsDefaultClassContext())
+            {
+                // Implicit this context has less priority
+                return scopeSymbol ?? contextSymbol;
+            }
+            else
+            {
+                return contextSymbol ?? scopeSymbol;
+            }
         }
-        else
+
+        var symbol = GetSymbolInternal(name);
+        if (symbol == null)
         {
-            return contextSymbol ?? scopeSymbol;
+            // TODO: why?
+            symbol = GetSymbolInternal(name + "_GEN_VARIABLE");
         }
+        return symbol;
     }
 
     private T? GetSymbol<T>(string name) where T : Symbol
@@ -353,7 +364,7 @@ public partial class KismetScriptCompiler
                 if (baseClass != null && classSymbol.BaseClass == null)
                 {
                     var baseClassSymbol = GetSymbol(baseClass.Text);
-                    if (baseClassSymbol != null)
+                    if (baseClassSymbol != null && baseClassSymbol != classSymbol)
                     {
                         classSymbol.BaseSymbol = baseClassSymbol;
 
@@ -1610,7 +1621,7 @@ public partial class KismetScriptCompiler
             }
         }
 
-        Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol || (contextSymbol is null && subContext != null));
+        //Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol || (contextSymbol is null && subContext != null));
 
         var context = new MemberContext()
         {
@@ -1702,7 +1713,7 @@ public partial class KismetScriptCompiler
                 {
                     ObjectExpression = CompileExpression(memberExpression.Context).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new() { Old = new() },
+                    RValuePointer = pointer ?? new() { Old = new(), New = new() },
                 });
             }
             else if (Context.Type == ContextType.Interface)
@@ -1714,7 +1725,7 @@ public partial class KismetScriptCompiler
                         InterfaceValue = CompileSubExpression(memberExpression.Context)
                     }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new() { Old = new() },
+                    RValuePointer = pointer ?? new() { Old = new(), New = new() },
                 }); ;
             }
             else if (Context.Type == ContextType.Struct)
@@ -1734,7 +1745,7 @@ public partial class KismetScriptCompiler
                         Value = GetPackageIndex(memberExpression.Context)
                     }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new() { Old = new() },
+                    RValuePointer = pointer ?? new() { Old = new(), New = new() },
                 }); ;
             }
             else if (Context.Type == ContextType.Enum)
@@ -1747,7 +1758,7 @@ public partial class KismetScriptCompiler
                 {
                     ObjectExpression = CompileSubExpression(memberExpression.Context),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
-                    RValuePointer = pointer ?? new() { Old = new() },
+                    RValuePointer = pointer ?? new() { Old = new(), New = new() },
                 });
             }
         }

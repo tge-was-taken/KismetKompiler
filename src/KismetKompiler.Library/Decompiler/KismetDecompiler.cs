@@ -81,7 +81,10 @@ public partial class KismetDecompiler
         var classProperties = classChildExports
             .Where(x => x is PropertyExport)
             .Cast<PropertyExport>()
-            .OrderBy(x => _asset.Exports.IndexOf((x)));
+            .Select(x => (IPropertyData)new PropertyExportData(x))
+            .OrderBy(x => _asset.Exports.IndexOf((Export)x.Source))
+            .Union(_class.LoadedProperties.Select(x => new FPropertyData(_asset, x)))
+            .ToList();
 
         var classFunctions = classChildExports
             .Where(x => x is FunctionExport)
@@ -237,6 +240,8 @@ public partial class KismetDecompiler
                     if (className == "Class")
                     {
                         // Try to detect the base class based on the members accessed
+                        // TODO: replace this with an evaluation phase where the code is evaluated
+                        // and context is used to deduce which base class each type has
 
                         // Find properties of the imported type
                         var targetProperties = _asset.Exports
@@ -247,6 +252,31 @@ public partial class KismetDecompiler
                             .ToList();
 
                         // Look for context expressions on these properties
+                        bool IsTargetProperty(KismetPropertyPointer ptr)
+                        {
+                            if (ptr.Old != null)
+                            {
+                                return ptr.Old.IsExport() && targetProperties.Contains(ptr.Old.ToExport(_asset) as PropertyExport);
+                            }
+                            else
+                            {
+                                return ptr.New.ResolvedOwner.IsExport() && targetProperties.Contains(ptr.New.ResolvedOwner.ToExport(_asset) as PropertyExport);
+                            }
+                        }
+
+                        Import GetImportFromProperty(KismetPropertyPointer ptr)
+                        {
+                            if (ptr.Old != null)
+                            {
+                                return ptr.Old.ToImport(_asset);
+                            }
+                            else
+                            {
+                                return ptr.New.ResolvedOwner.ToImport(_asset);
+                            }
+                        }
+
+
                         var baseClassImport = _asset.Exports
                             .Where(x => x is FunctionExport)
                             .Cast<FunctionExport>()
@@ -258,13 +288,12 @@ public partial class KismetDecompiler
 
                                 // ..where the target property is accessed through local variable
                                 context.ObjectExpression is EX_LocalVariable local &&
-                                local.Variable.Old.IsExport() &&
-                                targetProperties.Contains(local.Variable.Old.ToExport(_asset) as PropertyExport) &&
+                                IsTargetProperty(local.Variable) &&
 
                                 // ..and the member being accessed is an instance variable
                                 // given that the import does not have any children, this must be the base class
                                 context.ContextExpression is EX_InstanceVariable)
-                            .Select(x => ((EX_InstanceVariable)((EX_Context)x).ContextExpression).Variable.Old.ToImport(_asset))
+                            .Select(x => GetImportFromProperty(((EX_InstanceVariable)((EX_Context)x).ContextExpression).Variable))
                             .Select(x => x.OuterIndex.ToImport(_asset))
                             .Distinct()
                             .SingleOrDefault();
@@ -368,6 +397,110 @@ public partial class KismetDecompiler
         return string.Empty;
     }
 
+    private interface IPropertyData
+    {
+        UnrealPackage Asset { get; }
+        object Source { get; }
+
+        string Name { get; }
+        EPropertyFlags PropertyFlags { get; }
+        string TypeName { get; }
+
+        string? PropertyClassName { get; }
+        string? InterfaceClassName { get; }
+        string? StructName { get; }
+        IPropertyData ArrayInnerProperty { get; }
+    }
+
+    private class FPropertyData : IPropertyData
+    {
+        public UnrealPackage Asset { get; }
+        public FProperty Source { get; }
+
+        public FPropertyData(UnrealPackage Asset, FProperty source)
+        {
+            this.Asset = Asset;
+            Source = source;
+        }
+
+        public string Name => Source.Name.ToString();
+        public EPropertyFlags PropertyFlags => Source.PropertyFlags;
+        public string TypeName => Source.SerializedType.ToString();
+
+        public string? PropertyClassName 
+            => Asset.GetName(((FObjectProperty)Source).PropertyClass);
+
+        public string? InterfaceClassName
+            => Asset.GetName(((FInterfaceProperty)Source).InterfaceClass);
+
+        public string? StructName
+            => Asset.GetName(((FStructProperty)Source).Struct);
+
+        public IPropertyData? ArrayInnerProperty
+        {
+            get
+            {
+                var inner = ((FArrayProperty)Source).Inner;
+                if (inner != null)
+                {
+                    return new FPropertyData(Asset, inner);
+                }
+                return null;
+            }
+        }
+
+        object IPropertyData.Source => Source;
+    }
+
+    private class PropertyExportData : IPropertyData
+    {
+        public UnrealPackage Asset => Source.Asset;
+        public PropertyExport Source { get; }
+
+        public PropertyExportData(PropertyExport source)
+        {
+            Source = source;
+        }
+
+        public string Name 
+            => Source.ObjectName.ToString();
+
+        public EPropertyFlags PropertyFlags 
+            => Source.Property.PropertyFlags;
+
+        public string TypeName 
+            => Source.GetExportClassType().ToString();
+
+        public string? PropertyClassName
+            => Asset.GetName(((UObjectProperty)Source.Property).PropertyClass);
+
+        public string? InterfaceClassName 
+            => Asset.GetName(((UInterfaceProperty)Source.Property).InterfaceClass);
+
+        public string? StructName 
+            => Asset.GetName(((UStructProperty)Source.Property).Struct);
+
+        public IPropertyData? ArrayInnerProperty
+        {
+            get
+            {
+                var inner = ((UArrayProperty)Source.Property).Inner;
+                if (inner.IsExport())
+                {
+                    var export = inner.ToExport(Asset);
+                    if (export is PropertyExport propertyExport)
+                    {
+                        var innerProp = (PropertyExport)export;
+                        return new PropertyExportData(innerProp);
+                    }
+                }
+                return null;
+            }
+        }
+
+        object IPropertyData.Source => Source;
+    }
+
     private void WriteFunction(FunctionExport function, Node root)
     {
         var functionFlags =
@@ -396,16 +529,18 @@ public partial class KismetDecompiler
         //    _asset.Exports.Where(x => !x.OuterIndex.IsNull() && x.OuterIndex.ToExport(_asset) == function)
         //    .Cast<PropertyExport>();
 
-        var functionChildren =
+        var functionChildExports =
             _asset.Exports.Where(x => !x.OuterIndex.IsNull() && x.OuterIndex.ToExport(_asset) == function);
 
         var functionProperties =
-            functionChildren
+            functionChildExports
             .Where(x => x is PropertyExport)
-            .Cast<PropertyExport>();
+            .Select(x => (IPropertyData)new PropertyExportData((PropertyExport)x))
+            .Union(function.LoadedProperties.Select(x => new FPropertyData(_asset, x)))
+            .ToList();
 
         var functionParams = functionProperties
-            .Where(x => (x.Property.PropertyFlags & EPropertyFlags.CPF_Parm) != 0);
+            .Where(x => (x.PropertyFlags & EPropertyFlags.CPF_Parm) != 0);
 
         var functionLocals = functionProperties
             .Except(functionParams);
@@ -663,9 +798,9 @@ public partial class KismetDecompiler
         }
     }
 
-    private string GetDecompiledType(PropertyExport prop)
+    private string GetDecompiledType(IPropertyData prop)
     {
-        var classType = prop.GetExportClassType().ToString();
+        var classType = prop.TypeName;
         switch (classType)
         {
             case "IntProperty":
@@ -676,12 +811,12 @@ public partial class KismetDecompiler
                 return "float";
             case "InterfaceProperty":
                 {
-                    var interfaceName = _asset.GetName(((UInterfaceProperty)prop.Property).InterfaceClass);
+                    var interfaceName = prop.InterfaceClassName;
                     return $"Interface<{interfaceName}>";
                 }
             case "StructProperty":
                 {
-                    var structName = _asset.GetName(((UStructProperty)prop.Property).Struct);
+                    var structName = prop.StructName;
                     return $"Struct<{structName}>";
                 }
             case "BoolProperty":
@@ -690,15 +825,9 @@ public partial class KismetDecompiler
                 return "byte";
             case "ArrayProperty":
                 {
-                    var inner = ((UArrayProperty)prop.Property).Inner;
-                    if (inner.IsExport())
+                    if (prop.ArrayInnerProperty != null)
                     {
-                        var export = inner.ToExport(_asset);
-                        if (export is PropertyExport propertyExport)
-                        {
-                            var innerProp = (PropertyExport)export;
-                            return $"Array<{GetDecompiledType(innerProp)}>";
-                        }
+                        return $"Array<{GetDecompiledType(prop.ArrayInnerProperty)}>";
                     }
 
                     // TODO
@@ -706,8 +835,7 @@ public partial class KismetDecompiler
                 }
             case "ObjectProperty":
                 {
-                    var propData = (UObjectProperty)prop.Property;
-                    return $"Object<{_asset.GetName(propData.PropertyClass)}>";
+                    return $"Object<{prop.PropertyClassName}>";
                 }
             default:
                 if (classType != "Property" &&
@@ -762,13 +890,13 @@ public partial class KismetDecompiler
         return $"\"{value}\"";
     }
 
-    private string GetDecompiledPropertyText(PropertyExport prop)
+    private string GetDecompiledPropertyText(IPropertyData prop)
     {
         var flags =
             typeof(EPropertyFlags)
                 .GetEnumValues()
                 .Cast<EPropertyFlags>()
-                .Where(x => (prop.Property.PropertyFlags & x) != 0 && x != EPropertyFlags.CPF_Parm);
+                .Where(x => (prop.PropertyFlags & x) != 0 && x != EPropertyFlags.CPF_Parm);
 
         var modifierFlags = new[] {
             EPropertyFlags.CPF_ConstParm, EPropertyFlags.CPF_OutParm, EPropertyFlags.CPF_ReferenceParm};
@@ -794,7 +922,7 @@ public partial class KismetDecompiler
 
         var modifierText = string.Join(" ", modifiers).Trim();
         var attributeText = string.Join(", ", attributes).Trim();
-        var nameText = $"{GetDecompiledType(prop)} {FormatIdentifier(prop.ObjectName.ToString())}";
+        var nameText = $"{GetDecompiledType(prop)} {FormatIdentifier(prop.Name)}";
 
         if (!string.IsNullOrWhiteSpace(attributeText))
             attributeText = $"[{attributeText}]";

@@ -353,6 +353,57 @@ public class UAssetLinker : PackageLinker
                     Next = null,
                 };
                 break;
+            //case "Object":
+            //    // TODO test
+            //    propertyType = "ObjectProperty";
+            //    serialSize = 37;
+            //    var propertyClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
+            //    property = new UObjectProperty()
+            //    {
+            //        PropertyClass = propertyClassIndex,
+            //        ArrayDim = EArrayDim.TArray,
+            //        ElementSize = 0,
+            //        PropertyFlags = EPropertyFlags.CPF_None,
+            //        RepNotifyFunc = new FName(_asset, "None"),
+            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+            //        RawValue = null,
+            //        Next = null
+            //    };
+            //    break;
+            //case "Delegate":
+            //    // TODO test
+            //    propertyType = "DelegateProperty";
+            //    serialSize = 37;
+            //    var signatureFunctionIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
+            //    property = new UDelegateProperty()
+            //    {
+            //        SignatureFunction = signatureFunctionIndex,
+            //        ArrayDim = EArrayDim.TArray,
+            //        ElementSize = 0,
+            //        PropertyFlags = EPropertyFlags.CPF_None,
+            //        RepNotifyFunc = new FName(_asset, "None"),
+            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+            //        RawValue = null,
+            //        Next = null
+            //    };
+            //    break;
+            //case "Class":
+            //    // TODO test
+            //    propertyType = "ClassProperty";
+            //    serialSize = 37;
+            //    var metaClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
+            //    property = new UClassProperty()
+            //    {
+            //        MetaClass = metaClassIndex,
+            //        ArrayDim = EArrayDim.TArray,
+            //        ElementSize = 0,
+            //        PropertyFlags = EPropertyFlags.CPF_None,
+            //        RepNotifyFunc = new FName(_asset, "None"),
+            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+            //        RawValue = null,
+            //        Next = null
+            //    };
+            //    break;
             default:
                 throw new NotImplementedException($"Creating new property of type {type} is not implemented");
         }
@@ -421,6 +472,9 @@ public class UAssetLinker : PackageLinker
 
     private FPackageIndex EnsurePackageIndexForSymbolCreated(Symbol symbol)
     {
+        if (symbol == null)
+            return FPackageIndex.Null;
+
         if (TryFindPackageIndexInAsset(symbol, out var packageIndex))
             return packageIndex;
 
@@ -459,7 +513,11 @@ public class UAssetLinker : PackageLinker
             pointer = new KismetPropertyPointer()
             {
                 Old = packageIndex,
-                New = null,
+                New = new()
+                {
+                    Path = new[] { new FName(_asset, iProperty.Symbol.Name) },
+                    ResolvedOwner = packageIndex,
+                },
             };
         }
     }
