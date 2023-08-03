@@ -42,6 +42,7 @@ Compiles a script into a new or existing blueprint asset.
 - `-v, --version`: (Optional) Unreal Engine version (e.g., 4.23).
 - `-f, --overwrite`: (Optional) Overwrite existing files.
 - `--usmap`: (Optional) Path to a .usmap file.
+- `--global`: (Optional) Path to a global.ucas/utoc file. Required if IO store is used (eg. no uexp, usmap required)
 - `--help`: Display the help screen.
 
 ### ``decompile`` Command
@@ -50,12 +51,13 @@ Decompiles a blueprint asset into a .kms file.
 
 #### Options:
 
-- `-i, --input`: (Required) Path to an input .uasset file containing the blueprint asset to decompile.
-- `-o, --output`: Path to the output .kms file. If not specified, a default name will be used.
+- `-i, --input`: (Required) Path to an input .uasset file containing the blueprint asset to decompile or a folder containing blueprint assets to decompile.
+- `-o, --output`: Path to the output .kms file. If not specified, a default name will be used. Not applicable if the input as a folder.
 - `--no-verify`: Skip verifying the equality of the decompiled code.
 - `-v, --version`: (Optional) Unreal Engine version (e.g., 4.23).
 - `-f, --overwrite`: (Optional) Overwrite existing files.
 - `--usmap`: (Optional) Path to a .usmap file.
+- `--global`: (Optional) Path to a global.ucas/utoc file. Required if IO store is used (eg. no uexp, usmap required)
 - `--help`: Display the help screen.
 
 ## Known Limitations
