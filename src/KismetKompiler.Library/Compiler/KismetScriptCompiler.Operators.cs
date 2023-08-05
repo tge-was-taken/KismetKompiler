@@ -7,6 +7,7 @@ using UAssetAPI.Kismet.Bytecode;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
 using KismetKompiler.Library.Compiler.Context;
+using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Library.Compiler;
 
@@ -672,7 +673,11 @@ public partial class KismetScriptCompiler
                 TryGetPropertyPointer(assignmentOperator.Left, out var pointer);
                 return Emit(assignmentOperator, new EX_Let()
                 {
-                    Value = pointer ?? new KismetPropertyPointer() { Old = new(), New = new() },
+                    Value = pointer ?? new KismetPropertyPointer()
+                    {
+                        Old = FPackageIndex.Null,
+                        New = FFieldPath.Null,
+                    },
                     Variable = CompileSubExpression(assignmentOperator.Left),
                     Expression = CompileSubExpression(assignmentOperator.Right),
                 });

@@ -1,9 +1,10 @@
 ﻿using System.Diagnostics;
-using System.Security.AccessControl;
 using System.Text.RegularExpressions;
 using KismetKompiler.Library;
 using KismetKompiler.Library.Decompiler;
 using KismetKompiler.Library.Decompiler.Context;
+using KismetKompiler.Library.Decompiler.Context.Nodes;
+using KismetKompiler.Library.Decompiler.Context.Properties;
 using KismetKompiler.Library.Decompiler.Passes;
 using KismetKompiler.Library.Parser;
 using UAssetAPI;
@@ -12,7 +13,6 @@ using UAssetAPI.FieldTypes;
 using UAssetAPI.IO;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
-using UAssetAPI.PropertyTypes.Objects;
 using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Decompiler;
@@ -132,7 +132,8 @@ public partial class KismetDecompiler
         {
             void ProcessImport(Import import)
             {
-                var importIndex = -(imports.IndexOf(import) + 1);
+                var rawImportIndex = imports.IndexOf(import);
+                var importIndex = rawImportIndex != -1 ? -(imports.IndexOf(import) + 1) : -1;
                 var children = imports.Where(x => x?.OuterIndex.Index == importIndex);
                 var className = import.ClassName.ToString();
                 var objectName = import.ObjectName.ToString();
@@ -356,9 +357,24 @@ public partial class KismetDecompiler
                 else
                 {
                     _writer.WriteLine(";");
+
+                    if (objectName.EndsWith("_GEN_VARIABLE"))
+                    {
+                        // TODO: verify that this is correct
+                        // Verified to be necessary for matching compilation
+                        // Similar patterns are seen in the Unreal source code as well
+                        var temp = new Import()
+                        {
+                            bImportOptional = import.bImportOptional,
+                            ClassName = import.ClassName,
+                            ClassPackage = import.ClassPackage,
+                            ObjectName = FName.DefineDummy(_asset, import.ObjectName.ToString().Replace("_GEN_VARIABLE", "")),
+                            OuterIndex = import.OuterIndex
+                        };
+                        ProcessImport(temp);
+                    }
                 }
             }
-
             var name = _asset.GetFullName(import);
             var parentName = _asset.GetFullName(import.OuterIndex);
             var parentNameEscaped = parentName.Replace("/", ".").TrimStart('.');
@@ -395,110 +411,6 @@ public partial class KismetDecompiler
         _writer.Flush();
 
         return string.Empty;
-    }
-
-    private interface IPropertyData
-    {
-        UnrealPackage Asset { get; }
-        object Source { get; }
-
-        string Name { get; }
-        EPropertyFlags PropertyFlags { get; }
-        string TypeName { get; }
-
-        string? PropertyClassName { get; }
-        string? InterfaceClassName { get; }
-        string? StructName { get; }
-        IPropertyData ArrayInnerProperty { get; }
-    }
-
-    private class FPropertyData : IPropertyData
-    {
-        public UnrealPackage Asset { get; }
-        public FProperty Source { get; }
-
-        public FPropertyData(UnrealPackage Asset, FProperty source)
-        {
-            this.Asset = Asset;
-            Source = source;
-        }
-
-        public string Name => Source.Name.ToString();
-        public EPropertyFlags PropertyFlags => Source.PropertyFlags;
-        public string TypeName => Source.SerializedType.ToString();
-
-        public string? PropertyClassName 
-            => Asset.GetName(((FObjectProperty)Source).PropertyClass);
-
-        public string? InterfaceClassName
-            => Asset.GetName(((FInterfaceProperty)Source).InterfaceClass);
-
-        public string? StructName
-            => Asset.GetName(((FStructProperty)Source).Struct);
-
-        public IPropertyData? ArrayInnerProperty
-        {
-            get
-            {
-                var inner = ((FArrayProperty)Source).Inner;
-                if (inner != null)
-                {
-                    return new FPropertyData(Asset, inner);
-                }
-                return null;
-            }
-        }
-
-        object IPropertyData.Source => Source;
-    }
-
-    private class PropertyExportData : IPropertyData
-    {
-        public UnrealPackage Asset => Source.Asset;
-        public PropertyExport Source { get; }
-
-        public PropertyExportData(PropertyExport source)
-        {
-            Source = source;
-        }
-
-        public string Name 
-            => Source.ObjectName.ToString();
-
-        public EPropertyFlags PropertyFlags 
-            => Source.Property.PropertyFlags;
-
-        public string TypeName 
-            => Source.GetExportClassType().ToString();
-
-        public string? PropertyClassName
-            => Asset.GetName(((UObjectProperty)Source.Property).PropertyClass);
-
-        public string? InterfaceClassName 
-            => Asset.GetName(((UInterfaceProperty)Source.Property).InterfaceClass);
-
-        public string? StructName 
-            => Asset.GetName(((UStructProperty)Source.Property).Struct);
-
-        public IPropertyData? ArrayInnerProperty
-        {
-            get
-            {
-                var inner = ((UArrayProperty)Source.Property).Inner;
-                if (inner.IsExport())
-                {
-                    var export = inner.ToExport(Asset);
-                    if (export is PropertyExport propertyExport)
-                    {
-                        var innerProp = (PropertyExport)export;
-                        return new PropertyExportData(innerProp);
-                    }
-                }
-                return null;
-            }
-        }
-
-        object IPropertyData.Source => Source;
     }
 
     private void WriteFunction(FunctionExport function, Node root)
@@ -588,7 +500,7 @@ public partial class KismetDecompiler
                     if (isBlockStart)
                         _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset)}:");
 
-                    var cond = FormatExpression(ifBlock.Condition);
+                    var cond = FormatExpression(ifBlock.Condition, null);
                     _writer.WriteLine($"if ({cond}) {{");
                     _writer.Push();
                     WriteBlock(ifBlock);
@@ -611,7 +523,7 @@ public partial class KismetDecompiler
                             }
                             else if (returnNode.Source is EX_JumpIfNot jumpIfNot)
                             {
-                                WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpression(jumpIfNot.BooleanExpression)}) return");
+                                WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpression(jumpIfNot.BooleanExpression, null)}) return");
                             }
                             else
                             {
@@ -682,7 +594,7 @@ public partial class KismetDecompiler
     }
 
     private void WriteExpression(Node node, bool isUbergraphFunction)
-        => WriteExpression(node, isUbergraphFunction, FormatExpression(node.Source));
+        => WriteExpression(node, isUbergraphFunction, FormatExpression(node.Source, null));
 
     private void WriteFunctionVerbose(FunctionExport function, Node root)
     {
@@ -700,11 +612,11 @@ public partial class KismetDecompiler
                 if (node.ReferencedBy.Count > 0 ||
                     (isUbergraphFunction && IsUbergraphEntrypoint(node.CodeStartOffset)))
                 {
-                    line = $"    _{node.CodeStartOffset}: {FormatExpression(node.Source)}";
+                    line = $"    _{node.CodeStartOffset}: {FormatExpression(node.Source, null)}";
                 }
                 else
                 {
-                    line = $"    {FormatExpression(node.Source)}";
+                    line = $"    {FormatExpression(node.Source, null)}";
                 }
                 if (line.Contains(" //"))
                 {

@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Abstractions\" />
     <Folder Include="Analysis\" />
   </ItemGroup>
 

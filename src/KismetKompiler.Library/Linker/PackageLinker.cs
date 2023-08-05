@@ -1,10 +1,8 @@
-﻿using KismetKompiler.Compiler;
-using KismetKompiler.Library.Compiler;
+﻿using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Compiler.Context;
-using KismetKompiler.Library.Compiler.Exceptions;
 using KismetKompiler.Library.Compiler.Intermediate;
-using KismetKompiler.Library.Syntax.Statements.Declarations;
 using UAssetAPI;
+using UAssetAPI.CustomVersions;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
 using UAssetAPI.Kismet.Bytecode;
@@ -32,6 +30,9 @@ public record PackageExport<T>(FPackageIndex Index, T Export) where T : Export;
 public class UAssetLinker : PackageLinker
 {
     private UAsset _asset;
+
+    private bool SerializeLoadedProperties
+        => _asset.GetCustomVersion<FCoreObjectVersion>() >= FCoreObjectVersion.FProperties;
 
     public UAssetLinker()
     {
@@ -149,17 +150,400 @@ public class UAssetLinker : PackageLinker
         return FPackageIndex.FromImport(_asset.Imports.IndexOf(import));
     }
 
-    private PropertyExport CreatePropertyExport(UProperty property, string name, int serialSize, IEnumerable<FPackageIndex> serializationBeforeSerializationDependencies, IEnumerable<FPackageIndex> createBeforeSerializationDependencies, IEnumerable<FPackageIndex> createBeforeCreateDependencies, FPackageIndex outerIndex, FPackageIndex classIndex, FPackageIndex templateIndex)
+    private static string GetPropertySerializedType(VariableSymbol symbol)
     {
+        var type = symbol.Declaration?.Type.Text;
+        return type switch
+        {
+            "byte" => "ByteProperty",
+            "bool" => "BoolProperty",
+            "int" => "IntProperty",
+            "string" => "StrProperty",
+            "float" => "FloatProperty",
+            "double" => "DoubleProperty",
+            "Interface" => "InterfaceProperty",
+            "Struct" => "StructProperty",
+            "Array" => "ArrayProperty",
+            "Enum" => "IntProperty",
+            "Object" => "ObjectProperty",
+            "Delegate" => "DelegateProperty",
+            "Class" => "ClassProperty",
+            _ => throw new NotImplementedException($"Creating new property of type {type} is not implemented"),
+        };
+    }
+
+    private static EPropertyFlags GetPropertyFlags(VariableSymbol symbol)
+    {
+        EPropertyFlags flags = 0;
+        if (symbol.IsParameter)
+        {
+            flags = EPropertyFlags.CPF_BlueprintVisible | EPropertyFlags.CPF_BlueprintReadOnly | EPropertyFlags.CPF_Parm;
+            if (symbol.IsOutParameter)
+            {
+                flags |= EPropertyFlags.CPF_OutParm;
+            }
+            if (symbol.IsReturnParameter)
+            {
+                flags |= EPropertyFlags.CPF_OutParm;
+                flags |= EPropertyFlags.CPF_ReturnParm;
+            }
+        }
+        return flags;
+    }
+
+    private UProperty CreateUProperty(VariableSymbol symbol, string serializedType)
+    {
+        var propertyFlags = GetPropertyFlags(symbol);
+
+        return serializedType switch
+        {
+            "ByteProperty" => new UByteProperty()
+            {
+                Enum = new FPackageIndex(0),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "BoolProperty" => new UBoolProperty()
+            {
+                NativeBool = true,
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 1,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "IntProperty" => new UIntProperty()
+            {
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "StrProperty" => new UStrProperty()
+            {
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "FloatProperty" => new UFloatProperty()
+            {
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "DoubleProperty" => new UDoubleProperty()
+            {
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "InterfaceProperty" => new UInterfaceProperty()
+            {
+                InterfaceClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null
+            },
+            "StructProperty" => new UStructProperty()
+            {
+                Struct = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null
+            },
+            "ArrayProperty" => new UArrayProperty()
+            {
+                Inner = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "ObjectProperty" => new UObjectProperty()
+            {
+                PropertyClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "DelegateProperty" => new UDelegateProperty()
+            {
+                SignatureFunction = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            "ClassProperty" => new UClassProperty()
+            {
+                MetaClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+                Next = null,
+            },
+            _ => throw new NotImplementedException(serializedType),
+        };
+    }
+
+    private FProperty CreateFProperty(VariableSymbol symbol, string serializedType)
+    {
+        var propertyFlags = GetPropertyFlags(symbol);
+        return serializedType switch
+        {
+            "ByteProperty" => new FByteProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                Enum = new FPackageIndex(0),
+            },
+            "BoolProperty" => new FBoolProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 1,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                FieldSize = 1,
+                ByteOffset = 0,
+                ByteMask = 0x1,
+                FieldMask = 0xFF,
+                NativeBool = true,
+                Value = true, // TODO: is this correct?
+            },
+            "IntProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 4,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "StrProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "FloatProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 4,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "DoubleProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 8,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "InterfaceProperty" => new FInterfaceProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = EPropertyFlags.CPF_None,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                InterfaceClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
+            },
+            "StructProperty" => new FStructProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = EPropertyFlags.CPF_None,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                Struct = FindPackageIndexInAsset(symbol.InnerSymbol!),
+            },
+            "ArrayProperty" => new FArrayProperty()
+            {
+                // FField values
+                SerializedType = new FName(_asset, serializedType),
+                Name = new FName(_asset, symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 0,
+                PropertyFlags = EPropertyFlags.CPF_None,
+                RepIndex = 0,
+                RepNotifyFunc = new FName(_asset, "None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                // TODO verify if this works
+                Inner = CreateFProperty((VariableSymbol)symbol.InnerSymbol!, GetPropertySerializedType((VariableSymbol)symbol.InnerSymbol)),
+            },
+            _ => throw new NotImplementedException(serializedType),
+        };
+    }
+
+    private (FProperty Property, FPackageIndex ExportIndex, PropertyExport? Export) CreatePropertyAsFProperty(VariableSymbol symbol)
+    {
+        var serializedType = GetPropertySerializedType(symbol);
+        var property = CreateFProperty(symbol, serializedType);
+        // TODO: create _GEN_VARIABLE if necessary
+        var exportIndex = FPackageIndex.Null;
+        PropertyExport? export = null;
+        return (property, exportIndex, export);
+    }
+
+    private (FPackageIndex Index, PropertyExport Export) CreatePropertyAsPropertyExport(VariableSymbol symbol)
+    {
+        var serializedType = GetPropertySerializedType(symbol);
+        var property = CreateUProperty(symbol, serializedType);
+
+        var serializationBeforeSerializationDependencies = new List<FPackageIndex>();
+        var createBeforeSerializationDependencies = new List<FPackageIndex>();
+        var createBeforeCreateDependencies = new List<FPackageIndex>();
+
+        var classExport = _asset.FindClassExportByName(symbol.DeclaringClass?.Name);
+        var functionExport = _asset.FindFunctionExportByName(symbol?.DeclaringProcedure?.Name);
+        var coreUObjectImport = _asset.FindImportIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
+        var propertyClassImportIndex = EnsureObjectImported(coreUObjectImport, serializedType, "Class");
+        var propertyTemplateImportIndex = EnsureObjectImported(coreUObjectImport, $"Default__{serializedType}", serializedType);
+
+        var propertyOwnerIndex =
+            symbol.DeclaringProcedure != null ?
+                FPackageIndex.FromExport(_asset.Exports.IndexOf(functionExport)) :
+            symbol.DeclaringClass != null ?
+                FPackageIndex.FromExport(_asset.Exports.IndexOf(classExport)) :
+                FPackageIndex.Null;
+
+        if (propertyOwnerIndex != FPackageIndex.Null)
+        {
+            createBeforeCreateDependencies.Insert(0, propertyOwnerIndex);
+        }
+
         var propertyExport = new PropertyExport()
         {
             Asset = _asset,
             Property = property,
             Data = new(),
-            ObjectName = new FName(_asset, name),
+            ObjectName = new FName(_asset, symbol.Name),
             ObjectFlags = EObjectFlags.RF_Public,
-            SerialSize = serialSize,
-            SerialOffset = 0, // Filled be serializer
+            SerialSize = 0, // Filled by serializer
+            SerialOffset = 0, // Filled by serializer
             bForcedExport = false,
             bNotForClient = false,
             bNotForServer = false,
@@ -176,280 +560,11 @@ public class UAssetLinker : PackageLinker
             PublicExportHash = 0,
             Padding = null,
             Extras = new byte[0],
-            OuterIndex = outerIndex,
-            ClassIndex = classIndex,
+            OuterIndex = propertyOwnerIndex,
+            ClassIndex = propertyClassImportIndex,
             SuperIndex = new FPackageIndex(0),
-            TemplateIndex = templateIndex,
+            TemplateIndex = propertyTemplateImportIndex,
         };
-        return propertyExport;
-    }
-
-    private (FPackageIndex Index, PropertyExport Export) CreateVariable(VariableSymbol symbol)
-    {
-        string propertyType = null;
-        int? serialSize = null;
-        UProperty property = null;
-        var serializationBeforeSerializationDependencies = new List<FPackageIndex>();
-        var createBeforeSerializationDependencies = new List<FPackageIndex>();
-        var createBeforeCreateDependencies = new List<FPackageIndex>();
-
-        var type = symbol.Declaration?.Type.Text ?? symbol.Parameter.Type.Text;
-
-        switch (type)
-        {
-            case "byte":
-                propertyType = "ByteProperty";
-                serialSize = 37;
-                property = new UByteProperty()
-                {
-                    Enum = new FPackageIndex(0),
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-            case "bool":
-                propertyType = "BoolProperty";
-                serialSize = 35;
-                property = new UBoolProperty()
-                {
-                    NativeBool = true,
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 1,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-            case "int":
-                propertyType = "IntProperty";
-                serialSize = 33;
-                property = new UIntProperty()
-                {
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-
-            case "string":
-                propertyType = "StrProperty";
-                serialSize = 33;
-                property = new UStrProperty()
-                {
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-
-            case "float":
-                // TODO test
-                propertyType = "FloatProperty";
-                serialSize = 33;
-                property = new UFloatProperty()
-                {
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-            case "double":
-                // TODO test
-                propertyType = "DoubleProperty";
-                serialSize = 33;
-                property = new UDoubleProperty()
-                {
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-            case "Interface":
-                propertyType = "InterfaceProperty";
-                serialSize = 37;
-                var interfaceClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-                property = new UInterfaceProperty()
-                {
-                    InterfaceClass = interfaceClassIndex,
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null
-                };
-                createBeforeSerializationDependencies.Add(interfaceClassIndex);
-                break;
-            case "Struct":
-                propertyType = "StructProperty";
-                serialSize = 37;
-                var structClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-                property = new UStructProperty()
-                {
-                    Struct = structClassIndex,
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null
-                };
-                serializationBeforeSerializationDependencies.Add(structClassIndex);
-                break;
-            case "Array":
-                propertyType = "ArrayProperty";
-                serialSize = 37;
-                var arrayInnerIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-                property = new UArrayProperty()
-                {
-                    Inner = arrayInnerIndex,
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                serializationBeforeSerializationDependencies.Add(arrayInnerIndex);
-                break;
-            case "Enum":
-                // TODO: implement this properly
-                propertyType = "IntProperty";
-                serialSize = 33;
-                property = new UIntProperty()
-                {
-                    ArrayDim = EArrayDim.TArray,
-                    ElementSize = 0,
-                    PropertyFlags = EPropertyFlags.CPF_None,
-                    RepNotifyFunc = new FName(_asset, "None"),
-                    BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                    RawValue = null,
-                    Next = null,
-                };
-                break;
-            //case "Object":
-            //    // TODO test
-            //    propertyType = "ObjectProperty";
-            //    serialSize = 37;
-            //    var propertyClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-            //    property = new UObjectProperty()
-            //    {
-            //        PropertyClass = propertyClassIndex,
-            //        ArrayDim = EArrayDim.TArray,
-            //        ElementSize = 0,
-            //        PropertyFlags = EPropertyFlags.CPF_None,
-            //        RepNotifyFunc = new FName(_asset, "None"),
-            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-            //        RawValue = null,
-            //        Next = null
-            //    };
-            //    break;
-            //case "Delegate":
-            //    // TODO test
-            //    propertyType = "DelegateProperty";
-            //    serialSize = 37;
-            //    var signatureFunctionIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-            //    property = new UDelegateProperty()
-            //    {
-            //        SignatureFunction = signatureFunctionIndex,
-            //        ArrayDim = EArrayDim.TArray,
-            //        ElementSize = 0,
-            //        PropertyFlags = EPropertyFlags.CPF_None,
-            //        RepNotifyFunc = new FName(_asset, "None"),
-            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-            //        RawValue = null,
-            //        Next = null
-            //    };
-            //    break;
-            //case "Class":
-            //    // TODO test
-            //    propertyType = "ClassProperty";
-            //    serialSize = 37;
-            //    var metaClassIndex = FindPackageIndexInAsset(symbol.InnerSymbol);
-            //    property = new UClassProperty()
-            //    {
-            //        MetaClass = metaClassIndex,
-            //        ArrayDim = EArrayDim.TArray,
-            //        ElementSize = 0,
-            //        PropertyFlags = EPropertyFlags.CPF_None,
-            //        RepNotifyFunc = new FName(_asset, "None"),
-            //        BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-            //        RawValue = null,
-            //        Next = null
-            //    };
-            //    break;
-            default:
-                throw new NotImplementedException($"Creating new property of type {type} is not implemented");
-        }
-
-        if (symbol.IsParameter)
-        {
-            property.PropertyFlags = EPropertyFlags.CPF_BlueprintVisible | EPropertyFlags.CPF_BlueprintReadOnly | EPropertyFlags.CPF_Parm;
-            if (symbol.IsOutParameter)
-            {
-                property.PropertyFlags |= EPropertyFlags.CPF_OutParm;
-            }
-            if (symbol.IsReturnParameter)
-            {
-                property.PropertyFlags |= EPropertyFlags.CPF_OutParm;
-                property.PropertyFlags |= EPropertyFlags.CPF_ReturnParm;
-            }
-        }
-
-        var classExport = _asset.FindClassExportByName(symbol.DeclaringClass?.Name);
-        var functionExport = _asset.FindFunctionExportByName(symbol?.DeclaringProcedure?.Name);
-        var coreUObjectImport = _asset.FindImportIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
-        var propertyClassImportIndex = EnsureObjectImported(coreUObjectImport, propertyType, "Class");
-        var propertyTemplateImportIndex = EnsureObjectImported(coreUObjectImport, $"Default__{propertyType}", propertyType);
-
-        var propertyOwnerIndex =
-            symbol.DeclaringProcedure != null ?
-                FPackageIndex.FromExport(_asset.Exports.IndexOf(functionExport)) :
-            symbol.DeclaringClass != null ?
-                FPackageIndex.FromExport(_asset.Exports.IndexOf(classExport)) :
-                FPackageIndex.Null;
-
-        if (propertyOwnerIndex != FPackageIndex.Null)
-        {
-            createBeforeCreateDependencies.Insert(0, propertyOwnerIndex);
-        }
-
-        var propertyExport = CreatePropertyExport(
-            property: property,
-            name: symbol.Name,
-            serialSize: serialSize.Value,
-            serializationBeforeSerializationDependencies: serializationBeforeSerializationDependencies,
-            createBeforeSerializationDependencies: createBeforeSerializationDependencies,
-            createBeforeCreateDependencies: createBeforeCreateDependencies,
-            outerIndex: propertyOwnerIndex,
-            classIndex: propertyClassImportIndex,
-            templateIndex: propertyTemplateImportIndex);
 
         _asset.Exports.Add(propertyExport);
         var packageIndex = FPackageIndex.FromExport(_asset.Exports.Count - 1);
@@ -485,7 +600,7 @@ public class UAssetLinker : PackageLinker
     {
         if (symbol is VariableSymbol variableSymbol)
         {
-            return CreateVariable(variableSymbol).Index;
+            return CreatePropertyAsPropertyExport(variableSymbol).Index;
         }
         else if (symbol is ProcedureSymbol procedureSymbol)
         {
@@ -508,17 +623,27 @@ public class UAssetLinker : PackageLinker
     {
         if (pointer is IntermediatePropertyPointer iProperty)
         {
-            var packageIndex = EnsurePackageIndexForSymbolCreated(iProperty.Symbol);
-
-            pointer = new KismetPropertyPointer()
+            if (SerializeLoadedProperties)
             {
-                Old = packageIndex,
-                New = new()
+                pointer = new KismetPropertyPointer()
                 {
-                    Path = new[] { new FName(_asset, iProperty.Symbol.Name) },
-                    ResolvedOwner = packageIndex,
-                },
-            };
+                    Old = FPackageIndex.Null,
+                    New = new()
+                    {
+                        Path = new FName[] { new(_asset, iProperty.Symbol.Name) },
+                        ResolvedOwner = EnsurePackageIndexForSymbolCreated(iProperty.Symbol.DeclaringSymbol),
+                    }
+                };
+            }
+            else
+            {
+                var packageIndex = EnsurePackageIndexForSymbolCreated(iProperty.Symbol);
+                pointer = new KismetPropertyPointer()
+                {
+                    Old = packageIndex,
+                    New = FFieldPath.Null
+                };
+            }
         }
     }
 
@@ -871,7 +996,7 @@ public class UAssetLinker : PackageLinker
             FunctionFlags = context.Flags,
             SuperStruct = baseFunctionIndex,
             Children = new(),
-            LoadedProperties = Array.Empty<FProperty>(),
+            LoadedProperties = new(),
             ScriptBytecode = null,
             ScriptBytecodeSize = 0,
             ScriptBytecodeRaw = null,
@@ -904,11 +1029,29 @@ public class UAssetLinker : PackageLinker
         };
         _asset.Exports.Add(export);
 
-        var children = context.Variables
-            .Select(x => CreatePackageIndexForSymbol(x.Symbol))
-            .ToList();
-        export.Children.AddRange(children);
-        export.SerializationBeforeSerializationDependencies.AddRange(children);
+        if (_asset.GetCustomVersion<FCoreObjectVersion>() >= FCoreObjectVersion.FProperties)
+        {
+            var properties = context.Variables
+                .Select(x => CreatePropertyAsFProperty(x.Symbol))
+                .ToList();
+            var propertyData = properties
+                .Select(x => x.Property);
+            var exportProperties = properties
+                .Where(x => !x.ExportIndex.IsNull())
+                .Select(x => x.ExportIndex);
+
+            export.LoadedProperties.AddRange(propertyData);
+            export.Children.AddRange(exportProperties);
+            export.SerializationBeforeSerializationDependencies.AddRange(exportProperties);
+        }
+        else
+        {
+            var children = context.Variables
+                .Select(x => CreatePackageIndexForSymbol(x.Symbol))
+                .ToList();
+            export.Children.AddRange(children);
+            export.SerializationBeforeSerializationDependencies.AddRange(children);
+        }
 
         if (!baseFunctionClassIndex.IsNull())
         {
@@ -969,7 +1112,7 @@ public class UAssetLinker : PackageLinker
             ClassDefaultObject = classDefaultObjectIndex,
             SuperStruct = baseClassObjectIndex,
             Children = new(),
-            LoadedProperties = Array.Empty<FProperty>(),
+            LoadedProperties = new(),
             ScriptBytecode = Array.Empty<KismetExpression>(),
             ScriptBytecodeSize = 0,
             ScriptBytecodeRaw = null,
@@ -1070,10 +1213,17 @@ public class UAssetLinker : PackageLinker
 
             foreach (var variableContext in classContext.Variables)
             {
-                var export = FindChildExport<PropertyExport>(classExport, variableContext.Symbol.Name);
-                if (export == null)
+                if (SerializeLoadedProperties)
                 {
-                    (var index, var propExport) = CreateVariable(variableContext.Symbol);
+                    if (!classExport.LoadedProperties.Any(x => x.Name.ToString() == variableContext.Symbol.Name))
+                    {
+                        throw new NotImplementedException();
+                    }
+                }
+                else
+                {
+                    var export = FindChildExport<PropertyExport>(classExport, variableContext.Symbol.Name);
+                    (var index, var propExport) = CreatePropertyAsPropertyExport(variableContext.Symbol);
                     propExport.Property.PropertyFlags |= EPropertyFlags.CPF_Edit;
                     propExport.Property.PropertyFlags |= EPropertyFlags.CPF_BlueprintVisible;
                     propExport.Property.PropertyFlags |= EPropertyFlags.CPF_DisableEditOnInstance;

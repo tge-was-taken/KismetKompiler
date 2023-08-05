@@ -9,7 +9,7 @@ namespace KismetKompiler.Decompiler
     public partial class KismetDecompiler
     {
         // TODO factor this out of the class
-        private string FormatExpression(KismetExpression kismetExpression, KismetExpression? parentKismetExpression = default)
+        private string FormatExpression(KismetExpression kismetExpression, KismetExpression? parentKismetExpression)
         {
             switch (kismetExpression)
             {
@@ -22,7 +22,7 @@ namespace KismetKompiler.Decompiler
                 case EX_SetSet expr:
                     {
                         var setProperty = FormatExpression(expr.SetProperty, expr);
-                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         if (!string.IsNullOrWhiteSpace(elements))
                             return $"EX_SetSet({setProperty}, {elements})";
                         else
@@ -31,7 +31,7 @@ namespace KismetKompiler.Decompiler
                 case EX_SetConst expr:
                     {
                         var innerProperty = FormatString(_asset.GetPropertyName(expr.InnerProperty, _useFullPropertyNames));
-                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         if (!string.IsNullOrWhiteSpace(elements))
                             return $"EX_SetConst({innerProperty}, {elements})";
                         else
@@ -40,7 +40,7 @@ namespace KismetKompiler.Decompiler
                 case EX_SetMap expr:
                     {
                         var prop = FormatExpression(expr.MapProperty, expr);
-                        var elems = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elems = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         if (!string.IsNullOrWhiteSpace(elems))
                             return $"EX_SetMap({prop}, {elems})";
                         else
@@ -50,7 +50,7 @@ namespace KismetKompiler.Decompiler
                     {
                         var keyProperty = FormatString(_asset.GetPropertyName(expr.KeyProperty, _useFullPropertyNames));
                         var valueProperty = FormatString(_asset.GetPropertyName(expr.ValueProperty, _useFullPropertyNames));
-                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         if (!string.IsNullOrWhiteSpace(elements))
                             return $"EX_MapConst({keyProperty}, {valueProperty}, {elements})";
                         else
@@ -123,7 +123,7 @@ namespace KismetKompiler.Decompiler
                         var callContext = context;
                         _context = null;
 
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                         var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -141,7 +141,7 @@ namespace KismetKompiler.Decompiler
                         var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
                         .FirstOrDefault();
 
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
                         if (function != null &&
                             function.IsUbergraphFunction() &&
@@ -268,7 +268,7 @@ namespace KismetKompiler.Decompiler
                 case EX_CallMath expr:
                     {
                         var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                         if (string.IsNullOrWhiteSpace(parameters))
                             return $"{functionName}()";
                         else
@@ -282,7 +282,7 @@ namespace KismetKompiler.Decompiler
                         _context = null;
 
                         var stackNode = FormatIdentifier(GetFunctionName(expr.StackNode));
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                         var @delegate = FormatExpression(expr.Delegate, expr);
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -297,7 +297,7 @@ namespace KismetKompiler.Decompiler
                         _context = null;
 
                         var stackNode = GetFunctionName(expr.StackNode);
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
                         if (true)
                         {
@@ -322,7 +322,7 @@ namespace KismetKompiler.Decompiler
                         var callContext = context;
                         _context = null;
 
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x)));
+                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                         var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
 
                         if (string.IsNullOrWhiteSpace(parameters))
@@ -383,26 +383,26 @@ namespace KismetKompiler.Decompiler
                                 return $"EX_TextConst({type})";
                             case EBlueprintTextLiteralType.LocalizedText:
                                 {
-                                    var localizedSource = FormatExpression(expr.Value.LocalizedSource);
-                                    var localizedKey = FormatExpression(expr.Value.LocalizedKey);
-                                    var localizedNamespace = FormatExpression(expr.Value.LocalizedNamespace);
+                                    var localizedSource = FormatExpression(expr.Value.LocalizedSource, expr);
+                                    var localizedKey = FormatExpression(expr.Value.LocalizedKey, expr);
+                                    var localizedNamespace = FormatExpression(expr.Value.LocalizedNamespace, expr);
                                     return $"EX_TextConst({type}, {localizedSource}, {localizedKey}, {localizedNamespace})";
                                 }
                             case EBlueprintTextLiteralType.InvariantText:
                                 {
-                                    var invariantLiteralString = FormatExpression(expr.Value.InvariantLiteralString);
+                                    var invariantLiteralString = FormatExpression(expr.Value.InvariantLiteralString, expr);
                                     return $"EX_TextConst({type}, {invariantLiteralString})";
                                 }
                             case EBlueprintTextLiteralType.LiteralString:
                                 {
-                                    var literalString = FormatExpression(expr.Value.LiteralString);
+                                    var literalString = FormatExpression(expr.Value.LiteralString, expr);
                                     return $"EX_TextConst({type}, {literalString})";
                                 }
                             case EBlueprintTextLiteralType.StringTableEntry:
                                 {
                                     var stringTableAsset = _asset.GetName(expr.Value.StringTableAsset);
-                                    var stringTableId = FormatExpression(expr.Value.StringTableId);
-                                    var stringTableKey = FormatExpression(expr.Value.StringTableKey);
+                                    var stringTableId = FormatExpression(expr.Value.StringTableId, expr);
+                                    var stringTableKey = FormatExpression(expr.Value.StringTableKey, expr);
                                     return $"EX_TextConst({type}, {stringTableAsset}, {stringTableId}, {stringTableKey})";
                                 }
                             default:
@@ -411,7 +411,8 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_ObjectConst expr:
                     {
-                        if (parentKismetExpression is EX_Context)
+                        // TODO: change this check to to verify if the name refers to a type rather than a variable
+                        if (parentKismetExpression is (EX_Context or EX_CallMath))
                         {
                             return FormatIdentifier(_asset.GetName(expr.Value));
                         }
@@ -451,7 +452,7 @@ namespace KismetKompiler.Decompiler
                         var structName = FormatIdentifier(_asset.GetName(expr.Struct));
                         if (expr.Value?.Length > 0)
                         {
-                            var members = string.Join(", ", expr.Value.Select(x => FormatExpression(x)));
+                            var members = string.Join(", ", expr.Value.Select(x => FormatExpression(x, expr)));
                             return $"EX_StructConst({structName}, {expr.StructSize}, {members})";
                         }
                         else
@@ -463,13 +464,13 @@ namespace KismetKompiler.Decompiler
                 case EX_SetArray expr:
                     {
                         var prop = FormatExpression(expr.AssigningProperty, expr);
-                        var elems = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elems = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         return $"{prop} = [ {elems} ]";
                     }
                 case EX_ArrayConst expr:
                     {
                         var innerProperty = FormatIdentifier(_asset.GetPropertyName(expr.InnerProperty, _useFullPropertyNames));
-                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x)));
+                        var elements = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
                         if (!string.IsNullOrWhiteSpace(elements))
                         {
                             return $"EX_ArrayConst({innerProperty}, {elements})";
@@ -592,8 +593,8 @@ namespace KismetKompiler.Decompiler
                         var result = $"EX_SwitchValue({endGotoOffset}, {indexTerm}, {defaultTerm}";
                         foreach (var @case in expr.Cases)
                         {
-                            var caseIndexValueTerm = FormatExpression(@case.CaseIndexValueTerm);
-                            var caseTerm = FormatExpression(@case.CaseTerm);
+                            var caseIndexValueTerm = FormatExpression(@case.CaseIndexValueTerm, expr);
+                            var caseTerm = FormatExpression(@case.CaseTerm, expr);
                             //var nextCase = FormatCodeOffset(@case.NextOffset);
                             var nextCase = @case.NextOffset;
                             result += $", {caseIndexValueTerm}, {nextCase}, {caseTerm}";

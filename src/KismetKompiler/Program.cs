@@ -312,6 +312,8 @@ static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
         .OrderBy(x => oldAsset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
         .Select(x => new { Function = x.ObjectName.ToString(), Instructions = KismetSerializer.SerializeScript(x.ScriptBytecode) });
 
+    KismetSerializer.asset = newAsset;
+
     var newJsons = newAsset.Exports
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()

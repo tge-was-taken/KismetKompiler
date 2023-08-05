@@ -1,4 +1,4 @@
-﻿namespace KismetKompiler.Library.Decompiler.Context;
+﻿namespace KismetKompiler.Library.Decompiler.Context.Nodes;
 
 public class FunctionState
 {
