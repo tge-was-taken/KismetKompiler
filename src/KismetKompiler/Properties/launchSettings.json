@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile --input \"D:\\Users\\smart\\Downloads\\BP_HolyGrenade.uasset\" --version 4.27 -f"
+      "commandLineArgs": "compile -i D:\\Users\\smart\\Downloads\\BP_HolyGrenade.kms -o BP_HolyGrenade_New.uasset -v 4.27 --asset D:\\Users\\smart\\Downloads\\BP_HolyGrenade.uasset -f"
     }
   }
 }

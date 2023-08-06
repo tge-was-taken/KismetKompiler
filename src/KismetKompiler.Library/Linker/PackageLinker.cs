@@ -1,6 +1,7 @@
 ﻿using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Compiler.Context;
 using KismetKompiler.Library.Compiler.Intermediate;
+using System.Text.RegularExpressions;
 using UAssetAPI;
 using UAssetAPI.CustomVersions;
 using UAssetAPI.ExportTypes;
@@ -27,7 +28,7 @@ public record PackageImport(FPackageIndex Index, Import Import);
 
 public record PackageExport<T>(FPackageIndex Index, T Export) where T : Export;
 
-public class UAssetLinker : PackageLinker
+public partial class UAssetLinker : PackageLinker
 {
     private UAsset _asset;
 
@@ -42,6 +43,22 @@ public class UAssetLinker : PackageLinker
     public UAssetLinker(UAsset asset)
     {
         _asset = asset;
+    }
+
+    private FName AddName(string name)
+    {
+        var idSuffixMatch = NameIdSuffix().Match(name);
+        if (idSuffixMatch?.Success ?? false)
+        {
+            var nameWithoutSuffix = name[..^idSuffixMatch.Length];
+            if (_asset.ContainsNameReference(new(nameWithoutSuffix)) &&
+                int.TryParse(idSuffixMatch.Groups[1].Value, out var id))
+            {
+                return new FName(_asset, nameWithoutSuffix, id + 1);
+            }
+        }
+
+        return new FName(_asset, name);
     }
 
     private UAsset CreateDefaultAsset()
@@ -116,7 +133,7 @@ public class UAssetLinker : PackageLinker
         var import = _asset.FindImportByObjectName(objectName);
         if (import == null)
         {
-            import = new UAssetAPI.Import()
+            import = new Import()
             {
                 ObjectName = new(_asset, objectName),
                 OuterIndex =FPackageIndex.Null,
@@ -136,7 +153,7 @@ public class UAssetLinker : PackageLinker
         if (import == null)
         {
             var parentImport = parent.ToImport(_asset);
-            import = new UAssetAPI.Import()
+            import = new Import()
             {
                 ObjectName = new(_asset, objectName),
                 OuterIndex = parent,
@@ -203,7 +220,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -214,7 +231,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 1,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -224,7 +241,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -234,7 +251,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -244,7 +261,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -254,7 +271,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -265,7 +282,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null
@@ -276,7 +293,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null
@@ -287,7 +304,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -298,7 +315,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -309,7 +326,7 @@ public class UAssetLinker : PackageLinker
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -317,10 +334,11 @@ public class UAssetLinker : PackageLinker
             "ClassProperty" => new UClassProperty()
             {
                 MetaClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
+                //PropertyClass = FindPack
                 ArrayDim = EArrayDim.TArray,
                 ElementSize = 0,
                 PropertyFlags = propertyFlags,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
                 Next = null,
@@ -337,16 +355,16 @@ public class UAssetLinker : PackageLinker
             "ByteProperty" => new FByteProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
+                ElementSize = 1,
                 PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
 
@@ -355,8 +373,8 @@ public class UAssetLinker : PackageLinker
             "BoolProperty" => new FBoolProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
@@ -364,7 +382,7 @@ public class UAssetLinker : PackageLinker
                 ElementSize = 1,
                 PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
 
@@ -378,8 +396,8 @@ public class UAssetLinker : PackageLinker
             "IntProperty" => new FGenericProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
@@ -387,47 +405,15 @@ public class UAssetLinker : PackageLinker
                 ElementSize = 4,
                 PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
             },
             "StrProperty" => new FGenericProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
-                Flags = EObjectFlags.RF_Public,
-
-                // FProperty values
-                ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
-                PropertyFlags = propertyFlags,
-                RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
-                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                RawValue = null,
-            },
-            "FloatProperty" => new FGenericProperty()
-            {
-                // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
-                Flags = EObjectFlags.RF_Public,
-
-                // FProperty values
-                ArrayDim = EArrayDim.TArray,
-                ElementSize = 4,
-                PropertyFlags = propertyFlags,
-                RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
-                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
-                RawValue = null,
-            },
-            "DoubleProperty" => new FGenericProperty()
-            {
-                // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
@@ -435,23 +421,55 @@ public class UAssetLinker : PackageLinker
                 ElementSize = 8,
                 PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "FloatProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 4,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = AddName("None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+            },
+            "DoubleProperty" => new FGenericProperty()
+            {
+                // FField values
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 8,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
             },
             "InterfaceProperty" => new FInterfaceProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
-                PropertyFlags = EPropertyFlags.CPF_None,
+                ElementSize = 8,
+                PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
 
@@ -460,16 +478,16 @@ public class UAssetLinker : PackageLinker
             "StructProperty" => new FStructProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
-                PropertyFlags = EPropertyFlags.CPF_None,
+                ElementSize = 0, // TODO: depends on the actual size of the struct
+                PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
 
@@ -478,21 +496,58 @@ public class UAssetLinker : PackageLinker
             "ArrayProperty" => new FArrayProperty()
             {
                 // FField values
-                SerializedType = new FName(_asset, serializedType),
-                Name = new FName(_asset, symbol.Name),
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
                 Flags = EObjectFlags.RF_Public,
 
                 // FProperty values
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
-                PropertyFlags = EPropertyFlags.CPF_None,
+                ElementSize = 16,
+                PropertyFlags = propertyFlags,
                 RepIndex = 0,
-                RepNotifyFunc = new FName(_asset, "None"),
+                RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
                 RawValue = null,
 
                 // TODO verify if this works
                 Inner = CreateFProperty((VariableSymbol)symbol.InnerSymbol!, GetPropertySerializedType((VariableSymbol)symbol.InnerSymbol)),
+            },
+            "DelegateProperty" => new FDelegateProperty()
+            {
+                // FField values
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 20,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = AddName("None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                // TODO verify if this works
+                SignatureFunction = FindPackageIndexInAsset(symbol.InnerSymbol!),
+            },
+            "ObjectProperty" => new FObjectProperty()
+            {
+                // FField values
+                SerializedType = AddName(serializedType),
+                Name = AddName(symbol.Name),
+                Flags = EObjectFlags.RF_Public,
+
+                // FProperty values
+                ArrayDim = EArrayDim.TArray,
+                ElementSize = 8,
+                PropertyFlags = propertyFlags,
+                RepIndex = 0,
+                RepNotifyFunc = AddName("None"),
+                BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
+                RawValue = null,
+
+                PropertyClass = FindPackageIndexInAsset(symbol.InnerSymbol!),
             },
             _ => throw new NotImplementedException(serializedType),
         };
@@ -540,7 +595,7 @@ public class UAssetLinker : PackageLinker
             Asset = _asset,
             Property = property,
             Data = new(),
-            ObjectName = new FName(_asset, symbol.Name),
+            ObjectName = AddName(symbol.Name),
             ObjectFlags = EObjectFlags.RF_Public,
             SerialSize = 0, // Filled by serializer
             SerialOffset = 0, // Filled by serializer
@@ -630,7 +685,7 @@ public class UAssetLinker : PackageLinker
                     Old = FPackageIndex.Null,
                     New = new()
                     {
-                        Path = new FName[] { new(_asset, iProperty.Symbol.Name) },
+                        Path = new[] { AddName(iProperty.Symbol.Name) },
                         ResolvedOwner = EnsurePackageIndexForSymbolCreated(iProperty.Symbol.DeclaringSymbol),
                     }
                 };
@@ -665,7 +720,7 @@ public class UAssetLinker : PackageLinker
     {
         if (name is IntermediateName iName)
         {
-            name = new FName(_asset, iName.TextValue);
+            name = AddName(iName.TextValue);
         }
     }
 
@@ -677,7 +732,7 @@ public class UAssetLinker : PackageLinker
 
     private string? GetFullName(object obj)
     {
-        if (obj is UAssetAPI.Import import)
+        if (obj is Import import)
         {
             if (import.OuterIndex.Index != 0)
             {
@@ -742,7 +797,7 @@ public class UAssetLinker : PackageLinker
         {
             if (export.ObjectName.ToString() == name)
             {
-                yield return ((export, new FPackageIndex(+(_asset.Exports.IndexOf(export) + 1))));
+                yield return (export, new FPackageIndex(+(_asset.Exports.IndexOf(export) + 1)));
             }
         }
     }
@@ -769,7 +824,7 @@ public class UAssetLinker : PackageLinker
             var exportFullName = GetFullName(export);
             if (exportFullName == name)
             {
-                yield return ((export, new FPackageIndex(+(_asset.Exports.IndexOf(export) + 1))));
+                yield return (export, new FPackageIndex(+(_asset.Exports.IndexOf(export) + 1)));
             }
         }
     }
@@ -894,7 +949,8 @@ public class UAssetLinker : PackageLinker
                     break;
 
                 case EX_SetArray expr:
-                    FixPackageIndex(ref expr.ArrayInnerProp);
+                    if (_asset.ObjectVersion < ObjectVersion.VER_UE4_CHANGE_SETARRAY_BYTECODE)
+                        FixPackageIndex(ref expr.ArrayInnerProp);
                     break;
 
                 case EX_StructConst expr:
@@ -1104,7 +1160,7 @@ public class UAssetLinker : PackageLinker
             FuncMap = new(),
             ClassFlags = EClassFlags.CLASS_Parsed | EClassFlags.CLASS_ReplicationDataIsSetUp | EClassFlags.CLASS_CompiledFromBlueprint | EClassFlags.CLASS_HasInstancedReference,
             ClassWithin = objectObjectIndex, // -11
-            ClassConfigName = new FName(_asset, "Engine"),
+            ClassConfigName = AddName("Engine"),
             Interfaces = Array.Empty<SerializedInterfaceReference>(),
             ClassGeneratedBy = FPackageIndex.Null,
             bDeprecatedForceScriptOrder = false,
@@ -1147,7 +1203,7 @@ public class UAssetLinker : PackageLinker
                   ],
              */
             Data = new(),
-            ObjectName = new FName(_asset, classContext.Symbol.Name),
+            ObjectName = AddName(classContext.Symbol.Name),
             ObjectFlags = EObjectFlags.RF_Public | EObjectFlags.RF_Transactional,
             SerialSize = 0xDEADBEEF,
             SerialOffset = 0xDEADBEEF,
@@ -1257,4 +1313,7 @@ public class UAssetLinker : PackageLinker
     {
         return _asset;
     }
+
+    [GeneratedRegex("_(\\d+)")]
+    private static partial Regex NameIdSuffix();
 }
