@@ -39,14 +39,14 @@ namespace KismetKompiler.Library.Decompiler.Passes
                 var parent = _stack.Peek();
                 var node = context.Expression switch
                 {
-                    EX_Jump or EX_ComputedJump or EX_SwitchValue => new JumpNode()
+                    EX_Jump or EX_ComputedJump or EX_SwitchValue or EX_PopExecutionFlow => new JumpNode()
                     {
                         CodeStartOffset = context.CodeStartOffset,
                         Parent = parent,
                         Source = context.Expression,
                         Target = null
                     },
-                    EX_JumpIfNot => new ConditionalJumpNode()
+                    EX_JumpIfNot or EX_PopExecutionFlowIfNot => new ConditionalJumpNode()
                     {
                         CodeStartOffset = context.CodeStartOffset,
                         Parent = parent,

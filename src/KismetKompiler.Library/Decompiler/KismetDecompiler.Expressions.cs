@@ -323,12 +323,18 @@ namespace KismetKompiler.Decompiler
                         _context = null;
 
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
-                        var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
 
+                        var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
                         if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}.EX_VirtualFunction({virtualFunctionName})";
+                            return $"{context}.{virtualFunctionName}()";
                         else
-                            return $"{context}.EX_VirtualFunction({virtualFunctionName}, {parameters})";
+                            return $"{context}.{virtualFunctionName}({parameters})";
+
+                        //var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
+                        //if (string.IsNullOrWhiteSpace(parameters))
+                        //    return $"{context}.EX_VirtualFunction({virtualFunctionName})";
+                        //else
+                        //    return $"{context}.EX_VirtualFunction({virtualFunctionName}, {parameters})";
                     }
                 case EX_Context expr:
                     {
@@ -465,7 +471,7 @@ namespace KismetKompiler.Decompiler
                     {
                         var prop = FormatExpression(expr.AssigningProperty, expr);
                         var elems = string.Join(", ", expr.Elements.Select(x => FormatExpression(x, expr)));
-                        return $"{prop} = [ {elems} ]";
+                        return $"{prop} = new[] {{{elems}}}";
                     }
                 case EX_ArrayConst expr:
                     {
@@ -557,10 +563,13 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_PopExecutionFlow expr:
                     {
+                        //return "break";
                         return $"EX_PopExecutionFlow()";
                     }
                 case EX_PopExecutionFlowIfNot expr:
                     {
+                        //var booleanExpression = FormatExpression(expr.BooleanExpression, expr);
+                        //return $"if (!({booleanExpression})) break";
                         return $"EX_PopExecutionFlowIfNot({FormatExpression(expr.BooleanExpression, expr)})";
                     }
                 case EX_Breakpoint expr:

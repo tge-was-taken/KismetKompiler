@@ -668,6 +668,22 @@ public partial class KismetScriptCompiler
                     Elements = initializerList.Expressions.Select(x => CompileSubExpression(x)).ToArray()
                 });
             }
+            else if (assignmentOperator.Right is NewExpression newExpression)
+            {
+                if (newExpression.IsArray)
+                {
+                    return Emit(assignmentOperator, new EX_SetArray()
+                    {
+                        ArrayInnerProp = GetPackageIndex(assignmentOperator.Left),
+                        AssigningProperty = CompileSubExpression(assignmentOperator.Left),
+                        Elements = newExpression.Initializer.Select(x => CompileSubExpression(x)).ToArray()
+                    });
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
+            }
             else
             {
                 TryGetPropertyPointer(assignmentOperator.Left, out var pointer);
@@ -1026,6 +1042,11 @@ public partial class KismetScriptCompiler
     }
 
     private CompiledExpressionContext CompileInitializerList(InitializerList initializerListExpression)
+    {
+        throw new NotImplementedException();
+    }
+
+    private CompiledExpressionContext CompileNewExpression(NewExpression newExpression)
     {
         throw new NotImplementedException();
     }

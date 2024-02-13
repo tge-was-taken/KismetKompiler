@@ -53,6 +53,13 @@ namespace KismetKompiler.Library.Decompiler.Passes
                                     jumpNode.Target = root.Children.FirstOrDefault(x => x.CodeStartOffset == expr.EndGotoOffset);
                                 }
                                 break;
+                            case EX_PushExecutionFlow expr:
+                                jumpNode.Target = root.Children.First(x => x.CodeStartOffset == expr.PushingAddress);
+                                break;
+                            case EX_PopExecutionFlow expr:
+                            case EX_PopExecutionFlowIfNot expr2:
+                                // Depends on execution context
+                                break;
                         }
                     }
                     else

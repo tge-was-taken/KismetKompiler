@@ -65,7 +65,7 @@ variableDeclarationStatement
 	;
 
 arraySignifier
-	: ('['  ']')
+	: ('['  IntLiteral? ']')
 	;
 
 enumTypeDeclarationStatement
@@ -139,6 +139,7 @@ expression
 	| '(' expression ')'													# compoundExpression
 	| '{' (expression)? (',' expression)* (',')? '}'						# braceInitializerListExpression
 	| '[' (expression)? (',' expression)* (',')? ']'						# bracketInitializerListExpression
+	| New typeIdentifier? arraySignifier? '{' (expression)? (',' expression)* (',')? '}' # newExpression
 	| Identifier '[' expression ']'											# subscriptExpression
 	| expression Op=('.'|'->') expression									# memberExpression
 	| '(' typeIdentifier ')' expression										# castExpression				// precedence 2
@@ -236,6 +237,7 @@ Import:	'import';
 Package: 'package';
 From: 'from';
 Typeof: 'typeof';
+New:	'new';
 
 //	Storage types
 Function:	'function';

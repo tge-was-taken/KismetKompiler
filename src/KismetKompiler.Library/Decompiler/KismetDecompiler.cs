@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
+using System.Security.AccessControl;
 using System.Text.RegularExpressions;
 using KismetKompiler.Library;
 using KismetKompiler.Library.Decompiler;
+using KismetKompiler.Library.Decompiler.Analysis;
 using KismetKompiler.Library.Decompiler.Context;
 using KismetKompiler.Library.Decompiler.Context.Nodes;
 using KismetKompiler.Library.Decompiler.Context.Properties;
@@ -41,6 +43,7 @@ public partial class KismetDecompiler
     private readonly IndentedWriter _writer;
     private Context _context;
     private ClassExport _class;
+    private KismetAnalysisResult _analysisResult;
 
     private static EClassFlags[] classModifierFlags = new[] { EClassFlags.CLASS_Abstract };
 
@@ -53,6 +56,10 @@ public partial class KismetDecompiler
     {
         _asset = asset;
         _class = _asset.GetClassExport();
+
+        var analyser = new KismetAnalyser();
+        _analysisResult = analyser.Analyse(asset);
+
         if (_class != null)
         {
             //_writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
@@ -119,7 +126,7 @@ public partial class KismetDecompiler
         _writer.WriteLine($"}}");
     }
 
-    private void WriteImports()
+    private void WriteImportsOld()
     {
         _writer.WriteLine("// Imports");
         List<Import> imports;
@@ -158,7 +165,7 @@ public partial class KismetDecompiler
                     }
                     else
                     {
-                        var functionTokens = new[] { EExprToken.EX_FinalFunction, EExprToken.EX_LocalFinalFunction, EExprToken.EX_LocalVirtualFunction, EExprToken.EX_VirtualFunction, EExprToken.EX_CallMath };
+                        var functionTokens = new[] { EExprToken.EX_FinalFunction, EExprToken.EX_LocalFinalFunction, EExprToken.EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction, EExprToken.EX_CallMath };
                         var functionCalls = _asset.Exports
                             .Where(x => x is FunctionExport)
                             .Cast<FunctionExport>()
@@ -210,15 +217,22 @@ public partial class KismetDecompiler
                             {
                                 EExprToken.EX_FinalFunction => "sealed",
                                 EExprToken.EX_LocalFinalFunction => "sealed",
-                                EExprToken.EX_LocalVirtualFunction => "virtual",
+
                                 EExprToken.EX_VirtualFunction => "virtual",
+                                EExprToken.EX_LocalVirtualFunction => "virtual",
+
                                 EExprToken.EX_CallMath => "static sealed",
                             };
                             functionModifiers.Add(functionModifier);
                             var functionAttribute = callInstruction switch
                             {
-                                EExprToken.EX_LocalFinalFunction => "CalledLocally",
-                                EExprToken.EX_LocalVirtualFunction => "CalledLocally",
+                                EExprToken.EX_FinalFunction => "FinalFunction",
+                                EExprToken.EX_LocalFinalFunction => "LocalFinalFunction",
+                                
+                                EExprToken.EX_VirtualFunction => "VirtualFunction",
+                                EExprToken.EX_LocalVirtualFunction => "LocalVirtualFunction",
+
+                                EExprToken.EX_CallMath => "MathFunction",
                                 _ => ""
                             };
                             if (!string.IsNullOrWhiteSpace(functionAttribute))
@@ -391,6 +405,134 @@ public partial class KismetDecompiler
         _writer.WriteLine();
     }
 
+    private void WriteImports()
+    {
+        var importQueue = new Queue<Symbol>();
+        var isInsideClassDecl = false;
+
+        void WriteImport(Symbol symbol)
+        {
+            if (symbol.Class?.Name == "Package")
+            {
+                var ns = symbol.Name.Replace("/", ".").Trim('.');
+                _writer.WriteLine($"namespace {ns} {{");
+                _writer.Push();
+                foreach (var child in symbol.Children)
+                    WriteImport(child);
+                _writer.Pop();
+                _writer.WriteLine("}");
+            }
+            else if (symbol.Children.Count > 0)
+            {
+                if (symbol.Class.Name == "ArrayProperty")
+                {
+                    if (symbol.Children.Count() != 1)
+                        throw new NotImplementedException();
+
+                    _writer.Write($"Array<{GetDecompiledTypeName(symbol.Children.First().Class.Name)}> {FormatIdentifier(symbol.Name)}");
+                }
+                else if (isInsideClassDecl)
+                {
+                    _writer.WriteLine($"[Import] public {FormatIdentifier(symbol.Class?.Name)} {FormatIdentifier(symbol.Name)};");
+                    if (!importQueue.Any(x => x.Name == symbol.Name))
+                        importQueue.Enqueue(symbol);
+                }
+                else
+                {
+                    if (symbol.Class.Name != "Class")
+                        _writer.WriteLine($"[Import] public class {symbol.Name} : {symbol.Class.Name} {{");
+                    else
+                        _writer.WriteLine($"[Import] public class {symbol.Name} {{");
+                    _writer.Push();
+                    isInsideClassDecl = true;
+                    foreach (var child in symbol.Children)
+                        WriteImport(child);
+                    isInsideClassDecl = false;
+                    _writer.Pop();
+                    _writer.WriteLine("}");
+
+                    while (importQueue.Count > 0)
+                    {
+                        var queuedSymbol = importQueue.Dequeue();
+                        //WriteImport(queuedSymbol);
+                    }
+                }
+            }
+            else if (symbol.Class != null)
+            {
+                if (symbol.Class.Name == "Function")
+                {
+                    if (symbol.Name == "Default__Function")
+                    {
+                        _writer.WriteLine($"[Import] {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
+                    }
+                    else
+                    {
+                        var functionModifiers = new List<string>() { "public" };
+                        var functionAttributes = new List<string>() { "Import", "UnknownSignature" };
+
+                        var functionModifier = symbol.CallingConvention switch
+                        {
+                            CallingConvention.FinalFunction => "sealed",
+                            CallingConvention.LocalFinalFunction => "sealed",
+
+                            CallingConvention.VirtualFunction => "virtual",
+                            CallingConvention.LocalVirtualFunction => "virtual",
+
+                            CallingConvention.CallMath => "static sealed",
+                            _ => "",
+                        };
+                        functionModifiers.Add(functionModifier);
+                        var functionAttribute = symbol.CallingConvention switch
+                        {
+                            CallingConvention.FinalFunction => "FinalFunction",
+                            CallingConvention.LocalFinalFunction => "LocalFinalFunction",
+
+                            CallingConvention.VirtualFunction => "VirtualFunction",
+                            CallingConvention.LocalVirtualFunction => "LocalVirtualFunction",
+
+                            CallingConvention.CallMath => "MathFunction",
+                            _ => ""
+                        };
+                        if (!string.IsNullOrWhiteSpace(functionAttribute))
+                            functionAttributes.Add(functionAttribute);
+
+                        var functionAttributeText = string.Join(", ", functionAttributes);
+                        if (!string.IsNullOrWhiteSpace(functionAttributeText))
+                            functionAttributeText = $"[{functionAttributeText}] ";
+
+                        var functionModifierText = string.Join(" ", functionModifiers);
+                        if (!string.IsNullOrWhiteSpace(functionModifierText))
+                            functionModifierText = $"{functionModifierText} ";
+
+                        _writer.WriteLine($"{functionAttributeText}{functionModifierText}void {FormatIdentifier(symbol.Name)}()");
+                    }
+                }
+                else
+                {
+                    var cls = symbol.Class.Name == "Class" ? "Type" : symbol.Class.Name;
+                    _writer.WriteLine($"[Import] public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
+                }
+            }
+        }
+
+        var importSymbols = _analysisResult.RootSymbols.Where(x => x.Import != null).ToList();
+        foreach (var symbol in importSymbols)
+            WriteImport(symbol);
+
+        _writer.WriteLine();
+        foreach (var symbol in importSymbols)
+        {
+            if (symbol.Class.Name == "Package")
+            {
+                var ns = symbol.Name.Replace("/", ".").Trim('.');
+                _writer.WriteLine($"using {ns};");
+            }
+        }
+
+        _writer.WriteLine();
+    }
+
     public string DecompileFunction(FunctionExport function)
     {
         _asset ??= (UAsset)function.Asset;
@@ -402,6 +544,7 @@ public partial class KismetDecompiler
         root = ExecutePass<CreateBasicBlocksPass>(root);
         root = ExecutePass<RemoveGotoReturnsPass>(root);
         root = ExecutePass<CreateIfBlocksPass>(root);
+        root = ExecutePass<CreateWhileBlocksPass>(root);
 
         if (!_verbose)
             WriteFunction(function, root);
@@ -508,6 +651,21 @@ public partial class KismetDecompiler
                     _writer.WriteLine($"}}");
                     _writer.WriteLine();
                 }
+                else if (block is JumpBlockNode whileBlock)
+                {
+                    var isBlockStart = block.ReferencedBy.Count > 0 ||
+                        (isUbergraphFunction && IsUbergraphEntrypoint(block.CodeStartOffset));
+
+                    if (isBlockStart)
+                        _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset)}:");
+
+                    _writer.WriteLine($"while (true) {{");
+                    _writer.Push();
+                    WriteBlock(whileBlock);
+                    _writer.Pop();
+                    _writer.WriteLine($"}}");
+                    _writer.WriteLine();
+                }
                 else
                 {
                     _writer.WriteLine($"// Block {nextBlockIndex++}");
@@ -524,6 +682,29 @@ public partial class KismetDecompiler
                             else if (returnNode.Source is EX_JumpIfNot jumpIfNot)
                             {
                                 WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpression(jumpIfNot.BooleanExpression, null)}) return");
+                            }
+                            else
+                            {
+                                WriteExpression(node, isUbergraphFunction);
+                            }
+                        }
+                        else if (node is JumpNode jumpNode)
+                        {
+                            if (!jumpNode.Parent.Children.Any(x => x.Source is EX_PushExecutionFlow) &&
+                                !jumpNode.Parent.Parent.Children.SelectMany(x => x.Children).Any(x => x.Source is EX_PushExecutionFlow))
+                            {
+                                if (jumpNode.Source is EX_PopExecutionFlow)
+                                {
+                                    WriteExpression(node, isUbergraphFunction, "break");
+                                }
+                                else if (jumpNode.Source is EX_PopExecutionFlowIfNot popExecutionFlowIfNot)
+                                {
+                                    WriteExpression(node, isUbergraphFunction, $"if (!{FormatExpression(popExecutionFlowIfNot.BooleanExpression, null)}) break");
+                                }
+                                else
+                                {
+                                    WriteExpression(node, isUbergraphFunction);
+                                }
                             }
                             else
                             {
@@ -682,9 +863,8 @@ public partial class KismetDecompiler
         }, root);
     }
 
-    private string GetDecompiledTypeName(Import import)
+    private string GetDecompiledTypeName(string classType)
     {
-        var classType = import.ClassName.ToString();
         switch (classType)
         {
             case "Package":
@@ -708,6 +888,13 @@ public partial class KismetDecompiler
 
                 return FormatIdentifier(classType);
         }
+    }
+
+
+    private string GetDecompiledTypeName(Import import)
+    {
+        var classType = import.ClassName.ToString();
+        return GetDecompiledTypeName(classType);
     }
 
     private string GetDecompiledType(IPropertyData prop)
@@ -857,113 +1044,6 @@ public partial class KismetDecompiler
         return entryPoints.Contains(codeOffset);
     }
 
-    private string? GetPropertyType(KismetPropertyPointer kismetPropertyPointer)
-    {
-        var prop = _asset.GetProperty(kismetPropertyPointer);
-        if (prop != null)
-        {
-            if (prop is Import import)
-            {
-                // TODO
-            }
-            else if (prop is Export export)
-            {
-                var classType = export.GetExportClassType();
-                if (classType.ToString() == "IntProperty")
-                {
-                    return "int";
-                }
-                else if (classType.ToString() == "BoolProperty")
-                {
-                    return "bool";
-                }
-                else
-                {
-                    // TODO
-                }
-            }
-        }
-        return null;
-    }
-
-    private string? GetExpressionType(KismetExpression kismetExpression)
-    {
-        switch (kismetExpression)
-        {
-            case EX_LocalVariable expr:
-                return GetPropertyType(expr.Variable);
-            case EX_InstanceVariable expr:
-                return GetPropertyType(expr.Variable);
-            case EX_IntConst expr:
-                return "int";
-            case EX_FloatConst expr:
-                return "float";
-            case EX_StringConst expr:
-                return "string";
-            case EX_ByteConst expr:
-                return "byte";
-            case EX_UnicodeStringConst:
-                return "wstring";
-            case EX_True:
-                return "bool";
-            case EX_False:
-                return "bool";
-            case EX_CallMath expr:
-                {
-                    var name = _asset.GetName(expr.StackNode);
-                    if (name.EndsWith("ToString"))
-                    {
-                        return "string";
-                    }
-                    else if (name.EndsWith("ToInt"))
-                    {
-                        return "int";
-                    }
-                    else if (name.EndsWith("ToByte"))
-                    {
-                        return "byte";
-                    }
-                    else if (
-                        name.StartsWith("NotEqual_") ||
-                        name.StartsWith("GreaterEqual_") ||
-                        name.StartsWith("EqualEqual_") ||
-                        name.StartsWith("Boolean") ||
-                        name.StartsWith("Less_") ||
-                        name.StartsWith("Greater_") ||
-                        name.StartsWith("Not_"))
-                    {
-                        return "bool";
-                    }
-
-                    switch (name)
-                    {
-                        case "Conv_IntToString":
-                        case "Concat_StrStr":
-                            return "string";
-
-                        case "NotEqual_IntInt":
-                        case "GreaterEqual_IntInt":
-                        case "EqualEqual_IntInt":
-                        case "BooleanOR":
-                        case "Less_IntInt":
-                            return "bool";
-
-                        case "Add_IntInt":
-                            return "int";
-
-                        case "RandomIntegerInRange":
-                            return "int";
-
-                        default:
-                            break;
-                    }
-                    return null;
-                }
-            default:
-                return null;
-        }
-    }
-
     private string EscapeFullName(string name)
     {
         return name;
@@ -977,6 +1057,7 @@ public partial class KismetDecompiler
     }
 
     private string FormatCodeOffset(uint codeOffset, string? functionName = null) => FormatIdentifier($"{(functionName ?? _function.ObjectName.ToString())}_{codeOffset}");
+
     [GeneratedRegex("^[A-Za-z_][A-Za-z_\\d]*$")]
     private static partial Regex IdentifierRegex();
 }

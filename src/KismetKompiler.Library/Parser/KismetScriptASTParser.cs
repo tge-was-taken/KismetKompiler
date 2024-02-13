@@ -10,6 +10,7 @@ using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Declarations;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
+using static KismetKompiler.Library.Parser.KismetScriptParser;
 
 namespace KismetKompiler.Library.Parser;
 
@@ -821,6 +822,13 @@ public class KismetScriptASTParser
 
             expression = initializerList;
         }
+        else if (TryCast<KismetScriptParser.NewExpressionContext>(context, out var newExpressionContext))
+        {
+            var newExpression = CreateAstNode<NewExpression>(newExpressionContext);
+            if (!TryParseNewExpression(newExpressionContext, out var expr))
+                return false;
+            expression = expr;
+        }
         else if (TryCast<KismetScriptParser.SubscriptExpressionContext>(context, out var subscriptExpressionContext))
         {
             var subscriptOperator = CreateAstNode<SubscriptOperator>(subscriptExpressionContext);
@@ -996,7 +1004,39 @@ public class KismetScriptASTParser
             LogError(context, "Unknown expression");
             return false;
         }
+        return true;
+    }
 
+    private bool TryParseNewExpression(KismetScriptParser.NewExpressionContext context, out NewExpression newExpression)
+    {
+        newExpression = CreateAstNode<NewExpression>(context);
+        if (context.typeIdentifier() != null)
+        {
+            if (!TryParseTypeIdentifier(context.typeIdentifier(), out var typeIdentifier))
+                return false;
+            newExpression.TypeIdentifier = typeIdentifier;
+        }
+        if (context.arraySignifier() != null)
+        {
+            newExpression.IsArray = true;
+
+            if (context.arraySignifier().IntLiteral() != null)
+            {
+                if (!TryParseIntLiteral(context.arraySignifier().IntLiteral(), out var arrayLength))
+                    return false;
+                newExpression.ArrayLength = arrayLength;
+            }
+        }
+        if (context.expression() != null)
+        { 
+            newExpression.Initializer = new();
+            foreach (var item in context.expression())
+            {
+                if (!TryParseExpression(item, out var expr))
+                    return false;
+                newExpression.Initializer.Add(expr);
+            }
+        }
         return true;
     }
 

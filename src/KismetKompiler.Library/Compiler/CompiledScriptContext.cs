@@ -33,8 +33,6 @@ public class CompiledLabelContext : CompiledDeclarationContext<LabelSymbol>
 public class CompiledFunctionContext : CompiledDeclarationContext<ProcedureSymbol>
 {
     public CompiledFunctionContext(ProcedureSymbol symbol) : base(symbol) { }
-
-    public EFunctionFlags Flags { get; set; }
     public List<CompiledVariableContext> Variables { get; init; } = new();
     public List<CompiledLabelContext> Labels { get; init; } = new();
     public List<KismetExpression> Bytecode { get; init; } = new();

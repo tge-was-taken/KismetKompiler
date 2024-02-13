@@ -252,6 +252,13 @@ public class TypeResolver
                 ResolveTypesInExpression(expr);
             }
         }
+        else if (expression is NewExpression newExpression)
+        {
+            foreach (var expr in newExpression.Initializer)
+            {
+                ResolveTypesInExpression(expr);
+            }
+        }
         else if (expression is SubscriptOperator subscriptOperator)
         {
             expression.ExpressionValueKind = subscriptOperator.Operand.ExpressionValueKind;

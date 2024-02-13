@@ -16,7 +16,8 @@ namespace KismetKompiler.Library.Decompiler.Passes
                 var end = root.Children.Count - 1;
                 for (int j = i; j < root.Children.Count; j++)
                 {
-                    if (root.Children[j] is JumpNode jumpNode ||
+                    if (root.Children[j] is JumpNode ||
+                        root.Children[j].Source.Token == EExprToken.EX_PushExecutionFlow ||
                         root.Children[j].Source.Token == EExprToken.EX_EndOfScript)
                     {
                         // A jump has been found

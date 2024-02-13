@@ -2,8 +2,14 @@
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using System.CodeDom.Compiler;
+using static KismetKompiler.Library.KismetExpressionVisitor;
 
 namespace KismetKompiler.Library;
+
+public abstract class KismetExpressionVisitor : KismetExpressionVisitor<VisitorContext>
+{
+    public class VisitorContext { }
+}
 
 public abstract class KismetExpressionVisitor<T>
 {
@@ -50,7 +56,7 @@ public abstract class KismetExpressionVisitor<T>
         return codeOffset;
     }
 
-    public void Visit(KismetExpression expression, ref int codeOffset)
+    public virtual void Visit(KismetExpression expression, ref int codeOffset)
     {
         var codeStartOffset = codeOffset;
         var ctx = new KismetExpressionContext<T>(expression, codeOffset, default);

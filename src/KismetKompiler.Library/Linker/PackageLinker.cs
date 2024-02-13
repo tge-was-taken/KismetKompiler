@@ -1049,7 +1049,7 @@ public partial class UAssetLinker : PackageLinker
 
         var export = new FunctionExport()
         {
-            FunctionFlags = context.Flags,
+            FunctionFlags = context.Symbol.Flags,
             SuperStruct = baseFunctionIndex,
             Children = new(),
             LoadedProperties = new(),

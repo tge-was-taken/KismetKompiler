@@ -253,6 +253,8 @@ namespace KismetKompiler.Library.Compiler.Context
         }
 
         public override SymbolCategory SymbolCategory => SymbolCategory.Class;
+
+        public bool IsInterface { get; internal set; }
     }
 
     public class EnumSymbol : DeclaredSymbol<EnumDeclaration>, IExportSymbol
@@ -283,12 +285,24 @@ namespace KismetKompiler.Library.Compiler.Context
 
         public override SymbolCategory SymbolCategory => SymbolCategory.Procedure;
 
-        public bool IsUbergraphFunction
-            => (Declaration?.Attributes.Any(x => x.Identifier.Text == "UbergraphFunction") ?? false) ||
-               (Declaration?.Identifier?.Text.StartsWith("ExecuteUbergraph_") ?? false);
+        public EFunctionFlags Flags { get; init; } = 0;
+
+        public FunctionCustomFlags CustomFlags { get; init; } = 0;
 
         public bool IsVirtual
             => Declaration?.IsVirtual ?? false;
+
+        public bool HasAllFunctionFlags(EFunctionFlags flags)
+            => (Flags & flags) == flags;
+
+        public bool HasAnyFunctionFlags(EFunctionFlags flags)
+            => (Flags & flags) != 0;
+
+        public bool HasAllFunctionExtendedFlags(FunctionCustomFlags flags)
+            => (CustomFlags & flags) == flags;
+
+        public bool HasAnyFunctionCustomFlags(FunctionCustomFlags flags)
+            => (CustomFlags & flags) != 0;
     }
 
     public class LabelSymbol : DeclaredSymbol<LabelDeclaration>
@@ -400,11 +414,28 @@ namespace KismetKompiler.Library.Compiler.Context
 
     public class Scope : SymbolTableBase
     {
+        private LabelSymbol? _breakLabel;
+        private LabelSymbol? _continueLabel;
+        private bool? _isExecutionFlow;
+
         public Scope Parent { get; set; }
         public Symbol? DeclaringSymbol { get; set; }
         public ISymbolTable SymbolTable { get; set; }
-        public LabelSymbol? BreakLabel { get; set; }
-        public LabelSymbol? ContinueLabel { get; set; }
+        public LabelSymbol? BreakLabel
+        {
+            get => _breakLabel ?? Parent?.BreakLabel;
+            set => _breakLabel = value;
+        }
+        public LabelSymbol? ContinueLabel
+        {
+            get => _continueLabel ?? Parent?.ContinueLabel;
+            set => _continueLabel = value;
+        }
+        public bool? IsExecutionFlow
+        {
+            get => _isExecutionFlow ?? Parent?.IsExecutionFlow;
+            set => _isExecutionFlow = value;
+        }
         public Dictionary<Expression, LabelSymbol> SwitchLabels { get; set; } = new();
 
         public Scope(Scope parent, Symbol? declaringSymbol)

@@ -19,9 +19,6 @@ using System.Reflection;
 
 namespace KismetKompiler.Library.Compiler;
 
-// TODO: refactor symbol/context handling
-// How it works currently is very confusing
-
 public partial class KismetScriptCompiler
 {
     private ObjectVersion _objectVersion = 0;
@@ -245,6 +242,8 @@ public partial class KismetScriptCompiler
                     Name = procedureDeclaration.Identifier.Text,
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
+                    Flags = GetFunctionFlags(procedureDeclaration),
+                    CustomFlags = GetExtendedFunctionFlags(procedureDeclaration)             
                 };
                 if (procedureDeclaration.Body != null)
                 {
@@ -410,7 +409,7 @@ public partial class KismetScriptCompiler
 
     private static bool ShouldGloballyDeclareProcecureLocalSymbol(Symbol item)
     {
-        var isUbergraphFunction = item.DeclaringProcedure?.IsUbergraphFunction ?? false;
+        var isUbergraphFunction = item.DeclaringProcedure?.HasAnyFunctionFlags(EFunctionFlags.FUNC_UbergraphFunction) ?? false;
         var isK2NodeVariable = item.Name.StartsWith("K2Node") && item.SymbolCategory == SymbolCategory.Variable;
         var isLabel = item.SymbolCategory == SymbolCategory.Label;
         var shouldDeclareSymbol = isUbergraphFunction && (isK2NodeVariable || isLabel);
@@ -528,13 +527,22 @@ public partial class KismetScriptCompiler
 
         foreach (var attr in procedureDeclaration.Attributes)
         {
-            if (attr.Identifier.Text == "Extern" ||
-                attr.Identifier.Text == "UnknownSignature")
-                continue;
-
             var flagFormat = $"FUNC_{attr.Identifier.Text}";
             if (!Enum.TryParse<EFunctionFlags>(flagFormat, out var flag))
-                throw new CompilationError(attr, $"Unknown function attribute: {attr}");
+                continue;
+            functionFlags |= flag;
+        }
+        return functionFlags;
+    }
+
+    private FunctionCustomFlags GetExtendedFunctionFlags(ProcedureDeclaration procedureDeclaration)
+    {
+        FunctionCustomFlags functionFlags = 0;
+        foreach (var attr in procedureDeclaration.Attributes)
+        {
+            var flagFormat = $"{attr.Identifier.Text}";
+            if (!Enum.TryParse<FunctionCustomFlags>(attr.Identifier.Text, out var flag))
+                continue;
             functionFlags |= flag;
         }
         return functionFlags;
@@ -549,9 +557,6 @@ public partial class KismetScriptCompiler
             Declaration = procedureDeclaration,
             Symbol = symbol,
             CompiledFunctionContext = new CompiledFunctionContext(symbol)
-            {
-                Flags = GetFunctionFlags(procedureDeclaration)
-            }
         };
 
         if (!procedureDeclaration.IsExternal)
@@ -704,7 +709,14 @@ public partial class KismetScriptCompiler
         if (CurrentScope.BreakLabel == null)
             throw new CompilationError(breakStatement, "break is not valid in this context");
 
-        EmitPrimaryExpression(breakStatement, new EX_Jump(), new[] { CurrentScope.BreakLabel });
+        if (CurrentScope.IsExecutionFlow.GetValueOrDefault(false))
+        {
+            EmitPrimaryExpression(breakStatement, new EX_PopExecutionFlow());
+        }
+        else
+        {
+            EmitPrimaryExpression(breakStatement, new EX_Jump(), new[] { CurrentScope.BreakLabel });
+        }
     }
 
     private void CompileSwitchStatement(SwitchStatement switchStatement)
@@ -823,6 +835,16 @@ public partial class KismetScriptCompiler
                 BooleanExpression = CompileSubExpression(notOperator2.Operand)
             }, new[] { _functionContext.ReturnLabel });
         }
+        // Match 'if (!CallFunc_BI_TempFlagCheck_retValue) break;'
+        else if (ifStatement.Condition is LogicalNotOperator notOperator3 &&
+            ifStatement.Body?.FirstOrDefault() is BreakStatement &&
+            CurrentScope.IsExecutionFlow.GetValueOrDefault(false))
+        {
+            EmitPrimaryExpression(ifStatement, new EX_PopExecutionFlowIfNot()
+            {
+                BooleanExpression = CompileSubExpression(notOperator3.Operand)
+            });
+        }
         else
         {
             var endLabel = CreateCompilerLabel("IfStatementEndLabel");
@@ -857,29 +879,56 @@ public partial class KismetScriptCompiler
         PushScope(null);
         try
         {
-            var endLabel = CreateCompilerLabel("WhileStatement_EndLabel");
-            var conditionLabel = CreateCompilerLabel("WhileStatement_ConditionLabel");
-
             // Condition
-            ResolveLabel(conditionLabel);
-            EmitPrimaryExpression(whileStatement, new EX_JumpIfNot()
+            if (whileStatement.Condition is BoolLiteral boolLiteral &&
+                boolLiteral.Value)
             {
-                BooleanExpression = CompileSubExpression(whileStatement.Condition),
-            }, new[] { endLabel });
+                var endLabel = CreateCompilerLabel("WhileStatement_EndLabel");
+                var conditionLabel = CreateCompilerLabel("WhileStatement_ConditionLabel");
 
-            // Body
-            if (whileStatement.Body != null)
-            {
-                CurrentScope.BreakLabel = endLabel;
-                CurrentScope.ContinueLabel = conditionLabel;
-                CompileCompoundStatement(whileStatement.Body);
+                ResolveLabel(conditionLabel);
+                EmitPrimaryExpression(whileStatement, new EX_PushExecutionFlow(), new[] { endLabel });
+
+                // Body
+                if (whileStatement.Body != null)
+                {
+                    CurrentScope.BreakLabel = endLabel;
+                    CurrentScope.ContinueLabel = conditionLabel;
+                    CurrentScope.IsExecutionFlow = true;
+                    CompileCompoundStatement(whileStatement.Body);
+                }
+
+                // Jump to condition
+                //EmitPrimaryExpression(whileStatement, new EX_Jump(), new[] { conditionLabel });
+
+                // End
+                ResolveLabel(endLabel);
             }
+            else
+            {
+                var endLabel = CreateCompilerLabel("WhileStatement_EndLabel");
+                var conditionLabel = CreateCompilerLabel("WhileStatement_ConditionLabel");
 
-            // Jump to condition
-            EmitPrimaryExpression(whileStatement, new EX_Jump(), new[] { conditionLabel });
+                ResolveLabel(conditionLabel);
+                EmitPrimaryExpression(whileStatement, new EX_JumpIfNot()
+                {
+                    BooleanExpression = CompileSubExpression(whileStatement.Condition),
+                }, new[] { endLabel });
 
-            // End
-            ResolveLabel(endLabel);
+                // Body
+                if (whileStatement.Body != null)
+                {
+                    CurrentScope.BreakLabel = endLabel;
+                    CurrentScope.ContinueLabel = conditionLabel;
+                    CompileCompoundStatement(whileStatement.Body);
+                }
+
+                // Jump to condition
+                EmitPrimaryExpression(whileStatement, new EX_Jump(), new[] { conditionLabel });
+
+                // End
+                ResolveLabel(endLabel);
+            }
         }
         finally
         {
@@ -1152,10 +1201,11 @@ public partial class KismetScriptCompiler
             }
             else
             {
-                var procedureSymbol = GetSymbol<ProcedureSymbol>(callOperator.Identifier.Text, context: callContext);
-                if (procedureSymbol == null)
+                var functionToCall = GetSymbol<ProcedureSymbol>(callOperator.Identifier.Text, context: callContext);
+                if (functionToCall == null)
                 {
-                    return Emit(callOperator, new EX_LocalVirtualFunction()
+                    // TODO: make decompiler emit stubs for these with the proper calling convention
+                    return Emit(callOperator, new EX_VirtualFunction()
                     {
                         VirtualFunctionName = GetName(callOperator.Identifier),
                         Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
@@ -1163,56 +1213,84 @@ public partial class KismetScriptCompiler
                 }
                 else
                 {
-                    if (callContext != null && !callContext.IsImplicit)
+                    if (functionToCall.HasAnyFunctionCustomFlags(FunctionCustomFlags.CallTypeOverride))
                     {
-                        if (callContext.Type == ContextType.This ||
-                            callContext.Type == ContextType.Base)
+                        if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.FinalFunction))
                         {
-                            if (callContext.SymbolExists(procedureSymbol.Name, procedureSymbol.SymbolCategory))
+                            return Emit(callOperator, new EX_FinalFunction()
                             {
-                                // Procedure is local to class
-                                if (procedureSymbol.IsVirtual && !callContext.CallVirtualFunctionAsFinal)
-                                {
-                                    return Emit(callOperator, new EX_LocalVirtualFunction()
-                                    {
-                                        VirtualFunctionName = GetName(callOperator.Identifier),
-                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                                    });
-                                }
-                                else if (!procedureSymbol.IsExternal)
-                                {
-                                    // Function is declared locally, so we can call it as such
-                                    return Emit(callOperator, new EX_LocalFinalFunction()
-                                    {
-                                        StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
-                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                                    });
-                                }
-                                else
-                                {
-                                    // Function is declared externally
-                                    return Emit(callOperator, new EX_FinalFunction()
-                                    {
-                                        StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
-                                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                                    });
-                                }
-                            }
-                            else
-                            {
-                                throw new NotImplementedException();
-                            }
+                                StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
                         }
-                        else if (
-                                callContext.Type == ContextType.Object ||
-                                callContext.Type == ContextType.ObjectConst ||
-                                callContext.Type == ContextType.Class)
+                        else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.LocalVirtualFunction))
                         {
-                            if (procedureSymbol.IsVirtual)
+                            return Emit(callOperator, new EX_LocalFinalFunction()
                             {
-                                return Emit(callOperator, new EX_VirtualFunction()
+                                StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.VirtualFunction))
+                        {
+                            return Emit(callOperator, new EX_VirtualFunction()
+                            {
+                                VirtualFunctionName = GetName(callOperator.Identifier),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.LocalVirtualFunction))
+                        {
+                            return Emit(callOperator, new EX_LocalVirtualFunction()
+                            {
+                                VirtualFunctionName = GetName(callOperator.Identifier),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.MathFunction))
+                        {
+                            return Emit(callOperator, new EX_CallMath()
+                            {
+                                StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else
+                        {
+                            throw new NotImplementedException($"Unknown call type override: {functionToCall.CustomFlags}");
+                        }
+                    }
+                    else
+                    {
+                        var isParentContext = callContext?.Type == ContextType.Base;
+                        var isFinalFunction = (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Final) || isParentContext);
+                        var isMathCall = isFinalFunction
+                            && functionToCall.HasAllFunctionFlags(EFunctionFlags.FUNC_Static | EFunctionFlags.FUNC_Final | EFunctionFlags.FUNC_Native)
+                            && !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_NetFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse)
+                            && !functionToCall.DeclaringClass!.IsInterface
+                            && !HasWildcardParams(functionToCall);
+                        var isLocalScriptFunction =
+                            !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Native | EFunctionFlags.FUNC_NetFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse);
+
+                        if (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Delegate))
+                        {
+                            throw new InvalidOperationException("Invalid call to delegate function");
+                        }
+                        else if (isFinalFunction)
+                        {
+                            if (isMathCall)
+                            {
+                                return Emit(callOperator, new EX_CallMath()
                                 {
-                                    VirtualFunctionName = GetName(callOperator.Identifier),
+                                    StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                });
+                            }
+                            else if (isLocalScriptFunction)
+                            {
+                                return Emit(callOperator, new EX_LocalFinalFunction()
+                                {
+                                    StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
                                     Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
                                 });
                             }
@@ -1225,31 +1303,25 @@ public partial class KismetScriptCompiler
                                 });
                             }
                         }
-                        else if (callContext.Type == ContextType.SubContext)
-                        {
-                            PushContext(callContext.SubContext);
-                            try
-                            {
-                                return CompileCallOperator(callOperator);
-                            }
-                            finally
-                            {
-                                PopContext();
-                            }
-                        }
                         else
                         {
-                            throw new NotImplementedException();
+                            if (isLocalScriptFunction)
+                            {
+                                return Emit(callOperator, new EX_LocalVirtualFunction()
+                                {
+                                    VirtualFunctionName = GetName(callOperator.Identifier),
+                                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                });
+                            }
+                            else
+                            {
+                                return Emit(callOperator, new EX_VirtualFunction()
+                                {
+                                    VirtualFunctionName = GetName(callOperator.Identifier),
+                                    Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                                });
+                            }
                         }
-                    }
-                    else
-                    {
-                        // CallMath requires no context
-                        return Emit(callOperator, new EX_CallMath()
-                        {
-                            StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
-                            Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                        });
                     }
                 }
             }
@@ -1258,6 +1330,12 @@ public partial class KismetScriptCompiler
         {
             PopContext();
         }
+    }
+
+    private bool HasWildcardParams(ProcedureSymbol procedureSymbol)
+    {
+        // TODO
+        return false;
     }
 
     private CompiledExpressionContext CompileExpression(Expression expression)
@@ -1271,6 +1349,10 @@ public partial class KismetScriptCompiler
             else if (expression is InitializerList initializerListExpression)
             {
                 return CompileInitializerList(initializerListExpression);
+            }
+            else if (expression is NewExpression newExpression)
+            {
+                return CompileNewExpression(newExpression);
             }
             else if (expression is SubscriptOperator subscriptOperator)
             {
