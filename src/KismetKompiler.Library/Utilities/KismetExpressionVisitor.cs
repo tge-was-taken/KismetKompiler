@@ -2,9 +2,9 @@
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using System.CodeDom.Compiler;
-using static KismetKompiler.Library.KismetExpressionVisitor;
+using static KismetKompiler.Library.Utilities.KismetExpressionVisitor;
 
-namespace KismetKompiler.Library;
+namespace KismetKompiler.Library.Utilities;
 
 public abstract class KismetExpressionVisitor : KismetExpressionVisitor<VisitorContext>
 {

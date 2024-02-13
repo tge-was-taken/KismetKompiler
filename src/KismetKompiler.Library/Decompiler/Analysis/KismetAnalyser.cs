@@ -1,6 +1,7 @@
 ﻿using KismetKompiler.Library.Compiler.Context;
 using KismetKompiler.Library.Packaging;
 using KismetKompiler.Library.Syntax.Statements;
+using KismetKompiler.Library.Utilities;
 using System.Linq.Expressions;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;

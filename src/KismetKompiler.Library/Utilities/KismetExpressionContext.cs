@@ -1,6 +1,6 @@
 ﻿using UAssetAPI.Kismet.Bytecode;
 
-namespace KismetKompiler.Library;
+namespace KismetKompiler.Library.Utilities;
 
 public record KismetExpressionContext<T>(
     KismetExpression Expression,

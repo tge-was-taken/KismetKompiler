@@ -2,7 +2,7 @@
 using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
-using KismetKompiler.Library;
+using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Decompiler
 {

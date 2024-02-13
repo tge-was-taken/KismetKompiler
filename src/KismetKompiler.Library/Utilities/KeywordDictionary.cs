@@ -1,6 +1,6 @@
 ﻿using KismetKompiler.Library.Syntax;
 
-namespace KismetKompiler.Library;
+namespace KismetKompiler.Library.Utilities;
 
 public static class KeywordDictionary
 {

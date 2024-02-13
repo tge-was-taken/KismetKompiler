@@ -1,4 +1,4 @@
-﻿namespace KismetKompiler.Library;
+﻿namespace KismetKompiler.Library.Utilities;
 
 public static class DictionaryExtensions
 {

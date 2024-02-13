@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Security.AccessControl;
 using System.Text.RegularExpressions;
-using KismetKompiler.Library;
 using KismetKompiler.Library.Decompiler;
 using KismetKompiler.Library.Decompiler.Analysis;
 using KismetKompiler.Library.Decompiler.Context;
@@ -9,6 +8,7 @@ using KismetKompiler.Library.Decompiler.Context.Nodes;
 using KismetKompiler.Library.Decompiler.Context.Properties;
 using KismetKompiler.Library.Decompiler.Passes;
 using KismetKompiler.Library.Parser;
+using KismetKompiler.Library.Utilities;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -57,8 +57,8 @@ public partial class KismetDecompiler
         _asset = asset;
         _class = _asset.GetClassExport();
 
-        var analyser = new KismetAnalyser();
-        _analysisResult = analyser.Analyse(asset);
+        //var analyser = new KismetAnalyser();
+        //_analysisResult = analyser.Analyse(asset);
 
         if (_class != null)
         {

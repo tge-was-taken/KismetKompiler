@@ -11,6 +11,7 @@ using KismetKompiler.Library.Syntax.Statements.Declarations;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 using static KismetKompiler.Library.Parser.KismetScriptParser;
+using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Library.Parser;
 

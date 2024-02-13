@@ -2,7 +2,7 @@
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 
-namespace KismetKompiler.Library;
+namespace KismetKompiler.Library.Utilities;
 
 public static class KismetExpressionSizeCalculator2
 {

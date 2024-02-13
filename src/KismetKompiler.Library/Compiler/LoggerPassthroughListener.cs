@@ -1,4 +1,6 @@
-﻿namespace KismetKompiler.Library.Compiler;
+﻿using KismetKompiler.Library.Utilities;
+
+namespace KismetKompiler.Library.Compiler;
 
 public class LoggerPassthroughListener : LogListener
 {

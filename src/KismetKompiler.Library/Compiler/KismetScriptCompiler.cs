@@ -16,6 +16,7 @@ using KismetKompiler.Library.Compiler.Intermediate;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using System.Xml.Linq;
 using System.Reflection;
+using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Library.Compiler;
 

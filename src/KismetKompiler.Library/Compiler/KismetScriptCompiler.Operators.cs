@@ -8,6 +8,7 @@ using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Unary;
 using KismetKompiler.Library.Compiler.Context;
 using UAssetAPI.UnrealTypes;
+using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Library.Compiler;
 

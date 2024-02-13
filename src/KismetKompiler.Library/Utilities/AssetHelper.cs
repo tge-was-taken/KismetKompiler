@@ -5,7 +5,7 @@ using UAssetAPI.IO;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 
-namespace KismetKompiler.Library;
+namespace KismetKompiler.Library.Utilities;
 
 public static class AssetHelper
 {
@@ -177,7 +177,7 @@ public static class AssetHelper
         }
         if (parent == null)
             return false;
-        if (parent == import || (parent.OuterIndex.Index == import.OuterIndex.Index && parent.ObjectName == import.ObjectName))
+        if (parent == import || parent.OuterIndex.Index == import.OuterIndex.Index && parent.ObjectName == import.ObjectName)
             return true;
         return asset.ImportInheritsType(parent, type);
     }
@@ -227,7 +227,7 @@ public static class AssetHelper
     {
         if (asset is UAsset uasset)
         {
-            var import = FindImportByObjectName(asset, name);
+            var import = asset.FindImportByObjectName(name);
             return FPackageIndex.FromImport(uasset.Imports.IndexOf(import));
         }
         else
