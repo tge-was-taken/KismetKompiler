@@ -9,6 +9,7 @@ namespace KismetKompiler.Decompiler
     public partial class KismetDecompiler
     {
         // TODO factor this out of the class
+        public bool UseContext { get; set; } = true;
         private string FormatExpression(KismetExpression kismetExpression, KismetExpression? parentKismetExpression)
         {
             switch (kismetExpression)
@@ -119,51 +120,94 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_LocalVirtualFunction expr:
                     {
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = context;
-                        _context = null;
-
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
-                        var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
-
-                        if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}.{virtualFunctionName}()";
-                        else
-                            return $"{context}.{virtualFunctionName}({parameters})";
-                    }
-                case EX_LocalFinalFunction expr:
-                    {
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = _context;
-                        _context = null;
-
-                        var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
-                        var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
-                        .FirstOrDefault();
-
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
-
-                        if (function != null &&
-                            function.IsUbergraphFunction() &&
-                            expr.Parameters.Length == 1 &&
-                            expr.Parameters[0] is EX_IntConst firstParamInt)
+                        if (UseContext)
                         {
-                            var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, function.ObjectName.ToString());
-                            return $"{context}.{functionName}({uberGraphFunctionLabel})";
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = context;
+                            _context = null;
+
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+                            var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
+
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"{context}.{virtualFunctionName}()";
+                            else
+                                return $"{context}.{virtualFunctionName}({parameters})";
                         }
                         else
                         {
-                            var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
-                            var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
-                            if (!isFinalFunction && isClassMemberFunction && callContext == null)
-                            {
-                                context = _class.ObjectName.ToString();
-                            }
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+                            var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
 
                             if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.{functionName}()";
+                                return $"EX_LocalVirtualFunction({virtualFunctionName})";
                             else
-                                return $"{context}.{functionName}({parameters})";
+                                return $"EX_LocalVirtualFunction({virtualFunctionName}, {parameters})";
+                        }
+                    }
+                case EX_LocalFinalFunction expr:
+                    {
+                        if (UseContext)
+                        {
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = _context;
+                            _context = null;
+
+                            var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
+                            var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
+                            .FirstOrDefault();
+
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+
+                            if (function != null &&
+                                function.IsUbergraphFunction() &&
+                                expr.Parameters.Length == 1 &&
+                                expr.Parameters[0] is EX_IntConst firstParamInt)
+                            {
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, function.ObjectName.ToString());
+                                return $"{context}.{functionName}({uberGraphFunctionLabel})";
+                            }
+                            else
+                            {
+                                var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
+                                var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
+                                if (!isFinalFunction && isClassMemberFunction && callContext == null)
+                                {
+                                    context = _class.ObjectName.ToString();
+                                }
+
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"{context}.{functionName}()";
+                                else
+                                    return $"{context}.{functionName}({parameters})";
+                            }
+                        }
+                        else
+                        {
+                            var functionName = FormatString(GetFunctionName(expr.StackNode));
+                            var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
+                                .FirstOrDefault();
+
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+
+                            if (function != null &&
+                                function.IsUbergraphFunction() &&
+                                expr.Parameters.Length == 1 &&
+                                expr.Parameters[0] is EX_IntConst firstParamInt)
+                            {
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, function.ObjectName.ToString());
+                                return $"EX_LocalFinalFunction({functionName}, {uberGraphFunctionLabel})";
+                            }
+                            else
+                            {
+                                var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
+                                var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
+
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"EX_LocalFinalFunction({functionName})";
+                                else
+                                    return $"EX_LocalFinalFunction({functionName}, {parameters})";
+                            }
                         }
                     }
                 case EX_LetMulticastDelegate expr:
@@ -195,11 +239,19 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_InstanceVariable expr:
                     {
-                        var variable = FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = _context;
-                        _context = null;
-                        return $"{context}.{variable}";
+                        if (UseContext)
+                        {
+                            var variable = FormatIdentifier(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = _context;
+                            _context = null;
+                            return $"{context}.{variable}";
+                        }
+                        else
+                        {
+                            var variable = FormatString(_asset.GetPropertyName(expr.Variable, _useFullPropertyNames));
+                            return $"EX_InstanceVariable({variable})";
+                        }
                     }
                 case EX_LocalOutVariable expr:
                     {
@@ -276,95 +328,153 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_CallMulticastDelegate expr:
                     {
-                        // TODO: validate context
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = context;
-                        _context = null;
-
-                        var stackNode = FormatIdentifier(GetFunctionName(expr.StackNode));
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
-                        var @delegate = FormatExpression(expr.Delegate, expr);
-
-                        if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}.EX_CallMulticastDelegate({stackNode}, {@delegate})";
-                        else
-                            return $"{context}.EX_CallMulticastDelegate({stackNode}, {parameters}, {@delegate})";
-                    }
-                case EX_FinalFunction expr:
-                    {
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = context;
-                        _context = null;
-
-                        var stackNode = GetFunctionName(expr.StackNode);
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
-
-                        if (true)
+                        if (UseContext)
                         {
-                            stackNode = FormatIdentifier(stackNode);
+                            // TODO: validate context
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = context;
+                            _context = null;
+
+                            var stackNode = FormatIdentifier(GetFunctionName(expr.StackNode));
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+                            var @delegate = FormatExpression(expr.Delegate, expr);
+
                             if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.{stackNode}()";
+                                return $"{context}.EX_CallMulticastDelegate({stackNode}, {@delegate})";
                             else
-                                return $"{context}.{stackNode}({parameters})";
+                                return $"{context}.EX_CallMulticastDelegate({stackNode}, {parameters}, {@delegate})";
                         }
                         else
                         {
+                            var stackNode = FormatString(GetFunctionName(expr.StackNode));
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+                            var @delegate = FormatExpression(expr.Delegate, expr);
+
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"EX_CallMulticastDelegate({stackNode}, {@delegate})";
+                            else
+                                return $"EX_CallMulticastDelegate({stackNode}, {parameters}, {@delegate})";
+                        }
+                    }
+                case EX_FinalFunction expr:
+                    {
+                        if (UseContext)
+                        {
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = context;
+                            _context = null;
+
+                            var stackNode = GetFunctionName(expr.StackNode);
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+
+                            if (true)
+                            {
+                                stackNode = FormatIdentifier(stackNode);
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"{context}.{stackNode}()";
+                                else
+                                    return $"{context}.{stackNode}({parameters})";
+                            }
+                            else
+                            {
+                                stackNode = FormatString(stackNode);
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"{context}.EX_FinalFunction({stackNode})";
+                                else
+                                    return $"{context}.EX_FinalFunction({stackNode}, {parameters})";
+                            }
+                        }
+                        else
+                        {
+                            var stackNode = GetFunctionName(expr.StackNode);
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+
                             stackNode = FormatString(stackNode);
                             if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.EX_FinalFunction({stackNode})";
+                                return $"EX_FinalFunction({stackNode})";
                             else
-                                return $"{context}.EX_FinalFunction({stackNode}, {parameters})";
+                                return $"EX_FinalFunction({stackNode}, {parameters})";
                         }
                     }
                 case EX_VirtualFunction expr:
                     {
-                        var context = _context == null ? "this" : _context.Expression;
-                        var callContext = context;
-                        _context = null;
+                        if (UseContext)
+                        {
+                            var context = _context == null ? "this" : _context.Expression;
+                            var callContext = context;
+                            _context = null;
 
-                        var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
-                        var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
-                        if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{context}.{virtualFunctionName}()";
+                            var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"{context}.{virtualFunctionName}()";
+                            else
+                                return $"{context}.{virtualFunctionName}({parameters})";
+
+                            //var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
+                            //if (string.IsNullOrWhiteSpace(parameters))
+                            //    return $"{context}.EX_VirtualFunction({virtualFunctionName})";
+                            //else
+                            //    return $"{context}.EX_VirtualFunction({virtualFunctionName}, {parameters})";
+                        }
                         else
-                            return $"{context}.{virtualFunctionName}({parameters})";
+                        {
+                            var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
-                        //var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
-                        //if (string.IsNullOrWhiteSpace(parameters))
-                        //    return $"{context}.EX_VirtualFunction({virtualFunctionName})";
-                        //else
-                        //    return $"{context}.EX_VirtualFunction({virtualFunctionName}, {parameters})";
+                            var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
+                            if (string.IsNullOrWhiteSpace(parameters))
+                                return $"EX_VirtualFunction({virtualFunctionName})";
+                            else
+                                return $"EX_VirtualFunction({virtualFunctionName}, {parameters})";
+
+                            //var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
+                            //if (string.IsNullOrWhiteSpace(parameters))
+                            //    return $"{context}.EX_VirtualFunction({virtualFunctionName})";
+                            //else
+                            //    return $"{context}.EX_VirtualFunction({virtualFunctionName}, {parameters})";
+                        }
                     }
                 case EX_Context expr:
                     {
-                        if (expr.ObjectExpression is EX_InterfaceContext subExpr)
+                        if (UseContext)
                         {
-                            _context = new Context()
+                            if (expr.ObjectExpression is EX_InterfaceContext subExpr)
                             {
-                                Expression = FormatExpression(subExpr.InterfaceValue, expr),
-                                Type = ContextType.Interface,
-                            };
+                                _context = new Context()
+                                {
+                                    Expression = FormatExpression(subExpr.InterfaceValue, expr),
+                                    Type = ContextType.Interface,
+                                };
+                            }
+                            else
+                            {
+                                var @object = FormatExpression(expr.ObjectExpression, expr);
+                                _context = new Context()
+                                {
+                                    Expression = @object,
+                                    Type = ContextType.Default
+                                };
+                            }
+                            var context = FormatExpression(expr.ContextExpression, expr);
+                            _context = null;
+
+                            var offset = expr.Offset;
+                            var rvalue = _asset.GetPropertyName(expr.RValuePointer, _useFullPropertyNames);
+
+
+
+                            return context;
+                            //return $"{context}.{@object}";
                         }
                         else
                         {
-                            var @object = FormatExpression(expr.ObjectExpression,expr);
-                            _context = new Context()
-                            {
-                                Expression = @object,
-                                Type = ContextType.Default
-                            };
+                            var @object = FormatExpression(expr.ObjectExpression, expr);
+                            var context = FormatExpression(expr.ContextExpression, expr);
+                            var offset = expr.Offset;
+                            var rvalue = FormatString(_asset.GetPropertyName(expr.RValuePointer, _useFullPropertyNames));
+                            return $"EX_Context({@object}, {offset}, {rvalue}, {context})";
                         }
-                        var context = FormatExpression(expr.ContextExpression, expr);
-                        _context = null;
-
-                        var offset = expr.Offset;
-                        var rvalue = _asset.GetPropertyName(expr.RValuePointer, _useFullPropertyNames);
-
-
-
-                        return context;
-                        //return $"{context}.{@object}";
                     }
                 case EX_IntConst expr:
                     return $"{expr.Value}";
@@ -417,14 +527,21 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_ObjectConst expr:
                     {
-                        // TODO: change this check to to verify if the name refers to a type rather than a variable
-                        if (parentKismetExpression is (EX_Context or EX_CallMath))
+                        if (UseContext)
                         {
-                            return FormatIdentifier(_asset.GetName(expr.Value));
+                            // TODO: change this check to to verify if the name refers to a type rather than a variable
+                            if (parentKismetExpression is (EX_Context or EX_CallMath))
+                            {
+                                return FormatIdentifier(_asset.GetName(expr.Value));
+                            }
+                            else
+                            {
+                                return $"typeof({FormatIdentifier(_asset.GetName(expr.Value))})";
+                            }
                         }
                         else
                         {
-                            return $"typeof({FormatIdentifier(_asset.GetName(expr.Value))})";
+                            return $"EX_ObjectConst({FormatIdentifier(_asset.GetName(expr.Value))})";
                         }
                     }
                 case EX_SoftObjectConst expr:

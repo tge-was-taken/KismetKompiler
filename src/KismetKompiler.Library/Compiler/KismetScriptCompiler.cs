@@ -432,6 +432,9 @@ public partial class KismetScriptCompiler
         EClassFlags flags = 0;
         foreach (var attribute in classDeclaration.Attributes)
         {
+            if (attribute.Identifier.Text == "Import")
+                continue;
+
             var classFlagText = $"CLASS_{attribute.Identifier.Text}";
             if (!System.Enum.TryParse<EClassFlags>(classFlagText, true, out var flag))
                 throw new CompilationError(attribute, "Invalid class attribute");

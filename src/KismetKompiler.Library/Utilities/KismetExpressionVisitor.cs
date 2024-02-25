@@ -13,7 +13,12 @@ public abstract class KismetExpressionVisitor : KismetExpressionVisitor<VisitorC
 
 public abstract class KismetExpressionVisitor<T>
 {
+    private Stack<KismetExpression> _parentStack = new();
+
     public ObjectVersionUE5 ObjectVersionUE5 { get; init; } = ObjectVersionUE5.UNKNOWN;
+
+    public KismetExpression? ParentExpression
+        => _parentStack.Count == 0 ? null : _parentStack.Peek();
 
     private static void CalculateStringExpressionSize(KismetExpression expr, ref int index)
     {
@@ -35,9 +40,15 @@ public abstract class KismetExpressionVisitor<T>
         }
     }
 
-    protected virtual void OnEnter(KismetExpressionContext<T> context) { }
+    protected virtual void OnEnter(KismetExpressionContext<T> context)
+    {
+        _parentStack.Push(context.Expression);
+    }
 
-    protected virtual void OnExit(KismetExpressionContext<T> context) { }
+    protected virtual void OnExit(KismetExpressionContext<T> context)
+    {
+        _parentStack.Pop();
+    }
 
     public int Visit(KismetExpression expression)
     {

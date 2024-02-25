@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i D:\\Users\\smart\\Downloads\\BP_HolyGrenade.uasset -v 4.27 -f"
+      "commandLineArgs": "decompile -i F:\\Projects\\P3R\\ZenToolsOutput\\Game\\Xrd777\\Blueprints\\Battle\\Players\\PC01\\BP_BtlPc01.uasset -v 4.27 -f"
     }
   }
 }

@@ -19,30 +19,33 @@ namespace KismetKompiler.Library.Decompiler.Passes
                 if (firstNode?.Source is EX_PushExecutionFlow pushExecutionFlow &&
                     block.Children.Count == 1)
                 {
-                    var endBlock = root.Children.First(x => x.CodeStartOffset == pushExecutionFlow.PushingAddress);
-                    var endBlockIndex = root.Children.IndexOf(endBlock);
-
-                    var bodyStartIndex = blockIndex + 1;
-                    var bodyEndIndex = endBlockIndex;
-                    var bodyBlockCount = bodyEndIndex - bodyStartIndex;
-
-                    if (bodyBlockCount > 0)
+                    var endBlock = root.Children.FirstOrDefault(x => x.CodeStartOffset == pushExecutionFlow.PushingAddress);
+                    if (endBlock != null)
                     {
-                        var bodyNodes = root.Children.Skip(bodyStartIndex).Take(bodyBlockCount).ToList();
-                        var newBlock = new JumpBlockNode()
+                        var endBlockIndex = root.Children.IndexOf(endBlock);
+
+                        var bodyStartIndex = blockIndex + 1;
+                        var bodyEndIndex = endBlockIndex;
+                        var bodyBlockCount = bodyEndIndex - bodyStartIndex;
+
+                        if (bodyBlockCount > 0)
                         {
-                            Parent = block.Parent,
-                            CodeStartOffset = block.CodeStartOffset,
-                            CodeEndOffset = endBlock.CodeStartOffset,
-                            Source = block.Source,
-                            Children = bodyNodes
-                        };
-                        // Fix parent
-                        foreach (var subNode in newBlock.Children)
-                            subNode.Parent = newBlock;
-                        root.Children[blockIndex] = newBlock;
-                        root.Children.RemoveRange(bodyStartIndex, bodyBlockCount);
-                        Execute(context, newBlock);
+                            var bodyNodes = root.Children.Skip(bodyStartIndex).Take(bodyBlockCount).ToList();
+                            var newBlock = new JumpBlockNode()
+                            {
+                                Parent = block.Parent,
+                                CodeStartOffset = block.CodeStartOffset,
+                                CodeEndOffset = endBlock.CodeStartOffset,
+                                Source = block.Source,
+                                Children = bodyNodes
+                            };
+                            // Fix parent
+                            foreach (var subNode in newBlock.Children)
+                                subNode.Parent = newBlock;
+                            root.Children[blockIndex] = newBlock;
+                            root.Children.RemoveRange(bodyStartIndex, bodyBlockCount);
+                            Execute(context, newBlock);
+                        }
                     }
                 }
                 else

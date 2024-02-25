@@ -57,14 +57,15 @@ public partial class KismetDecompiler
         _asset = asset;
         _class = _asset.GetClassExport();
 
-        //var analyser = new KismetAnalyser();
-        //_analysisResult = analyser.Analyse(asset);
+        var analyser = new KismetAnalyser();
+        _analysisResult = analyser.Analyse(asset);
 
         if (_class != null)
         {
             //_writer.WriteLine($"// LegacyFileVersion={_asset.LegacyFileVersion}");
             //_writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
 
+            //WriteImportsOld();
             WriteImports();
             WriteClass();
         }
@@ -72,6 +73,7 @@ public partial class KismetDecompiler
         {
             // Workaround for incomplete assets
             WriteImports();
+            //WriteImportsOld();
             foreach (var func in asset.Exports.Where(x => x is FunctionExport).Cast<FunctionExport>())
             {
                 DecompileFunction(func);
@@ -433,16 +435,16 @@ public partial class KismetDecompiler
                 }
                 else if (isInsideClassDecl)
                 {
-                    _writer.WriteLine($"[Import] public {FormatIdentifier(symbol.Class?.Name)} {FormatIdentifier(symbol.Name)};");
+                    _writer.WriteLine($"public {FormatIdentifier(symbol.Class?.Name)} {FormatIdentifier(symbol.Name)};");
                     if (!importQueue.Any(x => x.Name == symbol.Name))
                         importQueue.Enqueue(symbol);
                 }
                 else
                 {
-                    if (symbol.Class.Name != "Class")
-                        _writer.WriteLine($"[Import] public class {symbol.Name} : {symbol.Class.Name} {{");
+                    if (symbol.Super != null)
+                        _writer.WriteLine($"public class {symbol.Name} : {symbol.Super.Name} {{");
                     else
-                        _writer.WriteLine($"[Import] public class {symbol.Name} {{");
+                        _writer.WriteLine($"public class {symbol.Name} {{");
                     _writer.Push();
                     isInsideClassDecl = true;
                     foreach (var child in symbol.Children)
@@ -464,14 +466,14 @@ public partial class KismetDecompiler
                 {
                     if (symbol.Name == "Default__Function")
                     {
-                        _writer.WriteLine($"[Import] {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
+                        _writer.WriteLine($"{FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                     }
                     else
                     {
                         var functionModifiers = new List<string>() { "public" };
-                        var functionAttributes = new List<string>() { "Import", "UnknownSignature" };
+                        var functionAttributes = new List<string>() { "UnknownSignature" };
 
-                        var functionModifier = symbol.CallingConvention switch
+                        var functionModifier = symbol.FunctionMetadata.CallingConvention switch
                         {
                             CallingConvention.FinalFunction => "sealed",
                             CallingConvention.LocalFinalFunction => "sealed",
@@ -483,7 +485,7 @@ public partial class KismetDecompiler
                             _ => "",
                         };
                         functionModifiers.Add(functionModifier);
-                        var functionAttribute = symbol.CallingConvention switch
+                        var functionAttribute = symbol.FunctionMetadata.CallingConvention switch
                         {
                             CallingConvention.FinalFunction => "FinalFunction",
                             CallingConvention.LocalFinalFunction => "LocalFinalFunction",
@@ -505,13 +507,29 @@ public partial class KismetDecompiler
                         if (!string.IsNullOrWhiteSpace(functionModifierText))
                             functionModifierText = $"{functionModifierText} ";
 
-                        _writer.WriteLine($"{functionAttributeText}{functionModifierText}void {FormatIdentifier(symbol.Name)}()");
+                        var functionParameterText =
+                            string.Join(", ", symbol.FunctionMetadata.Parameters.Select(x => $"{GetDecompiledTypeName(x.Class.Name)} {x.Name}"));
+
+                        var functionReturnTypeText =
+                            symbol.FunctionMetadata.ReturnType == null ? "void" : GetDecompiledTypeName(symbol.FunctionMetadata.ReturnType.Name);
+
+                        _writer.WriteLine($"{functionAttributeText}{functionModifierText}{functionReturnTypeText} {FormatIdentifier(symbol.Name)}({functionParameterText});");
                     }
                 }
                 else
                 {
-                    var cls = symbol.Class.Name == "Class" ? "Type" : symbol.Class.Name;
-                    _writer.WriteLine($"[Import] public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
+                    if (isInsideClassDecl)
+                    {
+                        var cls = symbol.Class.Name == "Class" ? "object" : symbol.Class.Name;
+                        _writer.WriteLine($"public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
+                    }
+                    else
+                    {
+                        if (symbol.Class.Name != "Class")
+                            _writer.WriteLine($"public class {symbol.Name} : {symbol.Class.Name} {{}}");
+                        else
+                            _writer.WriteLine($"public class {symbol.Name} {{}}");
+                    }
                 }
             }
         }

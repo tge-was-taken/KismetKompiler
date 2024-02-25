@@ -8,7 +8,7 @@ grammar KismetScript;
 
 // Basic constructs
 compilationUnit
-	: importStatement* declarationStatement* EOF
+	: namespaceStatement* usingStatement* declarationStatement* EOF
 	;
 
 statement
@@ -45,9 +45,16 @@ declarationStatement
 	| classDeclarationStatement
 	;
 
-importStatement
-	: From StringLiteral Import '{' declarationStatement* '}'
-	| Import typeIdentifier StringLiteral Semicolon
+namespaceStatement
+	: Namespace namespaceIdentifier '{' declarationStatement* '}'
+	;
+
+namespaceIdentifier
+	: Identifier ('.' Identifier)*
+	;
+
+usingStatement
+	: Using namespaceIdentifier Semicolon
 	;
 
 classDeclarationStatement
@@ -233,11 +240,13 @@ typeIdentifier
 
 // Keywords
 //	Directives
-Import:	'import';
-Package: 'package';
-From: 'from';
-Typeof: 'typeof';
-New:	'new';
+Import:		'import';
+Package:	'package';
+From:		'from';
+Typeof:		'typeof';
+New:		'new';
+Namespace:	'namespace';
+Using:		'using';
 
 //	Storage types
 Function:	'function';
