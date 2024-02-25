@@ -360,13 +360,13 @@ public class KismetAnalyser
         _symbols.AddRange(inferredClassSymbols);
     }
 
-    private class ExpressionVisitorFirstPass : KismetExpressionVisitor
+    private class AnalyzingExpressionVisitor : KismetExpressionVisitor
     {
         private readonly FunctionAnalysisContext _context;
         private Symbol _instance;
         private Stack<(EX_Context Context, Symbol ContextSymbol)> _contextStack = new();
 
-        public ExpressionVisitorFirstPass(FunctionAnalysisContext context, Symbol instance)
+        public AnalyzingExpressionVisitor(FunctionAnalysisContext context, Symbol instance)
         {
             _context = context;
             _instance = instance;
@@ -565,7 +565,11 @@ public class KismetAnalyser
 
         private Symbol ActiveContextSymbol => _contextStack.Count == 0 ? _instance : _contextStack.Peek().ContextSymbol;
 
-        public override void Visit(KismetExpression expression, ref int codeOffset)
+        /// <summary>
+        /// Create all implicit symbols based on kismet property pointers
+        /// </summary>
+        /// <param name="expression"></param>
+        private void EnsureKismetPropertyPointerSymbolsCreated(KismetExpression expression)
         {
             switch (expression)
             {
@@ -576,31 +580,13 @@ public class KismetAnalyser
                     EnsurePropertySymbol(classSparseDataVariable.Variable);
                     break;
                 case EX_Context context:
-                    {
-                        EnsurePropertySymbol(context.RValuePointer);
-                        var contextSymbol = GetContext(context);
-
-                        _contextStack.Push((context, contextSymbol));
-                        base.Visit(context.ContextExpression);
-                        _contextStack.Pop();
-                        return;
-                    }
+                    EnsurePropertySymbol(context.RValuePointer);
+                    break;
                 case EX_DefaultVariable defaultVariable:
                     EnsurePropertySymbol(defaultVariable.Variable);
                     break;
                 case EX_InstanceVariable instanceVariable:
-                    {
-                        var variableSymbol = EnsurePropertySymbol(instanceVariable.Variable);
-                        if (!ActiveContextSymbol.HasMember(variableSymbol))
-                        {
-                            if (ActiveContextSymbol.Super == null)
-                            {
-                                ActiveContextSymbol.Super = variableSymbol.Parent;
-                            }
-
-                            //ActiveContextSymbol.AddChild(variableSymbol);
-                        }
-                    }
+                    EnsurePropertySymbol(instanceVariable.Variable);
                     break;
                 case EX_Let let:
                     EnsurePropertySymbol(let.Value);
@@ -626,6 +612,40 @@ public class KismetAnalyser
                     break;
                 case EX_StructMemberContext structMemberContext:
                     EnsurePropertySymbol(structMemberContext.StructMemberExpression);
+                    break;
+            }
+
+        }
+
+        public override void Visit(KismetExpression expression, ref int codeOffset)
+        {
+            EnsureKismetPropertyPointerSymbolsCreated(expression);
+
+
+            // Create all implicit symbols based on kismet property pointers
+            switch (expression)
+            {
+                case EX_Context context:
+                    {
+                        var contextSymbol = GetContext(context);
+                        _contextStack.Push((context, contextSymbol));
+                        base.Visit(context.ContextExpression);
+                        _contextStack.Pop();
+                        return;
+                    }
+                case EX_InstanceVariable instanceVariable:
+                    {
+                        //var variableSymbol = EnsurePropertySymbol(instanceVariable.Variable);
+                        //if (!ActiveContextSymbol.HasMember(variableSymbol))
+                        //{
+                        //    if (ActiveContextSymbol.Super == null)
+                        //    {
+                        //        ActiveContextSymbol.Super = variableSymbol.Parent;
+                        //    }
+
+                        //    //ActiveContextSymbol.AddChild(variableSymbol);
+                        //}
+                    }
                     break;
                 case EX_FinalFunction finalFunction:
                     {
@@ -664,41 +684,6 @@ public class KismetAnalyser
                         }
                         break;
                     }
-                case EX_VirtualFunction virtualFunction:
-                    {
-                    }
-                    break;
-                //case EX_InstanceVariable instanceVariable:
-                //    {
-                //        var variableSymbol = GetProperty(ActiveContext, instanceVariable.Variable);
-                //        if (variableSymbol == null)
-                //        {
-                //            var candidates = GetProperties(null, instanceVariable.Variable).ToList();
-                //            if (candidates.Count == 1)
-                //            {
-                //                var symbol = ActiveContext
-                //                    .GetMember(candidates.First().Name);
-                //                if (symbol == null)
-                //                {
-                //                    _context.InferredSymbols.Add((ActiveContext, candidates.First()));
-                //                }
-                //            }
-                //            else
-                //            {
-                //                //
-                //            }
-                //        }
-                //        else
-                //        {
-                //            var symbol = ActiveContext
-                //                .GetMember(variableSymbol.Name);
-                //            if (symbol == null)
-                //            {
-                //                _context.InferredSymbols.Add((ActiveContext, variableSymbol));
-                //            }
-                //        }
-                //        break;
-                //    }
             }
 
             base.Visit(expression, ref codeOffset);
@@ -728,7 +713,7 @@ public class KismetAnalyser
             var functionExport = (FunctionExport)functionSymbol.Export!;
             foreach (var ex in functionExport.ScriptBytecode)
             {
-                var visitor = new ExpressionVisitorFirstPass(ctx, functionSymbol.Parent!);
+                var visitor = new AnalyzingExpressionVisitor(ctx, functionSymbol.Parent!);
                 visitor.Visit(ex);
             }
         }

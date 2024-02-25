@@ -129,10 +129,48 @@ public partial class KismetScriptCompiler
     }
 
     private Symbol GetRequiredSymbol(string name, MemberContext? context = default)
-        => GetSymbol(name, context) ?? throw new UnknownSymbolError(name);
+    {
+        if (!StrictMode)
+        {
+            var symbol = GetSymbol(name, context);
+
+            if (symbol == null)
+            {
+                symbol = CreateFakeSymbol(name, context);
+            }
+
+            return symbol;
+        }
+        else
+        {
+            return GetSymbol(name, context) ?? throw new UnknownSymbolError(name);
+        }
+    }
+
+    private Symbol CreateFakeSymbol(string name, MemberContext? context)
+    {
+        Symbol? symbol;
+        var candidates = CurrentScope
+                             .SelectMany(x => x.Members)
+                             .Where(x => x.Name == name);
+        symbol = candidates.FirstOrDefault();
+        if (symbol == null)
+        {
+            symbol = new UnknownSymbol()
+            {
+                DeclaringSymbol = context?.Symbol ?? CurrentScope.DeclaringSymbol,
+                IsExternal = false,
+                Name = name,
+            };
+        }
+
+        return symbol;
+    }
 
     private T GetRequiredSymbol<T>(string name, MemberContext? context = default) where T : Symbol
-        => GetSymbol<T>(name, context) ?? throw new UnknownSymbolError(name);
+    {
+        return GetSymbol<T>(name, context) ?? throw new UnknownSymbolError(name);
+    }
 
     private void DeclareSymbol(Symbol symbol)
         => CurrentScope.DeclareSymbol(symbol);
@@ -302,7 +340,7 @@ public partial class KismetScriptCompiler
             var packageSymbol = new PackageSymbol(packageDeclaration)
             {
                 IsExternal = true,
-                Name = packageDeclaration.Identifier.Text,
+                Name = "/" + packageDeclaration.Identifier.Text.Replace(".", "/"),
                 DeclaringSymbol = null,
             };
             foreach (var item in packageDeclaration.Declarations)
@@ -1982,6 +2020,72 @@ public partial class KismetScriptCompiler
         return CompileExpression(right).CompiledExpressions.Single();
     }
 
+    private string? GetSymbolName(Expression expression)
+    {
+        if (expression is TypeIdentifier typeIdentifier)
+        {
+            if (typeIdentifier.IsConstructedType)
+            {
+                // TODO handle base type info (Struct<>, Array<>, etc)
+                return GetSymbolName(typeIdentifier.TypeParameter!);
+            }
+            else
+            {
+                return typeIdentifier.Text;
+            }
+        }
+        else if (expression is StringLiteral stringLiteral)
+        {
+            return stringLiteral.Value;
+        }
+        else if (expression is Identifier identifier)
+        {
+            return identifier.Text;
+        }
+        else if (expression is MemberExpression memberExpression)
+        {
+            PushContext(GetContextForMemberExpression(memberExpression));
+            try
+            {
+                if (Context.Type != ContextType.This &&
+                    Context.Type != ContextType.Base)
+                {
+                    // Context is not a symbol, but a sub-context
+                    return null;
+                }
+                else
+                {
+                    return GetSymbolName(memberExpression.Member);
+                }
+            }
+            finally
+            {
+                PopContext();
+            }
+        }
+        else if (expression is CallOperator callOperator)
+        {
+            if (callOperator.Identifier.Text == "EX_ArrayGetByRef")
+            {
+                // 0: Array, 1: Index
+                var arrayObject = callOperator.Arguments.First();
+                return GetSymbolName(arrayObject.Expression);
+            }
+            else if (callOperator.Identifier.Text == "EX_InstanceVariable")
+            {
+                return GetSymbolName(callOperator.Arguments.First().Expression);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     private Symbol? GetSymbol<T>(Expression expression) where T : Symbol
     {
         if (expression is TypeIdentifier typeIdentifier)
@@ -1995,6 +2099,10 @@ public partial class KismetScriptCompiler
             {
                 return GetSymbol<T>(typeIdentifier.Text);
             }
+        }
+        else if (expression is StringLiteral stringLiteral)
+        {
+            return GetSymbol<T>(stringLiteral.Value);
         }
         else if (expression is Identifier identifier)
         {
@@ -2028,6 +2136,10 @@ public partial class KismetScriptCompiler
                 // 0: Array, 1: Index
                 var arrayObject = callOperator.Arguments.First();
                 return GetSymbol<T>(arrayObject.Expression);
+            }
+            else if (callOperator.Identifier.Text == "EX_InstanceVariable")
+            {
+                return GetSymbol<T>(callOperator.Arguments.First().Expression);
             }
             else
             {

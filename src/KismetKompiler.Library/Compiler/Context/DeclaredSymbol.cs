@@ -366,6 +366,11 @@ namespace KismetKompiler.Library.Compiler.Context
             => symbolsByName.SelectMany(x => x.Value).Where(x => x.Declaration == declaration).SingleOrDefault();
     }
 
+    public class UnknownSymbol : Symbol
+    {
+        public override SymbolCategory SymbolCategory => SymbolCategory.Any;
+    }
+
     public enum ContextType
     {
         None,

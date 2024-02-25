@@ -9,7 +9,7 @@ namespace KismetKompiler.Decompiler
     public partial class KismetDecompiler
     {
         // TODO factor this out of the class
-        public bool UseContext { get; set; } = true;
+        public bool UseContext { get; set; } = false;
         private string FormatExpression(KismetExpression kismetExpression, KismetExpression? parentKismetExpression)
         {
             switch (kismetExpression)
