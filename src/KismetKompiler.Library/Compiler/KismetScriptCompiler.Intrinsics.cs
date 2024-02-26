@@ -27,10 +27,31 @@ public partial class KismetScriptCompiler
                     Variable = GetPropertyPointer(callOperator.Arguments[0])
                 });
             case EExprToken.EX_InstanceVariable:
-                return new CompiledExpressionContext(callOperator, offset, new EX_InstanceVariable()
                 {
-                    Variable = GetPropertyPointer(callOperator.Arguments[0])
-                });
+                    KismetPropertyPointer variable;
+                    if (Context == null)
+                    {
+                        // Push implicit this context for instance member access
+                        PushContext(ContextType.This, _classContext.Symbol);
+                        try
+                        {
+                            variable = GetPropertyPointer(callOperator.Arguments[0]);
+                        }
+                        finally
+                        {
+                            PopContext();
+                        }
+                    }
+                    else
+                    {
+                        variable = GetPropertyPointer(callOperator.Arguments[0]);
+                    }
+
+                    return new CompiledExpressionContext(callOperator, offset, new EX_InstanceVariable()
+                    {
+                        Variable = variable
+                    });
+                }
             case EExprToken.EX_DefaultVariable:
                 return new CompiledExpressionContext(callOperator, offset, new EX_DefaultVariable()
                 {
@@ -121,12 +142,24 @@ public partial class KismetScriptCompiler
                     SkipExpression = CompileSubExpression(callOperator.Arguments[1])
                 }, new[] { GetLabel(callOperator.Arguments[0]) });
             case EExprToken.EX_Context:
-                return new CompiledExpressionContext(callOperator, offset, new EX_Context()
                 {
-                    ObjectExpression = CompileSubExpression(callOperator.Arguments[0]),
-                    RValuePointer = GetPropertyPointer(callOperator.Arguments[2]),
-                    ContextExpression = CompileSubExpression(callOperator.Arguments[3]),
-                }, new[] { GetLabel(callOperator.Arguments[1]) });
+                    var objectExpr = CompileSubExpression(callOperator.Arguments[0]);
+                    var context = GetContextForExpression(callOperator.Arguments[0].Expression);
+                    PushContext(context);
+                    try
+                    {
+                        return new CompiledExpressionContext(callOperator, offset, new EX_Context()
+                        {
+                            ObjectExpression = objectExpr,
+                            RValuePointer = GetPropertyPointer(callOperator.Arguments[2]),
+                            ContextExpression = CompileSubExpression(callOperator.Arguments[3]),
+                        }, new[] { GetLabel(callOperator.Arguments[1]) });
+                    }
+                    finally
+                    {
+                        PopContext();
+                    }
+                }
             case EExprToken.EX_Context_FailSilent:
                 return new CompiledExpressionContext(callOperator, offset, new EX_Context_FailSilent()
                 {

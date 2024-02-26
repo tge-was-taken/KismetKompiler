@@ -442,9 +442,9 @@ public partial class KismetDecompiler
                 else
                 {
                     if (symbol.Super != null)
-                        _writer.WriteLine($"public class {symbol.Name} : {symbol.Super.Name} {{");
+                        _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{");
                     else
-                        _writer.WriteLine($"public class {symbol.Name} {{");
+                        _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} {{");
                     _writer.Push();
                     isInsideClassDecl = true;
                     foreach (var child in symbol.Children)
@@ -526,9 +526,18 @@ public partial class KismetDecompiler
                     else
                     {
                         if (symbol.Class.Name != "Class")
-                            _writer.WriteLine($"public class {symbol.Name} : {symbol.Class.Name} {{}}");
+                            _writer.WriteLine($"public {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                         else
-                            _writer.WriteLine($"public class {symbol.Name} {{}}");
+                        {
+                            if (symbol.Super != null)
+                            {
+                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{}}");
+                            }
+                            else
+                            {
+                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} {{}}");
+                            }
+                        }
                     }
                 }
             }

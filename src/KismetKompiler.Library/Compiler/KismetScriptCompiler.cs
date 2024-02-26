@@ -14,8 +14,6 @@ using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Compiler.Intermediate;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
-using System.Xml.Linq;
-using System.Reflection;
 using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Library.Compiler;
@@ -1646,16 +1644,16 @@ public partial class KismetScriptCompiler
         }
     }
 
-    private MemberContext GetContextForMemberExpression(MemberExpression memberExpression)
+    private MemberContext GetContextForExpression(Expression expression)
     {
-        var contextSymbol = GetSymbol<Symbol>(memberExpression.Context);
+        var contextSymbol = GetSymbol<Symbol>(expression);
         var contextSymbolTemp = contextSymbol;
         var contextType = ContextType.Class;
         MemberContext subContext = default;
         if (contextSymbol == null)
         {
             contextType = ContextType.SubContext;
-            subContext = GetContextForMemberExpression((MemberExpression)memberExpression.Context);
+            subContext = GetContextForMemberExpression((MemberExpression)expression);
         }
         else if (contextSymbol is VariableSymbol variableSymbol)
         {
@@ -1726,27 +1724,7 @@ public partial class KismetScriptCompiler
             contextType = ContextType.Enum;
         }
 
-        if (!StrictMode)
-        {
-            (var memberIdentifier, bool isVirtual) = GetMemberIdentifier(memberExpression.Member);
-
-            if (memberIdentifier != null &&
-                !isVirtual &&
-                (contextSymbol == null ||
-                !contextSymbol.SymbolExists(memberIdentifier.Text)))
-            {
-                // TODO fix this in the decompiler
-                // Fuzzy match
-                contextSymbol = CurrentScope
-                     .Where(x => x is ClassSymbol)
-                     .SelectMany(x => x.Members)
-                     .Where(x => x.Name == memberIdentifier.Text)
-                     .Select(x => x.DeclaringClass)
-                     .Single();
-            }
-        }
-
-        //Debug.Assert(contextSymbol is ClassSymbol || contextSymbol is EnumSymbol || (contextSymbol is null && subContext != null));
+        Debug.Assert(contextSymbol != null);
 
         var context = new MemberContext()
         {
@@ -1755,7 +1733,7 @@ public partial class KismetScriptCompiler
             Type = contextType,
         };
 
-        if (memberExpression.Context is Identifier contextIdentifier &&
+        if (expression is Identifier contextIdentifier &&
             contextIdentifier.Text == _classContext?.Symbol.Name)
         {
             // TODO: make more flexible
@@ -1764,6 +1742,12 @@ public partial class KismetScriptCompiler
         }
 
         return context;
+    }
+
+    private MemberContext GetContextForMemberExpression(MemberExpression memberExpression)
+    {
+        var contextSymbol = GetContextForExpression(memberExpression.Context);
+        return contextSymbol;
     }
 
     private (Identifier Identifier, bool IsLookup) GetMemberIdentifier(Expression expression, bool? isVirtual = null)
@@ -1972,7 +1956,22 @@ public partial class KismetScriptCompiler
                     token == EExprToken.EX_InstanceVariable ||
                     token == EExprToken.EX_LocalOutVariable)
                 {
-                    pointer = GetPropertyPointer(callOperator.Arguments[0]);
+                    if (token == EExprToken.EX_InstanceVariable && Context == null)
+                    {
+                        PushContext(ContextType.This, _classContext.Symbol);
+                        try
+                        {
+                            pointer = GetPropertyPointer(callOperator.Arguments[0]);
+                        }
+                        finally
+                        {
+                            PopContext();
+                        }
+                    }
+                    else
+                    {
+                        pointer = GetPropertyPointer(callOperator.Arguments[0]);
+                    }
                 }
                 else if (token == EExprToken.EX_StructMemberContext)
                 {
@@ -2113,16 +2112,7 @@ public partial class KismetScriptCompiler
             PushContext(GetContextForMemberExpression(memberExpression));
             try
             {
-                if (Context.Type != ContextType.This &&
-                    Context.Type != ContextType.Base)
-                {
-                    // Context is not a symbol, but a sub-context
-                    return null;
-                }
-                else
-                {
-                    return GetSymbol<T>(memberExpression.Member);
-                }
+                return GetSymbol<T>(memberExpression.Member);
             }
             finally
             {
@@ -2139,7 +2129,22 @@ public partial class KismetScriptCompiler
             }
             else if (callOperator.Identifier.Text == "EX_InstanceVariable")
             {
-                return GetSymbol<T>(callOperator.Arguments.First().Expression);
+                if (Context == null)
+                {
+                    PushContext(ContextType.This, _classContext.Symbol);
+                    try
+                    {
+                        return GetSymbol<T>(callOperator.Arguments.First().Expression);
+                    }
+                    finally
+                    {
+                        PopContext();
+                    }
+                }
+                else
+                {
+                    return GetSymbol<T>(callOperator.Arguments.First().Expression);
+                }
             }
             else
             {

@@ -360,11 +360,138 @@ public class KismetAnalyser
         _symbols.AddRange(inferredClassSymbols);
     }
 
+    private void AnalyseFunctions()
+    {
+        // Walk through all functions and their instructions to do usage-based inference
+        var ctx = new FunctionAnalysisContext()
+        {
+            Asset = _asset,
+            Symbols = _symbols,
+            InferredSymbols = new(),
+            UnexpectedMemberAccesses = new(),
+        };
+
+        foreach (var functionSymbol in _symbols
+            .Where(x => x.Export is FunctionExport))
+        {
+            var functionExport = (FunctionExport)functionSymbol.Export!;
+            foreach (var ex in functionExport.ScriptBytecode)
+            {
+                var visitor = new AnalyzingExpressionVisitor(ctx, functionSymbol.Parent!);
+                visitor.Visit(ex);
+            }
+        }
+
+        // Resolve types of inferred symbols through their usage
+        foreach (var group in ctx.UnexpectedMemberAccesses
+            .GroupBy(x => x.ContextSymbol))
+        {
+            var contextSymbol = group.Key;
+            foreach (var memberAccess in group)
+            {
+                if (contextSymbol.HasMember(memberAccess.VariableSymbol))
+                    continue;
+
+                if (contextSymbol.Flags.HasFlag(SymbolFlags.UnresolvedClass))
+                {
+                    // The context's class is unresolved, likely because it was inferred from
+                    // a KismetPropertyPointer
+                    // Try to guess variable type based on what members have been accessed
+                    // FIXME: pick best candidate instead of first
+                    var classSymbol = _symbols.Where(x =>
+                        x.HasMember(memberAccess.VariableSymbol.Name)).ToList();
+                    if (classSymbol.Any())
+                    {
+                        contextSymbol.Class = classSymbol.First();
+                        contextSymbol.Flags &= ~SymbolFlags.UnresolvedClass;
+                    }
+                }
+                else
+                {
+                    // The context a known symbol. Might be a virtual call, or a missing base class.
+                    if (memberAccess.VariableExpression is EX_VirtualFunction virtualFunction)
+                    {
+                        // Virtual calls are done by name, and are not necessarily imported
+                        // We assume the virtual function belongs to the base class
+                        if (!contextSymbol.HasMember(memberAccess.VariableSymbol.Name))
+                        {
+                            if (contextSymbol.PropertyType != null)
+                            {
+                                contextSymbol.PropertyType.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else if (contextSymbol.Super != null)
+                            {
+                                contextSymbol.Super.AddChild(memberAccess.VariableSymbol);
+                            }
+                            //else
+                            //{
+                            //    contextSymbol.AddChild(memberAccess.VariableSymbol);
+                            //}
+                        }
+                    }
+                    else if (memberAccess.VariableExpression is EX_InstanceVariable instanceVariable)
+                    {
+                        // If an instance member on the context has been accessed, but it doesn't exist in the class
+                        // it must be part of a base class that is not assigned properly
+                        var rootBaseClass = contextSymbol.Super ?? contextSymbol;
+                        while (rootBaseClass?.Super != null)
+                            rootBaseClass = rootBaseClass.Super;
+
+                        var owningClassSymbol = _symbols.Where(x =>
+                            x.HasMember(memberAccess.VariableSymbol.Name)).ToList();
+                        if (owningClassSymbol.Any())
+                        {
+                            rootBaseClass.Super = owningClassSymbol.First();
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // For the remainder of the unresolved symbols, we generate
+        // fake classes which contain the accessed members to satisfy the compiler
+        foreach (var sym in ctx.Symbols
+            .Union(ctx.InferredSymbols)
+            .Where(x => x.Flags.HasFlag(SymbolFlags.UnresolvedClass))
+            .ToList())
+        {
+            var members = ctx.UnexpectedMemberAccesses.Where(x => x.ContextSymbol == sym)
+                .Select(x => x.VariableSymbol)
+                .DistinctBy(x => x.Name)
+                .ToList();
+
+            if (members.Any())
+            {
+                var fakeClass = new Symbol()
+                {
+                    Name = $"{sym.Name}FakeClass",
+                    Class = _symbols.Where(x => x.Name == "Class").FirstOrDefault(),
+                    Flags = SymbolFlags.FakeClass | SymbolFlags.Import,
+                };
+                foreach (var member in members)
+                {
+                    fakeClass.AddChild(member);
+                }
+                fakeClass.Parent = sym.Parent.Parent;
+
+                sym.Class = fakeClass;
+                sym.Flags &= ~SymbolFlags.UnresolvedClass;
+                ctx.InferredSymbols.Add(fakeClass);
+            }
+        }
+
+        // With all the classes hopefully mapped out
+
+        _symbols.AddRange(ctx.InferredSymbols);
+    }
+
     private class AnalyzingExpressionVisitor : KismetExpressionVisitor
     {
         private readonly FunctionAnalysisContext _context;
         private Symbol _instance;
         private Stack<(EX_Context Context, Symbol ContextSymbol)> _contextStack = new();
+        private Dictionary<KismetExpression, Symbol> _expressionSymbolCache = new();
 
         public AnalyzingExpressionVisitor(FunctionAnalysisContext context, Symbol instance)
         {
@@ -550,10 +677,8 @@ public class KismetAnalyser
                 return context.PropertyType ?? throw new NotImplementedException();
             }
             else if (ctx.ObjectExpression is EX_Context context)
-            {  
-                var temp = GetContext(context)
-                    ?? throw new NotImplementedException();
-                return temp;
+            {
+                return _expressionSymbolCache[context];
             }
             else
             {
@@ -617,128 +742,244 @@ public class KismetAnalyser
 
         }
 
-        public override void Visit(KismetExpression expression, ref int codeOffset)
+        private void TrackMemberAccesses(KismetExpression expression)
         {
-            EnsureKismetPropertyPointerSymbolsCreated(expression);
-
-
-            // Create all implicit symbols based on kismet property pointers
             switch (expression)
             {
-                case EX_Context context:
+                case EX_LocalVirtualFunction localVirtualFunction:
                     {
-                        var contextSymbol = GetContext(context);
-                        _contextStack.Push((context, contextSymbol));
-                        base.Visit(context.ContextExpression);
-                        _contextStack.Pop();
-                        return;
-                    }
-                case EX_InstanceVariable instanceVariable:
-                    {
-                        //var variableSymbol = EnsurePropertySymbol(instanceVariable.Variable);
-                        //if (!ActiveContextSymbol.HasMember(variableSymbol))
-                        //{
-                        //    if (ActiveContextSymbol.Super == null)
-                        //    {
-                        //        ActiveContextSymbol.Super = variableSymbol.Parent;
-                        //    }
-
-                        //    //ActiveContextSymbol.AddChild(variableSymbol);
-                        //}
+                        var sym = ActiveContextSymbol.GetMember(localVirtualFunction.VirtualFunctionName.ToString());
+                        if (sym == null)
+                        {
+                            sym = new Symbol()
+                            {
+                                Name = localVirtualFunction.VirtualFunctionName.ToString(),
+                                Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault(),
+                                Flags = SymbolFlags.EvaluationTemporary
+                            };
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = localVirtualFunction,
+                                VariableSymbol = sym
+                            });
+                        }
+                        _expressionSymbolCache[localVirtualFunction] = sym;
                     }
                     break;
-                case EX_FinalFunction finalFunction:
+
+                case EX_LocalFinalFunction localFinalFunction:
                     {
-                        // Analyse final (static) function call
-                        var functionSymbol =
-                            _context.Symbols.Where(x =>
-                                                x.ImportIndex?.Index == finalFunction.StackNode.Index ||
-                                                x.ExportIndex?.Index == finalFunction.StackNode.Index)
-                            .SingleOrDefault();
-
-                        // Set class to appropriate type (Function)
-                        functionSymbol.Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault();
-
-                        // Set function signature
-                        functionSymbol.FunctionMetadata.CallingConvention |= finalFunction switch
+                        var sym = ActiveContextSymbol.GetMember(localFinalFunction.StackNode);
+                        if (sym == null)
                         {
-                            EX_CallMath => CallingConvention.CallMath,
-                            EX_CallMulticastDelegate => CallingConvention.CallMulticastDelegate,
-                            EX_LocalFinalFunction => CallingConvention.LocalFinalFunction,
-                            EX_FinalFunction => CallingConvention.FinalFunction,
-                        };
-
-                        functionSymbol.FunctionMetadata.Parameters = finalFunction.Parameters
-                            .Select((x, i) => new Symbol()
+                            sym = _context.Symbols.Where(x => x.ExportIndex?.Index == localFinalFunction.StackNode.Index || x.ImportIndex?.Index == localFinalFunction.StackNode.Index)
+                                .FirstOrDefault() ??
+                                new Symbol()
+                                {
+                                    Name = _context.Asset.GetName(localFinalFunction.StackNode),
+                                    Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault(),
+                                    Flags = SymbolFlags.EvaluationTemporary
+                                };
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
                             {
-                                // FIXME: determine better name if it all feasible
-                                Name = $"param{i}",
-                                // FIXME: determine actual type
-                                Class = _context.Symbols.Where(x => x.Name == "ObjectProperty").FirstOrDefault()
-                            }).ToList();
-
-                        if (ParentExpression != null)
-                        {
-                            // FIXME: determine actual type
-                            functionSymbol.FunctionMetadata.ReturnType = _context.Symbols.Where(x => x.Name == "ObjectProperty").FirstOrDefault();
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = localFinalFunction,
+                                VariableSymbol = sym
+                            });
                         }
+                        _expressionSymbolCache[localFinalFunction] = sym;
                         break;
                     }
-            }
 
-            base.Visit(expression, ref codeOffset);
+                case EX_InstanceVariable instanceVariable:
+                    {
+                        var sym = EnsurePropertySymbol(instanceVariable.Variable);
+
+                        if (!ActiveContextSymbol.HasMember(sym))
+                        {
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = instanceVariable,
+                                VariableSymbol = sym
+                            });
+                        }
+                        _expressionSymbolCache[instanceVariable] = sym;
+                    }
+                    break;
+
+                case EX_CallMulticastDelegate callMulticastDelegate:
+                    {
+                        var sym = ActiveContextSymbol.GetMember(callMulticastDelegate.StackNode);
+                        if (sym == null)
+                        {
+                            sym = _context.Symbols.Where(x => x.ExportIndex?.Index == callMulticastDelegate.StackNode.Index || x.ImportIndex?.Index == callMulticastDelegate.StackNode.Index)
+                                .FirstOrDefault() ??
+                                new Symbol()
+                                {
+                                    Name = _context.Asset.GetName(callMulticastDelegate.StackNode),
+                                    Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault(),
+                                    Flags = SymbolFlags.EvaluationTemporary
+                                };
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = callMulticastDelegate,
+                                VariableSymbol = sym
+                            });
+                        }
+                        _expressionSymbolCache[callMulticastDelegate] = sym;
+                    }
+                    break;
+
+                case EX_FinalFunction finalFunction:
+                    {
+                        var sym = _context.Symbols.Where(x => x.ExportIndex?.Index == finalFunction.StackNode.Index || x.ImportIndex?.Index == finalFunction.StackNode.Index)
+                            .FirstOrDefault();
+                        if (sym == null)
+                        {
+                            sym = new Symbol()
+                            {
+                                Name = _context.Asset.GetName(finalFunction.StackNode),
+                                Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault(),
+                                Flags = SymbolFlags.EvaluationTemporary
+                            };
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = finalFunction,
+                                VariableSymbol = sym
+                            });
+                        }
+                        _expressionSymbolCache[finalFunction] = sym;
+
+                        //// Analyse final (static) function call
+                        //var functionSymbol =
+                        //    _context.Symbols.Where(x =>
+                        //                        x.ImportIndex?.Index == finalFunction.StackNode.Index ||
+                        //                        x.ExportIndex?.Index == finalFunction.StackNode.Index)
+                        //    .SingleOrDefault();
+
+                        //// Set class to appropriate type (Function)
+                        //functionSymbol.Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault();
+
+                        //// Set function signature
+                        //functionSymbol.FunctionMetadata.CallingConvention |= finalFunction switch
+                        //{
+                        //    EX_CallMath => CallingConvention.CallMath,
+                        //    EX_CallMulticastDelegate => CallingConvention.CallMulticastDelegate,
+                        //    EX_LocalFinalFunction => CallingConvention.LocalFinalFunction,
+                        //    EX_FinalFunction => CallingConvention.FinalFunction,
+                        //};
+
+                        //functionSymbol.FunctionMetadata.Parameters = finalFunction.Parameters
+                        //    .Select((x, i) => new Symbol()
+                        //    {
+                        //        // FIXME: determine better name if it all feasible
+                        //        Name = $"param{i}",
+                        //        // FIXME: determine actual type
+                        //        Class = _context.Symbols.Where(x => x.Name == "ObjectProperty").FirstOrDefault()
+                        //    }).ToList();
+
+                        //if (ParentExpression != null)
+                        //{
+                        //    // FIXME: determine actual type
+                        //    functionSymbol.FunctionMetadata.ReturnType = _context.Symbols.Where(x => x.Name == "ObjectProperty").FirstOrDefault();
+                        //}
+                        break;
+                    }
+
+
+                case EX_VirtualFunction virtualFunction:
+                    {
+                        var sym = ActiveContextSymbol.GetMember(virtualFunction.VirtualFunctionName.ToString());
+                        if (sym == null)
+                        {
+                            sym = new Symbol()
+                            {
+                                Name = virtualFunction.VirtualFunctionName.ToString(),
+                                Class = _context.Symbols.Where(x => x.Name == "Function").FirstOrDefault(),
+                                Flags = SymbolFlags.EvaluationTemporary
+                            };
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = ActiveContext,
+                                ContextSymbol = ActiveContextSymbol,
+                                VariableExpression = virtualFunction,
+                                VariableSymbol = sym
+                            });
+                        }
+                        _expressionSymbolCache[virtualFunction] = sym;
+                    }
+                    break;
+
+                case EX_Context context:
+                    {
+                        // Need to evaluate nested contexts depth-first
+                        //var contextExprStack = new Stack<EX_Context>();
+                        //contextExprStack.Push(context);
+                        //var currentContextExpr = context;
+                        //while (currentContextExpr.ObjectExpression is EX_Context subContextExpr)
+                        //{
+                        //    contextExprStack.Push(subContextExpr);
+                        //    currentContextExpr = subContextExpr;
+                        //}
+
+                        //var contextSymbolStack = new Stack<Symbol>();
+                        //while (contextExprStack.TryPop(out currentContextExpr))
+                        //{
+
+                        //}
+
+                        Visit(context.ObjectExpression);
+                        var contextSymbol = GetContext(context);
+                        _contextStack.Push((context, contextSymbol));
+                        Visit(context.ContextExpression);
+                        _contextStack.Pop();
+                        _expressionSymbolCache[context] = _expressionSymbolCache[context.ContextExpression];
+                        return;
+                    }
+            }
+        }
+
+        public override void Visit(KismetExpression expression, ref int codeOffset)
+        {
+            // Create all implicit symbols based on kismet property pointers
+            EnsureKismetPropertyPointerSymbolsCreated(expression);
+            TrackMemberAccesses(expression);
+
+            // Don't visit EX_Context because we visit it manually so we can handle the 
+            // context stack
+            if (expression is not EX_Context)
+                base.Visit(expression, ref codeOffset);
+        }
+    }
+
+    private class MemberAccessContext
+    {
+        public required EX_Context ContextExpression { get; init; }
+        public required Symbol ContextSymbol { get; init; }
+        public required KismetExpression VariableExpression { get; init; }
+        public required Symbol VariableSymbol { get; init; }
+
+        public override string ToString()
+        {
+            return $"{ContextExpression} {ContextSymbol} {VariableExpression} {VariableSymbol}";
         }
     }
 
     private class FunctionAnalysisContext
     {
         public required UnrealPackage Asset { get; init; }
-        public required List<Symbol> Symbols { get; init; }
+        public required IReadOnlyList<Symbol> Symbols { get; init; }
         public required HashSet<Symbol> InferredSymbols { get; init; }
-    }
-
-    private void AnalyseFunctions()
-    {
-        // Walk through all functions and their instructions to do usage-based inference
-        var ctx = new FunctionAnalysisContext()
-        {
-            Asset = _asset,
-            Symbols = _symbols,
-            InferredSymbols = new()
-        };
-
-        foreach (var functionSymbol in _symbols
-            .Where(x => x.Export is FunctionExport))
-        {
-            var functionExport = (FunctionExport)functionSymbol.Export!;
-            foreach (var ex in functionExport.ScriptBytecode)
-            {
-                var visitor = new AnalyzingExpressionVisitor(ctx, functionSymbol.Parent!);
-                visitor.Visit(ex);
-            }
-        }
-
-        // Resolve types of inferred symbols
-        foreach (var symbol in ctx.InferredSymbols)
-        {
-            
-
-            //if (item.Member.Parent == item.Context)
-            //    continue;
-            //else if (item.Member.Parent == null)
-            //{
-            //    // Found parent of orphaned symbol
-            //    item.Member.Parent = item.Context;
-            //}
-            //else
-            //{
-            //    if (item.Context.Super != item.Member.Parent &&
-            //        item.Context.PropertyClass?.Super != item.Member.Parent)
-            //    {
-            //        // If parent of member symbol is not the base class
-            //    }
-            //}
-        }
+        public required HashSet<MemberAccessContext> UnexpectedMemberAccesses { get; init; } = new();
     }
 }
 
@@ -755,6 +996,8 @@ public enum SymbolFlags
     ClonedFromGenVariable = 1 << 7,
     InferredFromKismetPropertyPointer = 1 << 8,
     UnresolvedClass = 1 << 9,
+    EvaluationTemporary = 1 << 10,
+    FakeClass = 1 << 11,
 }
 
 [Flags]
@@ -813,12 +1056,38 @@ public class Symbol
 
     public SymbolFunctionMetadata FunctionMetadata { get; set; } = new();
 
+
+    public bool HasMember(string name)
+    {
+        return GetMember(name) != null;
+    }
+
     public bool HasMember(Symbol member)
     {
         return Children.Contains(member) ||
                 (Super?.HasMember(member) ?? false) ||
                 (PropertyType?.HasMember(member) ?? false) ||
                 (Class?.HasMember(member) ?? false);
+    }
+
+    public Symbol? GetMember(KismetPropertyPointer pointer)
+    {
+        if (pointer.Old != null)
+        {
+            return GetMember(pointer.Old);
+        }
+        else
+        {
+            return GetMember(pointer.New.Path[0].ToString());
+        }
+    }
+
+    public Symbol? GetMember(FPackageIndex index)
+    {
+        return Children.Where(x => x.ImportIndex?.Index == index.Index || x.ExportIndex?.Index == index.Index).SingleOrDefault()
+            ?? Super?.GetMember(index)
+            ?? PropertyType?.GetMember(index)
+            ?? Class?.GetMember(index);
     }
 
     public Symbol? GetMember(string name)
@@ -831,7 +1100,7 @@ public class Symbol
 
     public void AddChild(Symbol child)
     {
-        if (child.Parent == this)
+        if (child.Parent != this)
         {
             child.Parent = this;
         }
