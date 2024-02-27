@@ -998,7 +998,7 @@ public partial class KismetDecompiler
     {
         if (!IdentifierRegex().IsMatch(name) ||
             (!allowKeywords && KismetScriptParser.IsKeyword(name)))
-            return $"``{name}``";
+            return $"`{name}`";
 
         return name;
     }

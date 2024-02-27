@@ -2074,12 +2074,12 @@ public class KismetScriptASTParser
     {
         identifier = CreateAstNode<Identifier>(node);
         identifier.Text = node.Symbol.Text;
-        if (identifier.Text.StartsWith("``"))
+        if (identifier.Text.StartsWith("`"))
         {
             // verbatim identifier
-            // ``foo``
+            // `foo`
             // 0123456
-            identifier.Text = identifier.Text.Substring(2, identifier.Text.Length - 4);
+            identifier.Text = identifier.Text.Substring(1, identifier.Text.Length - 2);
         }
 
         return true;

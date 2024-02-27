@@ -294,7 +294,7 @@ fragment
 False:		'false';
 
 fragment
-IdentifierEscape: '``';
+IdentifierEscape: '`';
 
 // Integer constants
 IntLiteral
