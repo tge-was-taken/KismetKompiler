@@ -13,10 +13,10 @@ public abstract class SyntaxNodeVisitor
 
     public virtual void Visit(CompilationUnit compilationUnit)
     {
-        foreach (var import in compilationUnit.Imports)
-        {
-            Visit(import);
-        }
+        //foreach (var import in compilationUnit.Imports)
+        //{
+        //    Visit(import);
+        //}
 
         foreach (var statement in compilationUnit.Declarations)
         {

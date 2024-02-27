@@ -122,14 +122,14 @@ public class KismetScriptASTParser
         compilationUnit = CreateAstNode<CompilationUnit>(context);
 
         // Parse using statements
-        if (TryGet(context, context.namespaceStatement, out var importContexts))
-        {
-            List<PackageDeclaration> imports = null;
-            if (!TryFunc(context, "Failed to parse imports", () => TryParseImports(importContexts, out imports)))
-                return false;
+        //if (TryGet(context, context.namespaceStatement, out var importContexts))
+        //{
+        //    List<PackageDeclaration> imports = null;
+        //    if (!TryFunc(context, "Failed to parse imports", () => TryParseImports(importContexts, out imports)))
+        //        return false;
 
-            compilationUnit.Imports = imports;
-        }
+        //    compilationUnit.Imports = imports;
+        //}
 
         // Parse declarations
         List<Declaration> statements = null;
@@ -145,53 +145,53 @@ public class KismetScriptASTParser
     //
     // Imports
     //
-    private bool TryParseImports(KismetScriptParser.NamespaceStatementContext[] contexts, out List<PackageDeclaration> imports)
-    {
-        LogTrace("Start parsing import statements");
-        imports = new List<PackageDeclaration>();
+    //private bool TryParseImports(KismetScriptParser.NamespaceStatementContext[] contexts, out List<PackageDeclaration> imports)
+    //{
+    //    LogTrace("Start parsing import statements");
+    //    imports = new List<PackageDeclaration>();
 
-        foreach (var importContext in contexts)
-        {
-            PackageDeclaration import = null;
-            if (!TryFunc(importContext, "Failed to parse import statement", () => TryParseImport(importContext, out import)))
-                return false;
+    //    foreach (var importContext in contexts)
+    //    {
+    //        PackageDeclaration import = null;
+    //        if (!TryFunc(importContext, "Failed to parse import statement", () => TryParseImport(importContext, out import)))
+    //            return false;
 
-            imports.Add(import);
-        }
+    //        imports.Add(import);
+    //    }
 
-        LogTrace("Done parsing imports");
-        return true;
-    }
+    //    LogTrace("Done parsing imports");
+    //    return true;
+    //}
 
-    private bool TryParseImport(KismetScriptParser.NamespaceStatementContext context, out PackageDeclaration import)
-    {
-        LogContextInfo(context);
+    //private bool TryParseImport(KismetScriptParser.NamespaceStatementContext context, out PackageDeclaration import)
+    //{
+    //    LogContextInfo(context);
 
-        import = null;
+    //    import = null;
 
-        if (!TryGet(context, "Expected file path", context.namespaceIdentifier, out var filePathNode))
-            return false;
+    //    if (!TryGet(context, "Expected file path", context.namespaceIdentifier, out var filePathNode))
+    //        return false;
 
-        import = CreateAstNode<PackageDeclaration>(context);
-        import.Identifier = new(filePathNode.GetText());
+    //    import = CreateAstNode<PackageDeclaration>(context);
+    //    import.Identifier = new(filePathNode.GetText());
 
-        if (context.declarationStatement()?.Length > 0)
-        {
-            foreach (var externDecl in context.declarationStatement())
-            {
-                if (!TryParseDeclaration(externDecl, out var externalDeclaration))
-                {
-                    LogError(externDecl, "Failed to parse external declaration");
-                    return false;
-                }
+    //    if (context.declarationStatement()?.Length > 0)
+    //    {
+    //        foreach (var externDecl in context.declarationStatement())
+    //        {
+    //            if (!TryParseDeclaration(externDecl, out var externalDeclaration))
+    //            {
+    //                LogError(externDecl, "Failed to parse external declaration");
+    //                return false;
+    //            }
 
-                import.Declarations.Add(externalDeclaration);
-            }
-        }
+    //            import.Declarations.Add(externalDeclaration);
+    //        }
+    //    }
 
-        LogTrace($"Parsed import: {import}");
-        return true;
-    }
+    //    LogTrace($"Parsed import: {import}");
+    //    return true;
+    //}
 
     //
     // Statements
@@ -610,6 +610,15 @@ public class KismetScriptASTParser
         //else
         //    variableDeclaration = CreateAstNode<ArrayVariableDeclaration>(context);
         variableDeclaration = CreateAstNode<VariableDeclaration>(context);
+
+        var attributeListContext = context.attributeList();
+        if (attributeListContext != null)
+        {
+            if (!TryParseAttributeList(attributeListContext, out var attributes))
+                return false;
+
+            variableDeclaration.Attributes.AddRange(attributes);
+        }
 
         // Parse modifier(s)
         if (TryGet(context, context.modifier, out var variableModifierContext))

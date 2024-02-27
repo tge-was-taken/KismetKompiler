@@ -18,8 +18,6 @@ public enum ProcedureModifier
 
 public class ProcedureDeclaration : Declaration, IBlockStatement
 {
-    public List<AttributeDeclaration> Attributes { get; init; } = new();
-
     public ProcedureModifier Modifiers { get; set; } = 0;
 
     public bool IsPublic => Modifiers.HasFlag(ProcedureModifier.Public);

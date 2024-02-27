@@ -8,7 +8,7 @@ grammar KismetScript;
 
 // Basic constructs
 compilationUnit
-	: namespaceStatement* usingStatement* declarationStatement* EOF
+	: declarationStatement* EOF
 	;
 
 statement
@@ -45,16 +45,8 @@ declarationStatement
 	| classDeclarationStatement
 	;
 
-namespaceStatement
-	: Namespace namespaceIdentifier '{' declarationStatement* '}'
-	;
-
 namespaceIdentifier
 	: Identifier ('.' Identifier)*
-	;
-
-usingStatement
-	: Using namespaceIdentifier Semicolon
 	;
 
 classDeclarationStatement

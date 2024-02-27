@@ -236,9 +236,9 @@ namespace KismetKompiler.Library.Compiler.Context
         public EPropertyFlags Flags { get; set; }
     }
 
-    public class PackageSymbol : DeclaredSymbol<PackageDeclaration>
+    public class PackageSymbol : Symbol
     {
-        public PackageSymbol(PackageDeclaration declaration) : base(declaration)
+        public PackageSymbol() : base()
         {
         }
 

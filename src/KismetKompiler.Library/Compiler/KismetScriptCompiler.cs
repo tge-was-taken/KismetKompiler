@@ -190,7 +190,8 @@ public partial class KismetScriptCompiler
 
     private void CompileScript(CompilationUnit compilationUnit, CompiledScriptContext script)
     {
-        foreach (var declaration in compilationUnit.Declarations)
+        foreach (var declaration in compilationUnit.Declarations
+            .Where(x => !x.Attributes.Any(x => x.Identifier.Text == "Import")))
         {
             if (declaration is ProcedureDeclaration procedureDeclaration)
             {
@@ -333,15 +334,35 @@ public partial class KismetScriptCompiler
             }
         }
 
-        foreach (var packageDeclaration in _compilationUnit.Imports)
+        // Find imported packages, and group the declarations that are imported from it
+        var packageImports = new List<(string PackagePath, List<Declaration> Declarations)>();
+        foreach (var decl in _compilationUnit.Declarations)
         {
-            var packageSymbol = new PackageSymbol(packageDeclaration)
+            var importAttrib = decl.Attributes.FirstOrDefault(x => x.Identifier.Text == "Import");
+            if (importAttrib != null)
+            {
+                if (importAttrib.Arguments.Count != 1)
+                    throw new UnexpectedSyntaxError(importAttrib);
+                var packagePath = importAttrib.Arguments[0].Expression as StringLiteral;
+                if (packagePath == null) 
+                    throw new UnexpectedSyntaxError(importAttrib.Arguments[0]);
+                var importedDeclarations = packageImports.Where(x => x.PackagePath == packagePath).FirstOrDefault().Declarations;
+                if (importedDeclarations != null)
+                    importedDeclarations.Add(decl);
+                else
+                    packageImports.Add((packagePath, new() { decl }));
+            }
+        }
+
+        foreach ((var packagePath, var declarations) in packageImports)
+        {
+            var packageSymbol = new PackageSymbol()
             {
                 IsExternal = true,
-                Name = "/" + packageDeclaration.Identifier.Text.Replace(".", "/"),
+                Name = packagePath,
                 DeclaringSymbol = null,
             };
-            foreach (var item in packageDeclaration.Declarations)
+            foreach (var item in declarations)
                 CreateDeclarationSymbol(item, packageSymbol, true);
 
             // Declare package, classes and (static) functions as global symbols
@@ -369,7 +390,8 @@ public partial class KismetScriptCompiler
                 DeclareSymbol(symbol);
         }
 
-        foreach (var declaration in _compilationUnit.Declarations)
+        foreach (var declaration in _compilationUnit.Declarations
+            .Except(packageImports.SelectMany(x => x.Declarations)))
         {
             var declarationSymbol = CreateDeclarationSymbol(declaration, null, false);
             DeclareSymbol(declarationSymbol);
@@ -1462,7 +1484,7 @@ public partial class KismetScriptCompiler
         {
             librarySymbol = new ClassSymbol(null)
             {
-                DeclaringSymbol = new PackageSymbol(null)
+                DeclaringSymbol = new PackageSymbol()
                 {
                     DeclaringSymbol = null,
                     IsExternal = true,
