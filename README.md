@@ -45,6 +45,9 @@ Compiles a script into a new or existing blueprint asset.
 - `--global`: (Optional) Path to a global.ucas/utoc file. Required if IO store is used (eg. no uexp, usmap required)
 - `--help`: Display the help screen.
 
+Example:
+``KismetKompiler compile -v 4.27 -i BP_BtlCalc.kms -o BP_BtlCalc_edit.uasset --asset BP_BtlCalc.uasset``
+
 ### ``decompile`` Command
 
 Decompiles a blueprint asset into a .kms file.
@@ -59,6 +62,9 @@ Decompiles a blueprint asset into a .kms file.
 - `--usmap`: (Optional) Path to a .usmap file.
 - `--global`: (Optional) Path to a global.ucas/utoc file. Required if IO store is used (eg. no uexp, usmap required)
 - `--help`: Display the help screen.
+
+Example:
+``KismetKompiler decompile -v 4.27 -i BP_BtlCalc.uasset``
 
 ## Known Limitations
 
