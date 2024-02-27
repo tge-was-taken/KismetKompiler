@@ -323,27 +323,28 @@ static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
     var oldJsonText = JsonConvert.SerializeObject(oldJsons, Formatting.Indented);
     var newJsonText = JsonConvert.SerializeObject(newJsons, Formatting.Indented);
 
+    var outDirectory = AppDomain.CurrentDomain.BaseDirectory;
+    try
+    {
+        File.WriteAllText(Path.Combine(outDirectory, "old.json"), oldJsonText);
+        File.WriteAllText(Path.Combine(outDirectory, "new.json"), newJsonText);
+    }
+    catch (Exception)
+    {
+        Console.WriteLine($"Failed to write verification dumps to {outDirectory}");
+    }
+
     if (oldJsonText != newJsonText)
     {
         Console.WriteLine("Verification failed");
-        var outDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        try
-        {
-            File.WriteAllText(Path.Combine(outDirectory, "old.json"), oldJsonText);
-            File.WriteAllText(Path.Combine(outDirectory, "new.json"), newJsonText);
-        }
-        catch (Exception)
-        {
-            Console.WriteLine($"Failed to write verification dumps to {outDirectory}");
-        }
         return false;
     }
     else
     {
         Console.WriteLine("Verification succeeded");
-    }
 
-    return true;
+        return true;
+    }
 }
 
 class OptionsBase

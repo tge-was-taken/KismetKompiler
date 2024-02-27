@@ -143,7 +143,6 @@ public class TypeResolver
         }
         else
         {
-            Debugger.Break();
         }
 
         //_functionState = new()
@@ -648,9 +647,6 @@ public class TypeResolver
         //     LogError($"({node.SourceInfo.Line:D4}:{node.SourceInfo.Column:D4}) {message}");
         // else
         //     LogError(message);
-
-        if (Debugger.IsAttached)
-            Debugger.Break();
     }
 
     private void LogError(string message)

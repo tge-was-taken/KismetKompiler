@@ -3,6 +3,7 @@ using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Utilities;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace KismetKompiler.Decompiler
 {
@@ -154,26 +155,35 @@ namespace KismetKompiler.Decompiler
                             _context = null;
 
                             var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
-                            var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
-                            .FirstOrDefault();
+                            var functionExport = (FunctionExport?)(expr.StackNode.IsExport() ? expr.StackNode.ToExport(_asset) : null);
+                            var functionImport = (expr.StackNode.IsImport() ? expr.StackNode.ToImport(_asset) : null);
+                            if (functionImport != null)
+                            {
+                                functionExport = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
+                                    .FirstOrDefault();
+                            }
+                            var classSymbol = _analysisResult.AllSymbols.Where(x => x.Export == _class).First();
 
                             var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
-                            if (function != null &&
-                                function.IsUbergraphFunction() &&
+                            if (functionExport != null &&
+                                functionExport.IsUbergraphFunction() &&
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, function.ObjectName.ToString());
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
                                 return $"{context}.{functionName}({uberGraphFunctionLabel})";
                             }
                             else
                             {
-                                var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
-                                var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
+                                // Check if a base class functions is being called
+                                var isFinalFunction = functionExport?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? false;
+                                //var isClassMemberFunction = ((functionExport?.OuterIndex.IsExport() ?? false) && (functionExport?.OuterIndex.ToExport(_asset) == _class));
+                                var isClassMemberFunction = classSymbol.HasMember(GetFunctionName(expr.StackNode));
                                 if (!isFinalFunction && isClassMemberFunction && callContext == null)
                                 {
-                                    context = _class.ObjectName.ToString();
+                                    // The function exists within the base class...
+                                    context = "base";
                                 }
 
                                 if (string.IsNullOrWhiteSpace(parameters))
@@ -185,23 +195,28 @@ namespace KismetKompiler.Decompiler
                         else
                         {
                             var functionName = FormatString(GetFunctionName(expr.StackNode));
-                            var function = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
-                                .FirstOrDefault();
+                            var functionExport = (FunctionExport?)(expr.StackNode.IsExport() ? expr.StackNode.ToExport(_asset) : null);
+                            var functionImport = (expr.StackNode.IsImport() ? expr.StackNode.ToImport(_asset) : null);
+                            if (functionImport != null)
+                            {
+                                functionExport = (FunctionExport)_asset.Exports.Where(x => x.ObjectName.ToString() == functionName && x is FunctionExport)
+                                    .FirstOrDefault();
+                            }
 
                             var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
-                            if (function != null &&
-                                function.IsUbergraphFunction() &&
+                            if (functionExport != null &&
+                                functionExport.IsUbergraphFunction() &&
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, function.ObjectName.ToString());
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
                                 return $"EX_LocalFinalFunction({functionName}, {uberGraphFunctionLabel})";
                             }
                             else
                             {
-                                var isFinalFunction = function?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
-                                var isClassMemberFunction = (function?.OuterIndex.IsExport() ?? false) && (function?.OuterIndex.ToExport(_asset) == _class);
+                                var isFinalFunction = functionExport?.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final) ?? true;
+                                var isClassMemberFunction = (functionExport?.OuterIndex.IsExport() ?? false) && (functionExport?.OuterIndex.ToExport(_asset) == _class);
 
                                 if (string.IsNullOrWhiteSpace(parameters))
                                     return $"EX_LocalFinalFunction({functionName})";

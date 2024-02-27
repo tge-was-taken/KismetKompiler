@@ -2470,9 +2470,6 @@ public class KismetScriptASTParser
     private void LogError(IToken token, string message)
     {
         mLogger.Error($"({token.Line:D4}:{token.Column:D4}) {message}");
-
-        if (Debugger.IsAttached)
-            Debugger.Break();
     }
 
     private void LogWarning(ParserRuleContext context, string str)

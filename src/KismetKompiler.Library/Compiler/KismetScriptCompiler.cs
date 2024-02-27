@@ -1017,21 +1017,6 @@ public partial class KismetScriptCompiler
 
     private void CompileReturnStatement(ReturnStatement returnStatement)
     {
-        if (returnStatement.Value != null)
-        {
-            EmitPrimaryExpression(returnStatement,
-                CompileAssignmentOperator(
-                    new AssignmentOperator()
-                    {
-                        Left = new Identifier(_functionContext.ReturnVariable.Name),
-                        Right = returnStatement.Value,
-                        ExpressionValueKind = returnStatement.Value.ExpressionValueKind,
-                        SourceInfo = returnStatement.SourceInfo
-                    }
-                 )
-            );
-        }
-
         var isLastStatement = _functionContext.Declaration.Body.Last() == returnStatement;
         if (isLastStatement)
         {
@@ -1041,6 +1026,21 @@ public partial class KismetScriptCompiler
         {
             // The original compiler has a quirk where, if you return in a block, it will always jump to a label
             // containing the return & end of script instructions
+            if (returnStatement.Value != null)
+            {
+                EmitPrimaryExpression(returnStatement,
+                    CompileAssignmentOperator(
+                        new AssignmentOperator()
+                        {
+                            Left = new Identifier(_functionContext.ReturnVariable.Name),
+                            Right = returnStatement.Value,
+                            ExpressionValueKind = returnStatement.Value.ExpressionValueKind,
+                            SourceInfo = returnStatement.SourceInfo
+                        }
+                     )
+                );
+            }
+
             EmitPrimaryExpression(returnStatement, new EX_Jump(), new[] { _functionContext.ReturnLabel });
         }
     }
@@ -1255,7 +1255,15 @@ public partial class KismetScriptCompiler
                 {
                     if (functionToCall.HasAnyFunctionCustomFlags(FunctionCustomFlags.CallTypeOverride))
                     {
-                        if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.FinalFunction))
+                        if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.LocalFinalFunction))
+                        {
+                            return Emit(callOperator, new EX_LocalFinalFunction()
+                            {
+                                StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
+                            });
+                        }
+                        else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.FinalFunction))
                         {
                             return Emit(callOperator, new EX_FinalFunction()
                             {
@@ -1265,9 +1273,9 @@ public partial class KismetScriptCompiler
                         }
                         else if (functionToCall.HasAllFunctionExtendedFlags(FunctionCustomFlags.LocalVirtualFunction))
                         {
-                            return Emit(callOperator, new EX_LocalFinalFunction()
+                            return Emit(callOperator, new EX_LocalVirtualFunction()
                             {
-                                StackNode = GetPackageIndex(callOperator.Identifier, context: callContext),
+                                VirtualFunctionName = GetName(callOperator.Identifier),
                                 Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
                             });
                         }
@@ -1302,15 +1310,17 @@ public partial class KismetScriptCompiler
                     }
                     else
                     {
+                        // See Engine/Source/Editor/KismetCompiler/Private/KismetCompilerVMBackend.cpp EmitFunctionCall
                         var isParentContext = callContext?.Type == ContextType.Base;
                         var isFinalFunction = (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Final) || isParentContext);
+                        var netFuncFlags = EFunctionFlags.FUNC_Net | EFunctionFlags.FUNC_NetReliable | EFunctionFlags.FUNC_NetServer | EFunctionFlags.FUNC_NetClient | EFunctionFlags.FUNC_NetMulticast;
                         var isMathCall = isFinalFunction
                             && functionToCall.HasAllFunctionFlags(EFunctionFlags.FUNC_Static | EFunctionFlags.FUNC_Final | EFunctionFlags.FUNC_Native)
-                            && !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_NetFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse)
+                            && !functionToCall.HasAnyFunctionFlags(netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse)
                             && !functionToCall.DeclaringClass!.IsInterface
                             && !HasWildcardParams(functionToCall);
                         var isLocalScriptFunction =
-                            !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Native | EFunctionFlags.FUNC_NetFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse);
+                            !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Native | netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse);
 
                         if (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Delegate))
                         {
@@ -1689,10 +1699,10 @@ public partial class KismetScriptCompiler
                 }
                 else
                 {
-                    if (variableSymbol.IsExternal)
-                    {
-                        contextType = ContextType.ObjectConst;
-                    }
+                    //if (variableSymbol.IsExternal)
+                    //{
+                    //    contextType = ContextType.ObjectConst;
+                    //}
                 }
 
                 contextSymbol = GetVariableTypeSymbol(variableSymbol);

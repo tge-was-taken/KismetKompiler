@@ -22,7 +22,6 @@ public class TypePropagationPass : IDecompilerPass
                 {
                     if (contextExpr.ContextExpression is EX_LocalVariable contextLocalExpr)
                     {
-                        Debugger.Break();
                     }
                     else
                     {
