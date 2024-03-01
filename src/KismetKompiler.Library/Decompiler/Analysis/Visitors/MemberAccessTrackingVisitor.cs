@@ -35,14 +35,14 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
         }
     }
 
-    private Symbol GetContext(EX_Context ctx)
+    private Symbol GetContextForExpression(KismetExpression expr)
     {
-        if (ctx.ObjectExpression is EX_InstanceVariable instanceVariable)
+        if (expr is EX_InstanceVariable instanceVariable)
         {
             var prop = GetProperty(_instance, instanceVariable.Variable);
             return prop;
         }
-        else if (ctx.ObjectExpression is EX_ObjectConst objectConst)
+        else if (expr is EX_ObjectConst objectConst)
         {
             if (objectConst.Value.IsExport())
             {
@@ -65,20 +65,36 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                 throw new NotImplementedException();
             }
         }
-        else if (ctx.ObjectExpression is EX_LocalVariable localVariable)
+        else if (expr is EX_LocalVariable localVariable)
         {
             var context = GetProperty(null, localVariable.Variable)
                 ?? throw new NotImplementedException();
-            return context.PropertyType ?? throw new NotImplementedException();
+            return context.PropertyClass 
+                ?? context.InterfaceClass
+                ?? throw new NotImplementedException();
         }
-        else if (ctx.ObjectExpression is EX_Context context)
+        else if (expr is EX_Context context)
         {
             return _expressionSymbolCache[context];
+        }
+        else if (expr is EX_InterfaceContext interfaceContext)
+        {
+            return GetContextForExpression(interfaceContext.InterfaceValue);
         }
         else
         {
             throw new NotImplementedException();
         }
+    }
+
+    private Symbol GetContextForInterfaceContext(EX_InterfaceContext ctx)
+    {
+        return GetContextForExpression(ctx.InterfaceValue);
+    }
+
+    private Symbol GetContextForContext(EX_Context ctx)
+    {
+        return GetContextForExpression(ctx.ObjectExpression);
     }
 
     private EX_Context? ActiveContext => _contextStack.Count == 0 ? null : _contextStack.Peek().Context;
@@ -376,24 +392,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
             case EX_Context context:
                 {
-                    // Need to evaluate nested contexts depth-first
-                    //var contextExprStack = new Stack<EX_Context>();
-                    //contextExprStack.Push(context);
-                    //var currentContextExpr = context;
-                    //while (currentContextExpr.ObjectExpression is EX_Context subContextExpr)
-                    //{
-                    //    contextExprStack.Push(subContextExpr);
-                    //    currentContextExpr = subContextExpr;
-                    //}
-
-                    //var contextSymbolStack = new Stack<Symbol>();
-                    //while (contextExprStack.TryPop(out currentContextExpr))
-                    //{
-
-                    //}
-
                     Visit(context.ObjectExpression);
-                    var contextSymbol = GetContext(context);
+                    var contextSymbol = GetContextForContext(context);
                     _contextStack.Push((context, contextSymbol));
                     Visit(context.ContextExpression);
                     _contextStack.Pop();

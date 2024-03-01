@@ -543,22 +543,23 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_ObjectConst expr:
                     {
-                        if (UseContext)
-                        {
-                            // TODO: change this check to to verify if the name refers to a type rather than a variable
-                            if (parentKismetExpression is (EX_Context or EX_CallMath))
-                            {
-                                return FormatIdentifier(_asset.GetName(expr.Value));
-                            }
-                            else
-                            {
-                                return $"typeof({FormatIdentifier(_asset.GetName(expr.Value))})";
-                            }
-                        }
-                        else
-                        {
-                            return $"EX_ObjectConst({FormatIdentifier(_asset.GetName(expr.Value))})";
-                        }
+                        return FormatIdentifier(_asset.GetName(expr.Value));
+                        //if (UseContext)
+                        //{
+                        //    // TODO: change this check to to verify if the name refers to a type rather than a variable
+                        //    if (parentKismetExpression is (EX_Context or EX_CallMath))
+                        //    {
+                        //        return FormatIdentifier(_asset.GetName(expr.Value));
+                        //    }
+                        //    else
+                        //    {
+                        //        return $"typeof({FormatIdentifier(_asset.GetName(expr.Value))})";
+                        //    }
+                        //}
+                        //else
+                        //{
+                        //    return $"EX_ObjectConst({FormatIdentifier(_asset.GetName(expr.Value))})";
+                        //}
                     }
                 case EX_SoftObjectConst expr:
                     {

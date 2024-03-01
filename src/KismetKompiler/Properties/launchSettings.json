@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i F:\\Development\\KismetKompiler\\Testdata\\P3R\\Battle\\GUI\\ABP_BtlUIColorAnimal.uasset -v 4.27 -f"
+      "commandLineArgs": "decompile -i F:\\Development\\KismetKompiler\\Testdata\\P3R\\Battle\\GUI\\BP_BtlEncountAssistant.uasset -v 4.27 -f"
     }
   }
 }

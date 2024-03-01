@@ -92,40 +92,45 @@ public class Symbol
             }
         } 
     }
-    public Symbol? InnerClass 
+    public Symbol? ClassWithin 
     { 
         get => _innerClass; 
         set 
         { 
             if (value != _innerClass)
             {
-                CheckCircularReferenceRecursively(value, x => x.InnerClass);
+                CheckCircularReferenceRecursively(value, x => x.ClassWithin);
                 _innerClass = value;
             }
         } 
     }
-    public Symbol? PropertyType 
+    public Symbol? PropertyClass 
     { 
         get => _propertyType; 
         set 
         { 
             if (value != _propertyType)
             {
-                CheckCircularReferenceRecursively(value, x => x.PropertyType);
+                CheckCircularReferenceRecursively(value, x => x.PropertyClass);
                 _propertyType = value;
             }
         } 
     }
     public Symbol? ClonedFrom { get; set; }
 
+    public Symbol? Enum { get; set; }
+    public Symbol? UnderlyingProp { get; set; }
+    public Symbol? Inner { get; set; }
+    public Symbol? ElementProp { get; set; }
+    public Symbol? MetaClass { get; set; }
+    public Symbol? SignatureFunction { get; set; }
+    public Symbol? InterfaceClass { get; set; }
+    public Symbol? KeyProp { get; set; }
+    public Symbol? ValueProp { get; set; }
+    public Symbol? Struct { get; set; }
+
     public SymbolFunctionMetadata FunctionMetadata { get; set; } = new();
     public SymbolClassMetadata ClassMetadata { get; set; } = new();
-
-    public IEnumerable<Symbol> ClassHierarchy => GetAncestors(x => x.Class);
-    public IEnumerable<Symbol> SuperHierarchy => GetAncestors(x => x.Super);
-    public IEnumerable<Symbol> TemplateHierarchy => GetAncestors(x => x.Template);
-    public IEnumerable<Symbol> InnerClassHierarchy => GetAncestors(x => x.InnerClass);
-    public IEnumerable<Symbol> PropertyTypeHierarchy => GetAncestors(x => x.PropertyType);
 
     public Symbol()
     {
@@ -172,7 +177,8 @@ public class Symbol
     {
         return Children.Contains(member) ||
                 (Super?.HasMember(member) ?? false) ||
-                (PropertyType?.HasMember(member) ?? false) ||
+                (PropertyClass?.HasMember(member) ?? false) ||
+                (InterfaceClass?.HasMember(member) ?? false) ||
                 (Class?.HasMember(member) ?? false);
     }
 
@@ -192,7 +198,8 @@ public class Symbol
     {
         return Children.Where(x => x.ImportIndex?.Index == index.Index || x.ExportIndex?.Index == index.Index).SingleOrDefault()
             ?? Super?.GetMember(index)
-            ?? PropertyType?.GetMember(index)
+            ?? PropertyClass?.GetMember(index)
+            ?? InterfaceClass?.GetMember(index)
             ?? Class?.GetMember(index);
     }
 
@@ -200,7 +207,8 @@ public class Symbol
     {
         return Children.Where(x => x.Name == name).SingleOrDefault()
             ?? Super?.GetMember(name)
-            ?? PropertyType?.GetMember(name)
+            ?? PropertyClass?.GetMember(name)
+            ?? InterfaceClass?.GetMember(name)
             ?? Class?.GetMember(name);
     }
 
@@ -238,8 +246,10 @@ public class Symbol
 
     public override string ToString()
     {
-        if (PropertyType != null)
-            return $"[{Flags}] {Class?.Name}<{PropertyType?.Name}> {Name}";
+        if (PropertyClass != null)
+            return $"[{Flags}] {Class?.Name}<{PropertyClass?.Name}> {Name}";
+        else if (InterfaceClass != null)
+            return $"[{Flags}] {Class?.Name}<{InterfaceClass?.Name}> {Name}";
         else
             return $"[{Flags}] {Class?.Name} {Name}";
     }

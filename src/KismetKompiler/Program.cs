@@ -326,6 +326,7 @@ static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
     var outDirectory = AppDomain.CurrentDomain.BaseDirectory;
     try
     {
+        File.Copy(fileName, Path.Combine(outDirectory, "out.kms"), true);
         File.WriteAllText(Path.Combine(outDirectory, "old.json"), oldJsonText);
         File.WriteAllText(Path.Combine(outDirectory, "new.json"), newJsonText);
     }

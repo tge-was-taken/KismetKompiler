@@ -179,7 +179,7 @@ public partial class PackageAnalyser
                     Flags = importSymbol.Flags | SymbolFlags.ClonedFromGenVariable,
                     Type = importSymbol.Type,
                     FProperty = importSymbol.FProperty,
-                    PropertyType = importSymbol.PropertyType,
+                    PropertyClass = importSymbol.PropertyClass,
                     ClonedFrom = importSymbol,
                 };
                 inferredSymbols.Add(symbolClone);
@@ -279,7 +279,7 @@ public partial class PackageAnalyser
                         .Where(x => x.ExportIndex?.Index == exportSymbol.Export!.TemplateIndex.Index ||
                                     x.ImportIndex?.Index == exportSymbol.Export!.TemplateIndex.Index)
                         .SingleOrDefault() ?? throw new InvalidOperationException("Reference to non existent index");
-                    exportSymbol.InnerClass = classWithin;
+                    exportSymbol.ClassWithin = classWithin;
                 }
             }
 
@@ -296,15 +296,47 @@ public partial class PackageAnalyser
             if (exportSymbol.Export is PropertyExport propertyExport)
             {
                 exportSymbol.UProperty = propertyExport.Property;
+                if (propertyExport.Property is UEnumProperty enumProperty)
+                {
+                    exportSymbol.Enum = _symbols.GetSymbolByPackageIndex(enumProperty.Enum); 
+                    exportSymbol.UnderlyingProp = _symbols.GetSymbolByPackageIndex(enumProperty.UnderlyingProp); 
+                }
+                if (propertyExport.Property is UArrayProperty arrayProperty)
+                {
+                    exportSymbol.Inner = _symbols.GetSymbolByPackageIndex(arrayProperty.Inner);
+                }
+                if (propertyExport.Property is USetProperty setProperty)
+                {
+                    exportSymbol.ElementProp = _symbols.GetSymbolByPackageIndex(setProperty.ElementProp);
+                }
                 if (propertyExport.Property is UObjectProperty objectProperty)
                 {
-                    exportSymbol.PropertyType = _symbols.Where(x => x.ExportIndex?.Index == objectProperty.PropertyClass.Index ||
-                                                               x.ImportIndex?.Index == objectProperty.PropertyClass.Index)
-                                                   .SingleOrDefault();
+                    exportSymbol.PropertyClass = _symbols.GetSymbolByPackageIndex(objectProperty.PropertyClass);
                 }
-                else
+                if (propertyExport.Property is USoftClassProperty softClassProperty)
                 {
-
+                    exportSymbol.MetaClass = _symbols.GetSymbolByPackageIndex(softClassProperty.MetaClass);
+                }
+                if (propertyExport.Property is UDelegateProperty delegateProperty)
+                {
+                    exportSymbol.SignatureFunction = _symbols.GetSymbolByPackageIndex(delegateProperty.SignatureFunction);
+                }
+                if (propertyExport.Property is UInterfaceProperty interfaceProperty)
+                {
+                    exportSymbol.InterfaceClass = _symbols.GetSymbolByPackageIndex(interfaceProperty.InterfaceClass);
+                }
+                if (propertyExport.Property is UMapProperty mapProperty)
+                {
+                    exportSymbol.KeyProp = _symbols.GetSymbolByPackageIndex(mapProperty.KeyProp);
+                    exportSymbol.ValueProp = _symbols.GetSymbolByPackageIndex(mapProperty.ValueProp);
+                }
+                if (propertyExport.Property is UByteProperty byteProperty)
+                {
+                    exportSymbol.Enum = _symbols.GetSymbolByPackageIndex(byteProperty.Enum);
+                }
+                if (propertyExport.Property is UStructProperty structProperty)
+                {
+                    exportSymbol.Struct = _symbols.GetSymbolByPackageIndex(structProperty.Struct);
                 }
             }
         }
@@ -375,13 +407,25 @@ public partial class PackageAnalyser
                         var propertyClassSymbol = _symbols
                             .Union(exportSymbols)
                             .Union(inferredClassSymbols)
-                            .Where(x =>
-                                x.ExportIndex?.Index == objectProperty.PropertyClass.Index ||
-                                x.ImportIndex?.Index == objectProperty.PropertyClass.Index)
-                           .SingleOrDefault();
+                            .GetSymbolByPackageIndex(objectProperty.PropertyClass);
                         if (propertyClassSymbol == null)
                             throw new AnalysisException($"No symbol found for property class {_asset.GetName(objectProperty.PropertyClass)}");
-                        propertySymbol.PropertyType = propertyClassSymbol;
+                        propertySymbol.PropertyClass = propertyClassSymbol;
+                    }
+                    if (property is FInterfaceProperty interfaceProperty)
+                    {
+                        if (interfaceProperty.InterfaceClass.IsNull())
+                            throw new AnalysisException($"Interface class is null for property {property.Name}");
+
+                        // Resolve property class symbol
+                        // FIXME: do this in the pass where other references are solved
+                        var interfaceClassSymbol = _symbols
+                            .Union(exportSymbols)
+                            .Union(inferredClassSymbols)
+                            .GetSymbolByPackageIndex(interfaceProperty.InterfaceClass);
+                        if (interfaceProperty == null)
+                            throw new AnalysisException($"No symbol found for property class {_asset.GetName(interfaceProperty.InterfaceClass)}");
+                        propertySymbol.InterfaceClass = interfaceClassSymbol;
                     }
 
                     propertySymbols.Add(propertySymbol);
@@ -398,7 +442,7 @@ public partial class PackageAnalyser
                             Flags = propertySymbol.Flags | SymbolFlags.ClonedFromGenVariable,
                             Type = propertySymbol.Type,
                             FProperty = propertySymbol.FProperty,
-                            PropertyType = propertySymbol.PropertyType,
+                            PropertyClass = propertySymbol.PropertyClass,
                             ClonedFrom = exportSymbol,
                         };
                         propertySymbols.Add(propertySymbolClone);
@@ -472,9 +516,13 @@ public partial class PackageAnalyser
                         // We assume the virtual function belongs to the base class
                         if (!contextSymbol.HasMember(memberAccess.VariableSymbol.Name))
                         {
-                            if (contextSymbol.PropertyType != null)
+                            if (contextSymbol.PropertyClass != null)
                             {
-                                contextSymbol.PropertyType.AddChild(memberAccess.VariableSymbol);
+                                contextSymbol.PropertyClass.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else if (contextSymbol.InterfaceClass != null)
+                            {
+                                contextSymbol.InterfaceClass.AddChild(memberAccess.VariableSymbol);
                             }
                             else if (contextSymbol.Super != null)
                             {
@@ -498,9 +546,13 @@ public partial class PackageAnalyser
                         // TODO: properly assigned base class instead of adding the members
                         if (!contextSymbol.HasMember(memberAccess.VariableSymbol.Name))
                         {
-                            if (contextSymbol.PropertyType != null)
+                            if (contextSymbol.PropertyClass != null)
                             {
-                                contextSymbol.PropertyType.AddChild(memberAccess.VariableSymbol);
+                                contextSymbol.PropertyClass.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else if (contextSymbol.InterfaceClass != null)
+                            {
+                                contextSymbol.InterfaceClass.AddChild(memberAccess.VariableSymbol);
                             }
                             else if (contextSymbol.Super != null)
                             {
