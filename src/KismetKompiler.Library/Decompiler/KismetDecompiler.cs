@@ -414,8 +414,11 @@ public partial class KismetDecompiler
 
         void WriteImport(Symbol symbol)
         {
-            if (symbol.Class?.Name == "Package")
+            if (symbol.Parent == null)
             {
+                if (symbol.Class?.Name != "Package")
+                    Trace.WriteLine($"Invalid class for package {symbol}");
+
                 foreach (var child in symbol.Children)
                     WriteImport(child);
                 _writer.WriteLine();
