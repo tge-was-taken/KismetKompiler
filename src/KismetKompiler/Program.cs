@@ -138,6 +138,9 @@ static bool DecompileFile(string inputPath, EngineVersion ver, string? usmapPath
     if (!noVerification)
     {
         Console.WriteLine($"Verifying equality...");
+        File.Copy(outPath, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "out.kms"), true);
+        DumpToJson(asset, "old.json");
+
         var script = CompileScript(outPath, noStrict);
         var tempAsset = LoadAsset(assetPath, ver, usmapPath, globalPath);
         var newAsset = new UAssetLinker((UAsset)tempAsset)
@@ -302,49 +305,43 @@ static EngineVersion ParseVersion(string version)
     return engineVersion;
 }
 
-static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackage newAsset)
+static string DumpToJson(UnrealPackage asset, string fileName)
 {
-    KismetSerializer.asset = oldAsset;
+    KismetSerializer.asset = asset;
 
-    var oldJsons = oldAsset.Exports
+    var jsonObj = asset.Exports
         .Where(x => x is FunctionExport)
         .Cast<FunctionExport>()
-        .OrderBy(x => oldAsset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
+        .OrderBy(x => asset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
         .Select(x => new { Function = x.ObjectName.ToString(), Instructions = KismetSerializer.SerializeScript(x.ScriptBytecode) });
 
-    KismetSerializer.asset = newAsset;
+    var jsonText = JsonConvert.SerializeObject(jsonObj, Formatting.Indented);
+    File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName), jsonText);
+    return jsonText;
+}
 
-    var newJsons = newAsset.Exports
-        .Where(x => x is FunctionExport)
-        .Cast<FunctionExport>()
-        .OrderBy(x => newAsset.GetClassExport()?.FuncMap.IndexOf(x.ObjectName))
-        .Select(x => new { Function=x.ObjectName.ToString(), Instructions=KismetSerializer.SerializeScript(x.ScriptBytecode) });
-
-    var oldJsonText = JsonConvert.SerializeObject(oldJsons, Formatting.Indented);
-    var newJsonText = JsonConvert.SerializeObject(newJsons, Formatting.Indented);
-
-    var outDirectory = AppDomain.CurrentDomain.BaseDirectory;
+static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackage newAsset)
+{
     try
     {
-        File.Copy(fileName, Path.Combine(outDirectory, "out.kms"), true);
-        File.WriteAllText(Path.Combine(outDirectory, "old.json"), oldJsonText);
-        File.WriteAllText(Path.Combine(outDirectory, "new.json"), newJsonText);
+        var oldJsonText = DumpToJson(oldAsset, "old.json");
+        var newJsonText = DumpToJson(oldAsset, "new.json");
+        if (oldJsonText != newJsonText)
+        {
+            Console.WriteLine("Verification failed");
+            return false;
+        }
+        else
+        {
+            Console.WriteLine("Verification succeeded");
+
+            return true;
+        }
     }
     catch (Exception)
     {
-        Console.WriteLine($"Failed to write verification dumps to {outDirectory}");
-    }
-
-    if (oldJsonText != newJsonText)
-    {
-        Console.WriteLine("Verification failed");
+        Console.WriteLine($"Failed to write verification dumps");
         return false;
-    }
-    else
-    {
-        Console.WriteLine("Verification succeeded");
-
-        return true;
     }
 }
 

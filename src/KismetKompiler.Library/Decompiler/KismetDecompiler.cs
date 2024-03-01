@@ -531,12 +531,12 @@ public partial class KismetDecompiler
                 {
                     if (isInsideClassDecl)
                     {
-                        var cls = (symbol.Class?.Name == "Class" || symbol.Class == null) ? "object" : symbol.Class.Name;
+                        var cls = (symbol.Class?.Name == "Class" || symbol.Class?.Name == "BlueprintGeneratedClass" || symbol.Class == null) ? "object" : symbol.Class.Name;
                         _writer.WriteLine($"public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
                     }
                     else
                     {
-                        if (symbol.Class != null && symbol.Class.Name != "Class")
+                        if (symbol.Class != null && (symbol.Class.Name != "Class" && symbol.Class.Name != "BlueprintGeneratedClass"))
                             _writer.WriteLine($"public {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                         else
                         {

@@ -14,6 +14,6 @@ public enum SymbolFlags
     InferredFromKismetPropertyPointer = 1 << 8,
     UnresolvedClass = 1 << 9,
     EvaluationTemporary = 1 << 10,
-    FakeClass = 1 << 11,
+    AnonymousClass = 1 << 11,
     FakeRootClass = 1 << 12,
 }

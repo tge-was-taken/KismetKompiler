@@ -168,6 +168,15 @@ public class Symbol
         }
     }
 
+    public bool IsClass => 
+        Class?.Name == "Class" ||
+        Class?.Name == "BlueprintGeneratedClass";
+
+    public bool IsInstance => !IsClass;
+
+    public Symbol? ResolvedType
+        => IsClass ? this : PropertyClass ?? InterfaceClass ?? Class;           
+
     public bool HasMember(string name)
     {
         return GetMember(name) != null;
@@ -210,6 +219,13 @@ public class Symbol
             ?? PropertyClass?.GetMember(name)
             ?? InterfaceClass?.GetMember(name)
             ?? Class?.GetMember(name);
+    }
+
+    public bool InheritsClass(Symbol classSymbol)
+    {
+        if (Super == classSymbol)
+            return true;
+        return Super?.InheritsClass(classSymbol) ?? false;
     }
 
     public void AddChild(Symbol child)

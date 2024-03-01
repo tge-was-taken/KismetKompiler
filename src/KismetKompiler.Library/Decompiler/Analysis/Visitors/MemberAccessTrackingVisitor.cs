@@ -121,8 +121,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = localVirtualFunction,
-                            VariableSymbol = sym
+                            MemberExpression = localVirtualFunction,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[localVirtualFunction] = sym;
@@ -151,8 +151,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = localFinalFunction,
-                            VariableSymbol = sym
+                            MemberExpression = localFinalFunction,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[localFinalFunction] = sym;
@@ -173,8 +173,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = instanceVariable,
-                            VariableSymbol = sym
+                            MemberExpression = instanceVariable,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[instanceVariable] = sym;
@@ -199,8 +199,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = callMulticastDelegate,
-                            VariableSymbol = sym
+                            MemberExpression = callMulticastDelegate,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[callMulticastDelegate] = sym;
@@ -229,8 +229,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = callMath,
-                            VariableSymbol = sym
+                            MemberExpression = callMath,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[callMath] = sym;
@@ -294,8 +294,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = finalFunction,
-                            VariableSymbol = sym
+                            MemberExpression = finalFunction,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[finalFunction] = sym;
@@ -315,8 +315,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = finalFunction,
-                            VariableSymbol = sym
+                            MemberExpression = finalFunction,
+                            MemberSymbol = sym
                         });
                     }
 
@@ -377,8 +377,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         {
                             ContextExpression = ActiveContext,
                             ContextSymbol = ActiveContextSymbol,
-                            VariableExpression = virtualFunction,
-                            VariableSymbol = sym
+                            MemberExpression = virtualFunction,
+                            MemberSymbol = sym
                         });
                     }
                     _expressionSymbolCache[virtualFunction] = sym;
@@ -396,11 +396,13 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                     var contextSymbol = GetContextForContext(context);
                     _contextStack.Push((context, contextSymbol));
                     Visit(context.ContextExpression);
-                    _contextStack.Pop();
                     _expressionSymbolCache[context] = _expressionSymbolCache[context.ContextExpression];
                     return;
                 }
         }
+
+        if (_contextStack.Count > 0)
+            _contextStack.Pop();
 
         // Don't visit EX_Context because we visit it manually so we can handle the 
         // context stack
