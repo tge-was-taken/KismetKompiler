@@ -132,7 +132,8 @@ public partial class KismetAnalyser
                 @class = new Symbol()
                 {
                     Name = importSymbol.Import!.ClassName.ToString(),
-                    Class = importSymbols.GetClass("Class")
+                    Class = importSymbol.Import!.ClassName.ToString() == "Class" ? new Symbol() { Name = "Class", Flags = SymbolFlags.ClassOfClass } :
+                        importSymbols.GetClass("Class")
                         ?? new Symbol() { Name = "Class", Flags = SymbolFlags.Import | SymbolFlags.InferredFromImportClassName },
                     Parent = classPackage,
                     Flags = SymbolFlags.Import | SymbolFlags.InferredFromImportClassName,
@@ -478,18 +479,20 @@ public partial class KismetAnalyser
                     }
                     else if (memberAccess.VariableExpression is EX_InstanceVariable instanceVariable)
                     {
+                        // FIXME: prevent wrong base classes from being assigned here
                         // If an instance member on the context has been accessed, but it doesn't exist in the class
                         // it must be part of a base class that is not assigned properly
-                        var rootBaseClass = contextSymbol.Super ?? contextSymbol;
-                        while (rootBaseClass?.Super != null)
-                            rootBaseClass = rootBaseClass.Super;
+                        //var rootBaseClass = contextSymbol.Super ?? contextSymbol;
+                        //while (rootBaseClass?.Super != null)
+                        //    rootBaseClass = rootBaseClass.Super;
 
-                        var owningClassSymbol = _symbols.Where(x =>
-                            x.HasMember(memberAccess.VariableSymbol.Name)).ToList();
-                        if (owningClassSymbol.Any())
-                        {
-                            rootBaseClass.Super = owningClassSymbol.First();
-                        }
+                        //var owningClassSymbol = _symbols.Where(x =>
+                        //    x != rootBaseClass &&
+                        //    x.HasMember(memberAccess.VariableSymbol.Name)).ToList();
+                        //if (owningClassSymbol.Any())
+                        //{
+                        //    rootBaseClass.Super = owningClassSymbol.First();
+                        //}
                     }
                 }
             }

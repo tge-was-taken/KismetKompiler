@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i F:\\Projects\\P3R\\ZenToolsOutput\\Game\\Xrd777\\Blueprints\\Battle\\Players\\PC01\\BP_BtlPc01.uasset -v 4.27 -f"
+      "commandLineArgs": "decompile -i F:\\Development\\KismetKompiler\\Testdata\\P3R\\Battle\\GUI\\BP_BtlSkillList.uasset -v 4.27 -f"
     }
   }
 }

@@ -11,7 +11,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "external", "external", "{AE
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KismetKompiler.Library", "KismetKompiler.Library\KismetKompiler.Library.csproj", "{ED09EDC2-0367-4233-BC0F-BA825C4A70CF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KismetKompiler.Test", "KismetKompiler.Test\KismetKompiler.Test.csproj", "{74370A51-8581-40FB-B360-7998518FD0BC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KismetKompiler.Test", "KismetKompiler.Test\KismetKompiler.Test.csproj", "{74370A51-8581-40FB-B360-7998518FD0BC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Utilities", "Utilities", "{1C71D085-3889-4ACF-BB64-A355488DB131}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KismetKompiler.Tests", "KismetKompiler.Tests\KismetKompiler.Tests.csproj", "{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KismetKompiler.TestGenerator", "KismetKompiler.TestGenerator\KismetKompiler.TestGenerator.csproj", "{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,6 +50,18 @@ Global
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
