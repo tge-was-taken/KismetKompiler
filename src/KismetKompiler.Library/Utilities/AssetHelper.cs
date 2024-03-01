@@ -9,14 +9,48 @@ namespace KismetKompiler.Library.Utilities;
 
 public static class AssetHelper
 {
-    public static string GetFullName(this UnrealPackage asset, object obj)
+    public static bool IsPackage(this UnrealPackage asset, FPackageIndex index)
+    {
+        var obj = asset.GetImportOrExport(index);
+        return obj is Import import && import.OuterIndex.Index == 0;
+    }
+
+    public static FPackageIndex GetOuterIndex(this UnrealPackage asset, FPackageIndex index)
+    {
+        var obj = asset.GetImportOrExport(index);
+        if (obj is Import import)
+        {
+            return import.OuterIndex;
+        }
+        else if (obj is Export export)
+        {
+            return export.OuterIndex;
+        }
+        else if (obj is null)
+        {
+            return FPackageIndex.Null;
+        }
+        else
+        {
+            throw new InvalidOperationException("Invalid import or export");
+        }
+    }
+
+    public static string GetFullName(this UnrealPackage asset, object obj, bool omitPackageName = false)
     {
         if (obj is Import import)
         {
             if (import.OuterIndex.Index != 0)
             {
-                string parent = asset.GetFullName(import.OuterIndex);
-                return parent + "." + import.ObjectName.ToString();
+                if (!omitPackageName || !asset.IsPackage(import.OuterIndex))
+                {
+                    string parent = asset.GetFullName(import.OuterIndex);
+                    return parent + "." + import.ObjectName.ToString();
+                }
+                else
+                {
+                    return import.ObjectName.ToString();
+                }
             }
             else
             {
@@ -27,8 +61,15 @@ public static class AssetHelper
         {
             if (export.OuterIndex.Index != 0)
             {
-                string parent = asset.GetFullName(export.OuterIndex);
-                return parent + "." + export.ObjectName.ToString();
+                if (!omitPackageName || !asset.IsPackage(export.OuterIndex))
+                {
+                    string parent = asset.GetFullName(export.OuterIndex);
+                    return parent + "." + export.ObjectName.ToString();
+                }
+                else
+                {
+                    return export.ObjectName.ToString();
+                }
             }
             else
             {
@@ -43,6 +84,12 @@ public static class AssetHelper
         {
             return "<null>";
         }
+    }
+
+    public static string GetFullNameWithoutPackage(this UnrealPackage asset, FPackageIndex index)
+    {
+        var obj = asset.GetImportOrExport(index);
+        return asset.GetFullName(obj, omitPackageName: true);
     }
 
     public static string GetFullName(this UnrealPackage asset, FPackageIndex index)

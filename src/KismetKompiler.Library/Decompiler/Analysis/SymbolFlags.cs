@@ -15,5 +15,5 @@ public enum SymbolFlags
     UnresolvedClass = 1 << 9,
     EvaluationTemporary = 1 << 10,
     FakeClass = 1 << 11,
-    ClassOfClass = 1 << 12,
+    FakeRootClass = 1 << 12,
 }

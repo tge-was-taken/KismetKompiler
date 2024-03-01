@@ -255,6 +255,8 @@ namespace KismetKompiler.Library.Compiler.Context
         public override SymbolCategory SymbolCategory => SymbolCategory.Class;
 
         public bool IsInterface { get; internal set; }
+
+        public bool IsStatic => Declaration.Modifiers.HasFlag(ClassModifiers.Static);
     }
 
     public class EnumSymbol : DeclaredSymbol<EnumDeclaration>, IExportSymbol

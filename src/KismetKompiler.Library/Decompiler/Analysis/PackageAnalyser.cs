@@ -10,19 +10,19 @@ using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Library.Decompiler.Analysis;
 
-public partial class KismetAnalyser
+public partial class PackageAnalyser
 {
     private UnrealPackage _asset;
     private SymbolTable _symbols;
 
-    public KismetAnalysisResult Analyse(UnrealPackage package)
+    public PackageAnalysisResult Analyse(UnrealPackage package)
     {
         _asset = package;
         _symbols = new();
         AnalyseImports();
         AnalyseExports();
         AnalyseFunctions();
-        return new KismetAnalysisResult()
+        return new PackageAnalysisResult()
         {
             AllSymbols = _symbols.AllSymbols.ToList(),
             RootSymbols = _symbols.RootSymbols.ToList()
@@ -37,7 +37,7 @@ public partial class KismetAnalyser
         if (symbol.Name.EndsWith("_GEN_VARIABLE"))
             return SymbolType.Property;
 
-        switch (symbol.Class.Name)
+        switch (symbol.Class?.Name)
         {
             case "Package":
                 return SymbolType.Package;
@@ -132,7 +132,7 @@ public partial class KismetAnalyser
                 @class = new Symbol()
                 {
                     Name = importSymbol.Import!.ClassName.ToString(),
-                    Class = importSymbol.Import!.ClassName.ToString() == "Class" ? new Symbol() { Name = "Class", Flags = SymbolFlags.ClassOfClass } :
+                    Class = importSymbol.Import!.ClassName.ToString() == "Class" ? null :
                         importSymbols.GetClass("Class")
                         ?? new Symbol() { Name = "Class", Flags = SymbolFlags.Import | SymbolFlags.InferredFromImportClassName },
                     Parent = classPackage,
@@ -332,6 +332,7 @@ public partial class KismetAnalyser
                 {
                     // Try to find a symbol for the property class type
                     var classSymbol = _symbols
+                        .Union(exportSymbols)
                         .Union(inferredClassSymbols)
                         .Where(x => x.Name == property.SerializedType.ToString()).SingleOrDefault();
                     if (classSymbol == null)
@@ -366,13 +367,21 @@ public partial class KismetAnalyser
 
                     if (property is FObjectProperty objectProperty)
                     {
+                        if (objectProperty.PropertyClass.IsNull())
+                            throw new AnalysisException($"Property class is null for property {property.Name}");
+
                         // Resolve property class symbol
                         // FIXME: do this in the pass where other references are solved
-                        propertySymbol.PropertyType = _symbols
+                        var propertyClassSymbol = _symbols
+                            .Union(exportSymbols)
+                            .Union(inferredClassSymbols)
                             .Where(x =>
                                 x.ExportIndex?.Index == objectProperty.PropertyClass.Index ||
                                 x.ImportIndex?.Index == objectProperty.PropertyClass.Index)
                            .SingleOrDefault();
+                        if (propertyClassSymbol == null)
+                            throw new AnalysisException($"No symbol found for property class {_asset.GetName(objectProperty.PropertyClass)}");
+                        propertySymbol.PropertyType = propertyClassSymbol;
                     }
 
                     propertySymbols.Add(propertySymbol);
@@ -471,10 +480,40 @@ public partial class KismetAnalyser
                             {
                                 contextSymbol.Super.AddChild(memberAccess.VariableSymbol);
                             }
-                            //else
-                            //{
-                            //    contextSymbol.AddChild(memberAccess.VariableSymbol);
-                            //}
+                            else if (contextSymbol.Class?.Name != "Class")
+                            {
+                                contextSymbol.Class!.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else
+                            {
+                                contextSymbol.AddChild(memberAccess.VariableSymbol);
+                            }
+                        }
+                    }
+                    else if (memberAccess.VariableExpression is EX_FinalFunction finalFunction)
+                    {
+                        // When an unexpected call to a final function happens, it's very likely
+                        // that the function is defined in the base class, but the base class itself
+                        // has not been properly assigned to the context class
+                        // TODO: properly assigned base class instead of adding the members
+                        if (!contextSymbol.HasMember(memberAccess.VariableSymbol.Name))
+                        {
+                            if (contextSymbol.PropertyType != null)
+                            {
+                                contextSymbol.PropertyType.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else if (contextSymbol.Super != null)
+                            {
+                                contextSymbol.Super.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else if (contextSymbol.Class?.Name != "Class")
+                            {
+                                contextSymbol.Class!.AddChild(memberAccess.VariableSymbol);
+                            }
+                            else
+                            {
+                                contextSymbol.AddChild(memberAccess.VariableSymbol);
+                            }
                         }
                     }
                     else if (memberAccess.VariableExpression is EX_InstanceVariable instanceVariable)

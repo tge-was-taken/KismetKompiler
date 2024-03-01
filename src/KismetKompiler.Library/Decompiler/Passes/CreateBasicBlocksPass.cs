@@ -42,7 +42,8 @@ namespace KismetKompiler.Library.Decompiler.Passes
                     Parent = nodes.First().Parent,
                     CodeStartOffset = nodes.First().CodeStartOffset,
                     CodeEndOffset = nodes.Last().CodeEndOffset,
-                    Children = nodes.ToList()
+                    Children = nodes.ToList(),
+                    ReferencedBy = nodes.First().ReferencedBy,
                 };
 
                 foreach (var node in blockNode.Children)

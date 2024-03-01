@@ -5,6 +5,7 @@ using KismetKompiler.Library.Syntax.Statements.Expressions;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
 using System.Diagnostics;
+using System.Xml.Linq;
 using UAssetAPI.ExportTypes;
 
 namespace KismetKompiler.Library.Compiler.Processing;
@@ -28,42 +29,42 @@ public class TypeResolver
 
     public class DeclarationScope
     {
-        public DeclarationScope Parent { get; }
+        private readonly DeclarationScope _parent;
 
-        public Dictionary<string, Declaration> Declarations { get; }
+        private readonly Dictionary<string, Declaration> _declarations;
 
         public DeclarationScope(DeclarationScope parent)
         {
-            Parent = parent;
-            Declarations = new Dictionary<string, Declaration>();
+            _parent = parent;
+            _declarations = new Dictionary<string, Declaration>();
         }
 
-        public bool IsDeclared(Identifier identifier)
+        public bool IsDeclaredLocally(string name)
+            => _declarations.ContainsKey(name);
+
+        public bool IsDeclaredInScope(string name)
         {
-            return TryGetDeclaration(identifier, out _);
-        }
-
-        public bool TryRegisterDeclaration(Declaration declaration)
-        {
-            if (IsDeclared(declaration.Identifier))
-                return false;
-
-            Declarations[declaration.Identifier.Text] = declaration;
-
+            if (!IsDeclaredLocally(name))
+                return _parent?.IsDeclaredInScope(name) ?? false;
             return true;
         }
 
-        public bool TryGetDeclaration(Identifier identifier, out Declaration declaration)
+        public bool TryRegisterDeclarationLocally(Declaration declaration)
         {
-            if (!Declarations.TryGetValue(identifier.Text, out declaration))
-            {
-                if (Parent != null)
-                {
-                    return Parent.TryGetDeclaration(identifier, out declaration);
-                }
+            if (IsDeclaredLocally(declaration.Identifier.Text))
                 return false;
-            }
 
+            _declarations[declaration.Identifier.Text] = declaration;
+            return true;
+        }
+
+        public bool TryGetDeclarationLocally(string name, out Declaration? declaration)
+            => _declarations.TryGetValue(name, out declaration);
+
+        public bool TryGetDeclarationInScope(string name, out Declaration? declaration)
+        {
+            if (!_declarations.TryGetValue(name, out declaration))
+                return _parent?.TryGetDeclarationInScope(name, out declaration) ?? false;
             return true;
         }
     }
@@ -184,7 +185,7 @@ public class TypeResolver
 
     private void RegisterDeclaration(Declaration declaration)
     {
-        if (!Scope.TryRegisterDeclaration(declaration))
+        if (!Scope.TryRegisterDeclarationLocally(declaration))
         {
             // Special case: forward declared declarations on top level
             //if (Scope.Parent != null)
@@ -270,7 +271,7 @@ public class TypeResolver
             var contextIdentifier = memberExpression.Context as Identifier;
             if (contextIdentifier != null)
             {
-                Scope.TryGetDeclaration(contextIdentifier, out var declaration);
+                Scope.TryGetDeclarationInScope(contextIdentifier.Text, out var declaration);
                 _context = declaration;
             }
 
@@ -512,7 +513,7 @@ public class TypeResolver
 
     private void ResolveTypesInCallExpression(CallOperator callExpression)
     {
-        if (!Scope.TryGetDeclaration(callExpression.Identifier, out var declaration))
+        if (!Scope.TryGetDeclarationInScope(callExpression.Identifier.Text, out var declaration))
         {
             // Disable for now because we import functions at compile time
             //LogWarning( callExpression, $"Call expression references undeclared identifier '{callExpression.Identifier.Value}'" );
@@ -540,7 +541,7 @@ public class TypeResolver
                     Type = outArg.Type
                 };
                 ResolveTypesInDeclaration(decl);
-                Scope.TryRegisterDeclaration(decl);
+                Scope.TryRegisterDeclarationLocally(decl);
             }
 
             ResolveTypesInExpression(arg.Expression);
@@ -551,7 +552,7 @@ public class TypeResolver
     private void ResolveTypesInIdentifier(Identifier identifier)
     {
         bool isUndeclared = false;
-        if (!Scope.TryGetDeclaration(identifier, out var declaration))
+        if (!Scope.TryGetDeclarationInScope(identifier.Text, out var declaration))
         {
             if (_context != null)
             {

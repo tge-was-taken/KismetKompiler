@@ -373,7 +373,7 @@ public partial class KismetScriptCompiler
                 yield return symbol;
                 foreach (var item in symbol.Members)
                 {
-                    if (item.DeclaringClass != null && item is VariableSymbol)
+                    if (item.DeclaringClass != null)
                     {
                         // Do not globally declare class properties
                         continue;
@@ -1266,12 +1266,7 @@ public partial class KismetScriptCompiler
                 var functionToCall = GetSymbol<ProcedureSymbol>(callOperator.Identifier.Text, context: callContext);
                 if (functionToCall == null)
                 {
-                    // TODO: make decompiler emit stubs for these with the proper calling convention
-                    return Emit(callOperator, new EX_VirtualFunction()
-                    {
-                        VirtualFunctionName = GetName(callOperator.Identifier),
-                        Parameters = callOperator.Arguments.Select(CompileSubExpression).ToArray()
-                    });
+                    throw new CompilationError(callOperator, $"Call to unknown function {callOperator.Identifier.Text}");
                 }
                 else
                 {
@@ -1892,6 +1887,24 @@ public partial class KismetScriptCompiler
             else if (Context.Type == ContextType.Enum)
             {
                 return Emit(memberExpression, CompileSubExpression(memberExpression.Member));
+            }
+            else if (Context.Type == ContextType.Class)
+            {
+                var classSymbol = (ClassSymbol)Context.Symbol;
+                if (classSymbol.IsStatic)
+                {
+                    // No context for static classes
+                    return CompileExpression(memberExpression.Member);
+                }
+                else
+                {
+                    return Emit(memberExpression, new EX_Context()
+                    {
+                        ObjectExpression = CompileSubExpression(memberExpression.Context),
+                        ContextExpression = CompileSubExpression(memberExpression.Member),
+                        RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
+                    });
+                }
             }
             else
             {

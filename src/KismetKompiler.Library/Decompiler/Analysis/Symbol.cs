@@ -119,6 +119,7 @@ public class Symbol
     public Symbol? ClonedFrom { get; set; }
 
     public SymbolFunctionMetadata FunctionMetadata { get; set; } = new();
+    public SymbolClassMetadata ClassMetadata { get; set; } = new();
 
     public IEnumerable<Symbol> ClassHierarchy => GetAncestors(x => x.Class);
     public IEnumerable<Symbol> SuperHierarchy => GetAncestors(x => x.Super);
@@ -242,4 +243,9 @@ public class Symbol
         else
             return $"[{Flags}] {Class?.Name} {Name}";
     }
+}
+
+public class SymbolClassMetadata
+{
+    public bool IsStaticClass { get; set; }
 }

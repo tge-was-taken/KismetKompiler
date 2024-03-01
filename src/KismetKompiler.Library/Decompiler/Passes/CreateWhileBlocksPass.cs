@@ -37,7 +37,8 @@ namespace KismetKompiler.Library.Decompiler.Passes
                                 CodeStartOffset = block.CodeStartOffset,
                                 CodeEndOffset = endBlock.CodeStartOffset,
                                 Source = block.Source,
-                                Children = bodyNodes
+                                Children = bodyNodes,
+                                ReferencedBy = block.ReferencedBy,
                             };
                             // Fix parent
                             foreach (var subNode in newBlock.Children)

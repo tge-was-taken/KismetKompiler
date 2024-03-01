@@ -334,12 +334,13 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_CallMath expr:
                     {
+                        var className = FormatIdentifier(GetFunctionClassName(expr.StackNode));
                         var functionName = FormatIdentifier(GetFunctionName(expr.StackNode));
                         var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                         if (string.IsNullOrWhiteSpace(parameters))
-                            return $"{functionName}()";
+                            return $"{className}.{functionName}()";
                         else
-                            return $"{functionName}({parameters})";
+                            return $"{className}.{functionName}({parameters})";
                     }
                 case EX_CallMulticastDelegate expr:
                     {
@@ -355,9 +356,9 @@ namespace KismetKompiler.Decompiler
                             var @delegate = FormatExpression(expr.Delegate, expr);
 
                             if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.EX_CallMulticastDelegate({stackNode}, {@delegate})";
+                                return $"EX_CallMulticastDelegate({context}.{stackNode}, {@delegate})";
                             else
-                                return $"{context}.EX_CallMulticastDelegate({stackNode}, {parameters}, {@delegate})";
+                                return $"EX_CallMulticastDelegate({context}.{stackNode}, {parameters}, {@delegate})";
                         }
                         else
                         {

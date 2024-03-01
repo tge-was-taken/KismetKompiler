@@ -1,11 +1,105 @@
 ﻿using System.Collections;
+using System.Xml.Linq;
 using UAssetAPI.UnrealTypes;
 
 namespace KismetKompiler.Library.Decompiler.Analysis;
 
-public class SymbolTable : IEnumerable<Symbol>, IList<Symbol>
+public class AggregrateSymbolTable : ISymbolTable
 {
-    private List<Symbol> _symbols = new();
+    private readonly IEnumerable<ISymbolTable> _symbolTables;
+
+    public AggregrateSymbolTable(IEnumerable<ISymbolTable> symbolTables)
+    {
+        _symbolTables = symbolTables;
+    }
+
+    public Symbol this[int index] { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+    public IEnumerable<Symbol> AllSymbols => _symbolTables.SelectMany(t => t.AllSymbols);
+
+    public IEnumerable<Symbol> Classes => _symbolTables.SelectMany(t => t.Classes);
+
+    public Symbol? DefaultClass => 
+        _symbolTables.Where(x => x.DefaultClass != null).Select(x => x.DefaultClass).FirstOrDefault();
+
+    public Symbol? FunctionClass =>
+        _symbolTables.Where(x => x.FunctionClass != null).Select(x => x.FunctionClass).FirstOrDefault();
+
+    public IEnumerable<Symbol> Functions => _symbolTables.SelectMany(x => x.Functions);
+
+    public IEnumerable<Symbol> Packages => _symbolTables.SelectMany(x => x.Packages);
+
+    public IEnumerable<Symbol> RootSymbols => _symbolTables.SelectMany(x => x.RootSymbols);
+
+    public int Count => _symbolTables.Sum(x => x.Count);
+
+    public bool IsReadOnly => true;
+
+    public void Add(Symbol item)
+    {
+        throw new NotSupportedException();
+    }
+
+    public void Clear()
+    {
+        throw new NotSupportedException();
+    }
+
+    public bool Contains(Symbol item)
+        => _symbolTables.Any(x => x.Contains(item));
+
+    public void CopyTo(Symbol[] array, int arrayIndex) =>
+        throw new NotSupportedException();
+
+    public Symbol? GetClass(string name)
+        => _symbolTables.Select(x => x.GetClass(name)).Where(x => x != null).FirstOrDefault();
+
+    public IEnumerator<Symbol> GetEnumerator()
+        => _symbolTables.SelectMany(x => x.AllSymbols).GetEnumerator();
+
+    public Symbol? GetSymbol(string name)
+        => _symbolTables.Select(x => x.GetSymbol(name)).Where(x => x != null).FirstOrDefault();
+
+    public Symbol? GetSymbolByExport(FPackageIndex index)
+        => _symbolTables.Select(x => x.GetSymbolByExport(index)).Where(x => x != null).FirstOrDefault();
+
+    public Symbol? GetSymbolByImport(FPackageIndex index)
+        => _symbolTables.Select(x => x.GetSymbolByImport(index)).Where(x => x != null).FirstOrDefault();
+
+    public Symbol? GetSymbolByPackageIndex(FPackageIndex index)
+        => _symbolTables.Select(x => x.GetSymbolByPackageIndex(index)).Where(x => x != null).FirstOrDefault();
+
+    public int IndexOf(Symbol item)
+    {
+        throw new NotSupportedException();
+    }
+
+    public void Insert(int index, Symbol item)
+    {
+        throw new NotSupportedException();
+    }
+
+    public bool Remove(Symbol item)
+    {
+        throw new NotSupportedException();
+    }
+
+    public void RemoveAt(int index)
+    {
+        throw new NotSupportedException();
+    }
+
+    public ISymbolTable Union(ISymbolTable other)
+    {
+        return new AggregrateSymbolTable(new ISymbolTable[] { this, other });
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+public class SymbolTable : IEnumerable<Symbol>, IList<Symbol>, ISymbolTable
+{
+    private readonly List<Symbol> _symbols = new();
 
     public IEnumerable<Symbol> AllSymbols
         => _symbols;
@@ -67,8 +161,9 @@ public class SymbolTable : IEnumerable<Symbol>, IList<Symbol>
             Add(item);
     }
 
-    public SymbolTable Union(SymbolTable other)
-        => new SymbolTable(_symbols.Union(other._symbols));
+    public ISymbolTable Union(ISymbolTable other)
+        => new SymbolTable(this._symbols.Union(other));
+        //=> new AggregrateSymbolTable(new[] { this, other });
 
     public IEnumerator<Symbol> GetEnumerator()
     {

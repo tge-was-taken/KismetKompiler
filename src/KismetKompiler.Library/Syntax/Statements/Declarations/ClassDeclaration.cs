@@ -8,6 +8,7 @@ namespace KismetKompiler.Library.Syntax.Statements.Declarations
         Public = 1 << 1,
         Private = 1 << 2,
         Abstract = 1 << 3,
+        Static = 1 << 4,
     }
 
     public class ClassDeclaration : Declaration

@@ -223,6 +223,7 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                     sym.Flags &= ~SymbolFlags.UnresolvedClass;
                     sym.FunctionMetadata.CallingConvention |= CallingConvention.CallMath;
                     sym.Type = SymbolType.Function;
+                    sym.Parent!.ClassMetadata.IsStaticClass = true;
 
                     //// Analyse final (static) function call
                     //var functionSymbol =
@@ -287,6 +288,21 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                     sym.Flags &= ~SymbolFlags.UnresolvedClass;
                     sym.FunctionMetadata.CallingConvention |= CallingConvention.FinalFunction;
                     sym.Type = SymbolType.Function;
+
+                    if (ActiveContextSymbol != null &&
+                        !ActiveContextSymbol.HasMember(sym.Name))
+                    {
+                        // Function has been called that does not exist in the active context
+                        // This probably means that the function is defined in the base class,
+                        // but the base class has not been properly assigned to the context class yet
+                        _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                        {
+                            ContextExpression = ActiveContext,
+                            ContextSymbol = ActiveContextSymbol,
+                            VariableExpression = finalFunction,
+                            VariableSymbol = sym
+                        });
+                    }
 
                     //// Analyse final (static) function call
                     //var functionSymbol =

@@ -43,7 +43,7 @@ public partial class KismetDecompiler
     private readonly IndentedWriter _writer;
     private Context _context;
     private ClassExport _class;
-    private KismetAnalysisResult _analysisResult;
+    private PackageAnalysisResult _analysisResult;
 
     private static EClassFlags[] classModifierFlags = new[] { EClassFlags.CLASS_Abstract };
 
@@ -57,7 +57,7 @@ public partial class KismetDecompiler
         _asset = asset;
         _class = _asset.GetClassExport();
 
-        var analyser = new KismetAnalyser();
+        var analyser = new PackageAnalyser();
         _analysisResult = analyser.Analyse(asset);
 
         if (_class != null)
@@ -444,10 +444,17 @@ public partial class KismetDecompiler
                     }
                     else
                     {
+                        var modifiers = new List<string> { "public" };
+                        if (symbol.ClassMetadata.IsStaticClass)
+                            modifiers.Add("static");
+                        var modifierText = string.Join(" ", modifiers);
+                        if (!string.IsNullOrWhiteSpace(modifierText))
+                            modifierText += " ";
+
                         if (symbol.Super != null)
-                            _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{");
+                            _writer.WriteLine($"{modifierText}class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{");
                         else
-                            _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} {{");
+                            _writer.WriteLine($"{modifierText}class {FormatIdentifier(symbol.Name)} {{");
                         _writer.Push();
                         isInsideClassDecl = true;
                         foreach (var child in symbol.Children)
@@ -463,83 +470,80 @@ public partial class KismetDecompiler
                         }
                     }
                 }
-                else if (symbol.Class != null)
+                else if (symbol.Class?.Name == "Function")
                 {
-                    if (symbol.Class.Name == "Function")
+                    if (symbol.Name == "Default__Function")
                     {
-                        if (symbol.Name == "Default__Function")
-                        {
-                            _writer.WriteLine($"{FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
-                        }
-                        else
-                        {
-                            var functionModifiers = new List<string>() { "public" };
-                            var functionAttributes = new List<string>() { "UnknownSignature" };
-
-                            var functionModifier = symbol.FunctionMetadata.CallingConvention switch
-                            {
-                                CallingConvention.FinalFunction => "sealed",
-                                CallingConvention.LocalFinalFunction => "sealed",
-
-                                CallingConvention.VirtualFunction => "virtual",
-                                CallingConvention.LocalVirtualFunction => "virtual",
-
-                                CallingConvention.CallMath => "static sealed",
-                                _ => "",
-                            };
-                            functionModifiers.Add(functionModifier);
-                            var functionAttribute = symbol.FunctionMetadata.CallingConvention switch
-                            {
-                                CallingConvention.FinalFunction => "FinalFunction",
-                                CallingConvention.LocalFinalFunction => "LocalFinalFunction",
-
-                                CallingConvention.VirtualFunction => "VirtualFunction",
-                                CallingConvention.LocalVirtualFunction => "LocalVirtualFunction",
-
-                                CallingConvention.CallMath => "MathFunction",
-                                _ => ""
-                            };
-                            if (!string.IsNullOrWhiteSpace(functionAttribute))
-                                functionAttributes.Add(functionAttribute);
-
-                            var functionAttributeText = string.Join(", ", functionAttributes);
-                            if (!string.IsNullOrWhiteSpace(functionAttributeText))
-                                functionAttributeText = $"[{functionAttributeText}] ";
-
-                            var functionModifierText = string.Join(" ", functionModifiers);
-                            if (!string.IsNullOrWhiteSpace(functionModifierText))
-                                functionModifierText = $"{functionModifierText} ";
-
-                            var functionParameterText =
-                                string.Join(", ", symbol.FunctionMetadata.Parameters.Select(x => $"{GetDecompiledTypeName(x.Class.Name)} {x.Name}"));
-
-                            var functionReturnTypeText =
-                                symbol.FunctionMetadata.ReturnType == null ? "void" : GetDecompiledTypeName(symbol.FunctionMetadata.ReturnType.Name);
-
-                            _writer.WriteLine($"{functionAttributeText}{functionModifierText}{functionReturnTypeText} {FormatIdentifier(symbol.Name)}({functionParameterText});");
-                        }
+                        _writer.WriteLine($"{FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                     }
                     else
                     {
-                        if (isInsideClassDecl)
+                        var functionModifiers = new List<string>() { "public" };
+                        var functionAttributes = new List<string>() { "UnknownSignature" };
+
+                        var functionModifier = symbol.FunctionMetadata.CallingConvention switch
                         {
-                            var cls = symbol.Class.Name == "Class" ? "object" : symbol.Class.Name;
-                            _writer.WriteLine($"public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
-                        }
+                            CallingConvention.FinalFunction => "sealed",
+                            CallingConvention.LocalFinalFunction => "sealed",
+
+                            CallingConvention.VirtualFunction => "virtual",
+                            CallingConvention.LocalVirtualFunction => "virtual",
+
+                            CallingConvention.CallMath => "static sealed",
+                            _ => "",
+                        };
+                        functionModifiers.Add(functionModifier);
+                        var functionAttribute = symbol.FunctionMetadata.CallingConvention switch
+                        {
+                            CallingConvention.FinalFunction => "FinalFunction",
+                            CallingConvention.LocalFinalFunction => "LocalFinalFunction",
+
+                            CallingConvention.VirtualFunction => "VirtualFunction",
+                            CallingConvention.LocalVirtualFunction => "LocalVirtualFunction",
+
+                            CallingConvention.CallMath => "MathFunction",
+                            _ => ""
+                        };
+                        if (!string.IsNullOrWhiteSpace(functionAttribute))
+                            functionAttributes.Add(functionAttribute);
+
+                        var functionAttributeText = string.Join(", ", functionAttributes);
+                        if (!string.IsNullOrWhiteSpace(functionAttributeText))
+                            functionAttributeText = $"[{functionAttributeText}] ";
+
+                        var functionModifierText = string.Join(" ", functionModifiers);
+                        if (!string.IsNullOrWhiteSpace(functionModifierText))
+                            functionModifierText = $"{functionModifierText} ";
+
+                        var functionParameterText =
+                            string.Join(", ", symbol.FunctionMetadata.Parameters.Select(x => $"{GetDecompiledTypeName(x.Class.Name)} {x.Name}"));
+
+                        var functionReturnTypeText =
+                            symbol.FunctionMetadata.ReturnType == null ? "void" : GetDecompiledTypeName(symbol.FunctionMetadata.ReturnType.Name);
+
+                        _writer.WriteLine($"{functionAttributeText}{functionModifierText}{functionReturnTypeText} {FormatIdentifier(symbol.Name)}({functionParameterText});");
+                    }
+                }
+                else
+                {
+                    if (isInsideClassDecl)
+                    {
+                        var cls = (symbol.Class?.Name == "Class" || symbol.Class == null) ? "object" : symbol.Class.Name;
+                        _writer.WriteLine($"public {FormatIdentifier(cls)} {FormatIdentifier(symbol.Name)};");
+                    }
+                    else
+                    {
+                        if (symbol.Class != null && symbol.Class.Name != "Class")
+                            _writer.WriteLine($"public {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                         else
                         {
-                            if (symbol.Class.Name != "Class")
-                                _writer.WriteLine($"public {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
+                            if (symbol.Super != null)
+                            {
+                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{}}");
+                            }
                             else
                             {
-                                if (symbol.Super != null)
-                                {
-                                    _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{}}");
-                                }
-                                else
-                                {
-                                    _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} {{}}");
-                                }
+                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} {{}}");
                             }
                         }
                     }
@@ -1068,6 +1072,12 @@ public partial class KismetDecompiler
     private string EscapeFullName(string name)
     {
         return name;
+    }
+
+    private string GetFunctionClassName(FPackageIndex index)
+    {
+        var classIndex = _asset.GetOuterIndex(index);
+        return _asset.GetName(classIndex);
     }
 
     private string GetFunctionName(FPackageIndex index)

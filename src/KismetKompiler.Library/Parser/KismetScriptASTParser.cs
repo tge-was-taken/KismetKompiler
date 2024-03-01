@@ -433,6 +433,10 @@ public class KismetScriptASTParser
             {
                 switch (modifierSymbol.GetText())
                 {
+                    case "static":
+                        classDeclaration.Modifiers |= ClassModifiers.Static;
+                        break;
+
                     case "private":
                         classDeclaration.Modifiers |= ClassModifiers.Private;
                         break;
