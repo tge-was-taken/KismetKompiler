@@ -118,6 +118,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
     public override void Visit(KismetExpression expression, ref int codeOffset)
     {
+        var skipBaseVisit = false;
+
         switch (expression)
         {
             case EX_LocalVirtualFunction localVirtualFunction:
@@ -201,7 +203,17 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                     var member = EnsurePropertySymbolCreated(let.Value);
                     if (let.Variable is EX_StructMemberContext structMemberContext)
                     {
+                        skipBaseVisit = true;
+                        codeOffset += 8;
+                        Visit(let.Variable, ref codeOffset);
+                        Visit(let.Expression, ref codeOffset);
+
                         var structContext = GetContextSymbolForExpression(let.Variable);
+                        //if (structContext.Flags.HasFlag(SymbolFlags.UnresolvedClass))
+                        //{
+                        //    structContext.
+                        //}
+
                         if (!structContext.HasMember(member))
                         {
                             _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
@@ -428,6 +440,7 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
             case EX_StructMemberContext structMemberContext:
                 {
+                    skipBaseVisit = true;
                     Visit(structMemberContext.StructExpression);
                     var contextSymbol = GetContextSymbolForExpression(structMemberContext.StructExpression);
                     _contextStack.Push((structMemberContext, contextSymbol));
@@ -439,6 +452,7 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
             case EX_Context context:
                 {
+                    skipBaseVisit = true;
                     Visit(context.ObjectExpression);
                     var contextSymbol = GetContextSymbolForExpression(context.ObjectExpression);
                     _contextStack.Push((context, contextSymbol));
@@ -451,10 +465,7 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
         if (_contextStack.Count > 0)
             _contextStack.Pop();
 
-        // Don't visit EX_Context because we visit it manually so we can handle the 
-        // context stack
-        if (expression is not EX_Context &&
-            expression is not EX_StructMemberContext)
+        if (!skipBaseVisit)
             base.Visit(expression, ref codeOffset);
     }
 }

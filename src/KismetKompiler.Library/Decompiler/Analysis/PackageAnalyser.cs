@@ -500,6 +500,27 @@ public partial class PackageAnalyser
         }
     }
 
+    private void ResolveUnresolvedClasses2(FunctionAnalysisContext ctx)
+    {
+        foreach (var group in ctx.UnexpectedMemberAccesses
+            .GroupBy(x => x.ContextSymbol))
+        {
+            var contextSymbol = group.Key;
+
+            foreach (var memberAccess in group)
+            {
+                if (contextSymbol.HasMember(memberAccess.MemberSymbol.Name))
+                    continue;
+
+                var classSymbol = _symbols.Where(x => x.Type == SymbolType.Class && x.HasMember(memberAccess.MemberSymbol.Name));
+                if (classSymbol.Count() == 1)
+                {
+                    contextSymbol.ResolvedType.AddSuperClass(classSymbol.First());
+                }
+            }
+        }
+    }
+
     private bool IsValidPotentialBaseClass(Symbol @class, Symbol baseClass)
     {
         // Exported classes can't be base classes
@@ -537,7 +558,7 @@ public partial class PackageAnalyser
         ResolveUnresolvedClasses(ctx);
         ResolveClassHierarchy(ctx);
         ResolveTypes(ctx);
-
+        ResolveUnresolvedClasses2(ctx);
         // For the remainder of the unresolved symbols, we generate
         // fake classes which contain the accessed members to satisfy the compiler
         CreateAnonymousClasses(ctx);
@@ -685,7 +706,7 @@ public partial class PackageAnalyser
             {
                 var fakeClass = new Symbol()
                 {
-                    Name = $"{sym.Name}AnonymousClass",
+                    Name = $"AnonymousClass_{Guid.NewGuid().ToString().Replace("-", "")}",
                     Class = _symbols.Where(x => x.Name == "Class").FirstOrDefault(),
                     Flags = SymbolFlags.AnonymousClass | SymbolFlags.Import,
                     Type = SymbolType.Class,
@@ -744,45 +765,81 @@ public partial class PackageAnalyser
     private void ResolveClassHierarchy(FunctionAnalysisContext ctx)
     {
         // Determine potential base classes
-        var potentialBaseClasses = DeterminePotentialBaseClasses(ctx);
+        var potentialBaseClassesPerClass = DeterminePotentialBaseClasses(ctx);
         while (true)
         {
             // Repeat the algorithm so long as we can still find definitive matches (only 1 plausible base class)
-            if (!potentialBaseClasses.Any(x => x.Value.Count == 1))
+            if (!potentialBaseClassesPerClass.Any(x => x.Value.Count == 1))
                 break;
-            foreach ((var classSymbol, var baseClasses) in potentialBaseClasses
+            foreach ((var classSymbol, var baseClasses) in potentialBaseClassesPerClass
                 .Where(x => x.Value.Count == 1))
             {
                 classSymbol.AddSuperClass(baseClasses.First());
             }
-            potentialBaseClasses = DeterminePotentialBaseClasses(ctx);
+            potentialBaseClassesPerClass = DeterminePotentialBaseClasses(ctx);
         }
 
         // Solve the remainder of the base classes
-        foreach ((var classSymbol, var baseClasses) in potentialBaseClasses
+        foreach ((var classSymbol, var potentialBaseClasses) in potentialBaseClassesPerClass
             .Where(x => x.Value.Count > 0))
         {
             //var candidateBaseClasses = potentialBaseClasses
             //    .Where(x => baseClasses.Contains(x.Key))
             //    .SelectMany(x => x.Value)
             //    .Distinct();
-
-            var rootBaseClass = baseClasses
-                .Where(x => x.Super == null)
-                .OrderByDescending(x => x.ImportIndex?.Index)
-                .First();
-            var remainingBaseClasses = new Queue<Symbol>(
-                baseClasses
-                    .Where(x => x != rootBaseClass)
-                    .OrderBy(x => x.Super == null)
-                    .ThenBy(x => x.ImportIndex?.Index));
-            var previousBaseClass = rootBaseClass;
-            while (remainingBaseClasses.TryDequeue(out var currentBaseClass))
+            var knownBaseClasses = new HashSet<Symbol>();
+            var currentKnownBaseClass = classSymbol.Super;
+            while (currentKnownBaseClass != null)
             {
-                currentBaseClass.AddSuperClass(previousBaseClass);
-                previousBaseClass = currentBaseClass;
+                knownBaseClasses.Add(currentKnownBaseClass);
+                currentKnownBaseClass = currentKnownBaseClass.Super;
             }
-            classSymbol.AddSuperClass(previousBaseClass);
+
+            var filteredBaseClasses = new HashSet<Symbol>();
+            foreach (var baseClass in potentialBaseClasses)
+            {
+                if (knownBaseClasses.Contains(baseClass))
+                {
+                    // Class is already a base class if the current class
+                    continue;
+                }
+
+                if (baseClass.Super != null && potentialBaseClasses.Contains(baseClass.Super))
+                {
+                    // The base class of this class is already part of the list of candidates
+                    // meaning that it's that base class that should be assigned, not the derived one
+                    continue;
+                }
+                
+                filteredBaseClasses.Add(baseClass);
+            }
+
+            if (filteredBaseClasses.Any())
+            {
+                if (filteredBaseClasses.Count() == 1)
+                {
+                    classSymbol.AddSuperClass(filteredBaseClasses.First());
+                }
+                else
+                {
+                    var rootBaseClass = filteredBaseClasses
+                        .Where(x => x.Super == null)
+                        .OrderByDescending(x => x.ImportIndex?.Index)
+                        .First();
+                    var remainingBaseClasses = new Queue<Symbol>(
+                        filteredBaseClasses
+                            .Where(x => x != rootBaseClass)
+                            .OrderBy(x => x.Super == null)
+                            .ThenBy(x => x.ImportIndex?.Index));
+                    var previousBaseClass = rootBaseClass;
+                    while (remainingBaseClasses.TryDequeue(out var currentBaseClass))
+                    {
+                        currentBaseClass.AddSuperClass(previousBaseClass);
+                        previousBaseClass = currentBaseClass;
+                    }
+                    classSymbol.AddSuperClass(previousBaseClass);
+                }
+            }
         }
     }
 }

@@ -222,12 +222,7 @@ public class Symbol
     public bool IsImport => Import != null;
     public bool IsExport => Export != null;
 
-    public bool HasMember(string name)
-    {
-        return GetMember(name) != null;
-    }
-
-    private bool HasMemberIterative(Symbol member)
+    private Symbol? FindMember(Func<Symbol, bool> predicate)
     {
         var stack = new Stack<Symbol>();
         stack.Push(this);
@@ -238,8 +233,11 @@ public class Symbol
             var current = stack.Pop();
             Debug.Assert(current.ResolvedType?.CheckSuperClassCircularReference() ?? true);
 
-            if (current.Children.Contains(member))
-                return true;
+            foreach (var child in current.Children)
+            {
+                if (predicate(child))
+                    return child;
+            }
 
             if (current.Super != null)
                 stack.Push(current.Super);
@@ -261,21 +259,17 @@ public class Symbol
                 throw new AnalysisException($"Circular reference in {this}");
         }
 
-        return false;
+        return null;
+    }
+
+    public bool HasMember(string name)
+    {
+        return FindMember(x => x.Name == name) != null;
     }
 
     public bool HasMember(Symbol member)
     {
-        return HasMemberIterative(member);
-
-        Debug.Assert(ResolvedType?.CheckSuperClassCircularReference() ?? true);
-
-        return Children.Contains(member) ||
-                (Super?.HasMember(member) ?? false) ||
-                (PropertyClass?.HasMember(member) ?? false) ||
-                (InterfaceClass?.HasMember(member) ?? false) ||
-                (Struct?.HasMember(member) ?? false) ||
-                (Class?.HasMember(member) ?? false);
+        return FindMember(x => x == member) != null;
     }
 
     public Symbol? GetMember(KismetPropertyPointer pointer)
