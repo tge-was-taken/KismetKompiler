@@ -1,5 +1,4 @@
-﻿using KismetKompiler.Library.Compiler.Context;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -225,8 +224,44 @@ public class Symbol
         return GetMember(name) != null;
     }
 
+    private bool HasMemberIterative(Symbol member)
+    {
+        var stack = new Stack<Symbol>();
+        stack.Push(this);
+        var iterations = 0;
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            Debug.Assert(current.ResolvedType?.CheckSuperClassCircularReference() ?? true);
+
+            if (current.Children.Contains(member))
+                return true;
+
+            if (current.Super != null)
+                stack.Push(current.Super);
+
+            if (current.PropertyClass != null)
+                stack.Push(current.PropertyClass);
+
+            if (current.InterfaceClass != null)
+                stack.Push(current.InterfaceClass);
+
+            if (current.Class != null)
+                stack.Push(current.Class);
+
+            ++iterations;
+            if (iterations > 1000)
+                throw new AnalysisException($"Circular reference in {this}");
+        }
+
+        return false;
+    }
+
     public bool HasMember(Symbol member)
     {
+        return HasMemberIterative(member);
+
         Debug.Assert(ResolvedType?.CheckSuperClassCircularReference() ?? true);
 
         return Children.Contains(member) ||
