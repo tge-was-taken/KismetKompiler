@@ -325,10 +325,11 @@ static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
     try
     {
         var oldJsonText = DumpToJson(oldAsset, "old.json");
-        var newJsonText = DumpToJson(oldAsset, "new.json");
+        var newJsonText = DumpToJson(newAsset, "new.json");
         if (oldJsonText != newJsonText)
         {
             Console.WriteLine("Verification failed");
+            PrintDiff(oldJsonText, newJsonText);
             return false;
         }
         else
@@ -342,6 +343,33 @@ static bool VerifyEquality(string fileName, UnrealPackage oldAsset, UnrealPackag
     {
         Console.WriteLine($"Failed to write verification dumps");
         return false;
+    }
+}
+
+static void PrintDiff(string text1, string text2)
+{
+    string[] lines1 = text1.Split('\n');
+    string[] lines2 = text2.Split('\n');
+
+    int minLength = Math.Min(lines1.Length, lines2.Length);
+
+    for (int i = 0; i < minLength; i++)
+    {
+        if (lines1[i] != lines2[i])
+        {
+            Console.WriteLine($"First difference at line {i + 1}:");
+            Console.WriteLine($"Old: {lines1[i]}");
+            Console.WriteLine($"New: {lines2[i]}");
+            return;
+        }
+    }
+
+    if (lines1.Length != lines2.Length)
+    {
+        int differingLine = minLength;
+        Console.WriteLine($"First difference at line {differingLine + 1}:");
+        Console.WriteLine(lines1.Length > lines2.Length ? $"Old: {lines1[differingLine]}" : $"New: {lines2[differingLine]}");
+        return;
     }
 }
 

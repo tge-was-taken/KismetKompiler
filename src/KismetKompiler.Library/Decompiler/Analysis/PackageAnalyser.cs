@@ -521,8 +521,17 @@ public partial class PackageAnalyser
         }
     }
 
-    private bool IsValidPotentialBaseClass(Symbol @class, Symbol baseClass)
+    private bool IsValidPotentialBaseClass(Symbol symbol, Symbol baseClass)
     {
+        if (symbol.ResolvedType != null)
+        {
+            // These known classes don't have a base class
+            if (symbol.ResolvedType.Name == "AnimBlueprintGeneratedClass" ||
+                symbol.ResolvedType.Name == "BlueprintGeneratedClass" ||
+                symbol.ResolvedType.Name == "Class")
+            return false;
+        }
+
         // Exported classes can't be base classes
         if (baseClass.IsExport)
             return false;
@@ -824,13 +833,13 @@ public partial class PackageAnalyser
                 {
                     var rootBaseClass = filteredBaseClasses
                         .Where(x => x.Super == null)
-                        .OrderByDescending(x => x.ImportIndex?.Index)
+                        .OrderBy(x => x.Name.Length)
                         .First();
                     var remainingBaseClasses = new Queue<Symbol>(
                         filteredBaseClasses
                             .Where(x => x != rootBaseClass)
                             .OrderBy(x => x.Super == null)
-                            .ThenBy(x => x.ImportIndex?.Index));
+                            .ThenBy(x => x.Name.Length));
                     var previousBaseClass = rootBaseClass;
                     while (remainingBaseClasses.TryDequeue(out var currentBaseClass))
                     {

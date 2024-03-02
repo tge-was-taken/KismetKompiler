@@ -101,6 +101,14 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
         {
             return GetContextSymbolForExpression(switchValue.DefaultTerm);
         }
+        else if (expr is EX_ArrayGetByRef arrayGetByRef)
+        {
+            return GetContextSymbolForExpression(arrayGetByRef.ArrayVariable);
+        }
+        else if (expr is EX_Self self)
+        {
+            return _instance;
+        }
         else
         {
             throw new NotImplementedException();
@@ -443,9 +451,15 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                     skipBaseVisit = true;
                     Visit(structMemberContext.StructExpression);
                     var contextSymbol = GetContextSymbolForExpression(structMemberContext.StructExpression);
-                    _contextStack.Push((structMemberContext, contextSymbol));
+                    //_contextStack.Push((structMemberContext, contextSymbol));
                     var memberSymbol = EnsurePropertySymbolCreated(structMemberContext.StructMemberExpression);
-                    _contextStack.Pop();
+                    //_contextStack.Pop();
+                    if (contextSymbol.Flags.HasFlag(SymbolFlags.UnresolvedClass))
+                    {
+                        contextSymbol.Class = memberSymbol.Parent;
+                        contextSymbol.Flags &= ~SymbolFlags.UnresolvedClass;
+                    }
+
                     _expressionSymbolCache[structMemberContext] = memberSymbol;
                     return;
                 }

@@ -654,6 +654,10 @@ public partial class UAssetLinker : PackageLinker
 
     private FPackageIndex CreatePackageIndexForSymbol(Symbol symbol)
     {
+        // FIXME: remove this hack
+        if (symbol.Name.StartsWith("AnonymousClass_"))
+            return FPackageIndex.Null;
+
         if (symbol is VariableSymbol variableSymbol)
         {
             return CreatePropertyAsPropertyExport(variableSymbol).Index;

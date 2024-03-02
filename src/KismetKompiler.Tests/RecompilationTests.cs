@@ -61,12 +61,42 @@ public partial class RecompilationTests
         var newJsonText = JsonConvert.SerializeObject(newJsons, Formatting.Indented);
         if (oldJsonText != newJsonText)
         {
+            PrintDiff(oldJsonText, newJsonText);
             return false;
         }
         else
         {
             return true;
         }
+    }
+
+    static void PrintDiff(string text1, string text2)
+    {
+        string[] lines1 = text1.Split('\n');
+        string[] lines2 = text2.Split('\n');
+
+        int minLength = Math.Min(lines1.Length, lines2.Length);
+
+        for (int i = 0; i < minLength; i++)
+        {
+            if (lines1[i] != lines2[i])
+            {
+                Console.WriteLine($"The texts differ at line {i + 1}:");
+                Console.WriteLine($"Old: {lines1[i]}");
+                Console.WriteLine($"New: {lines2[i]}");
+                return;
+            }
+        }
+
+        if (lines1.Length != lines2.Length)
+        {
+            int differingLine = minLength;
+            Console.WriteLine($"The texts differ at line {differingLine + 1}:");
+            Console.WriteLine(lines1.Length > lines2.Length ? $"Old: {lines1[differingLine]}" : $"New: {lines2[differingLine]}");
+            return;
+        }
+
+        Console.WriteLine("The texts are identical.");
     }
 
 
