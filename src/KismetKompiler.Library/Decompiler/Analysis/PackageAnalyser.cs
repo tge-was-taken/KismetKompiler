@@ -427,6 +427,21 @@ public partial class PackageAnalyser
                             throw new AnalysisException($"No symbol found for property class {_asset.GetName(interfaceProperty.InterfaceClass)}");
                         propertySymbol.InterfaceClass = interfaceClassSymbol;
                     }
+                    if (property is FStructProperty structProperty)
+                    {
+                        if (structProperty.Struct.IsNull())
+                            throw new AnalysisException($"Struct class is null for property {property.Name}");
+
+                        // Resolve property class symbol
+                        // FIXME: do this in the pass where other references are solved
+                        var structSymbol = _symbols
+                            .Union(exportSymbols)
+                            .Union(inferredClassSymbols)
+                            .GetSymbolByPackageIndex(structProperty.Struct);
+                        if (structProperty == null)
+                            throw new AnalysisException($"No symbol found for property class {_asset.GetName(structProperty.Struct)}");
+                        propertySymbol.Struct = structSymbol;
+                    }
 
                     propertySymbols.Add(propertySymbol);
 
@@ -559,6 +574,10 @@ public partial class PackageAnalyser
                             {
                                 contextSymbol.InterfaceClass.AddChild(memberAccess.MemberSymbol);
                             }
+                            else if (contextSymbol.Struct != null)
+                            {
+                                contextSymbol.Struct.AddChild(memberAccess.MemberSymbol);
+                            }
                             else if (contextSymbol.Super != null)
                             {
                                 contextSymbol.Super.AddChild(memberAccess.MemberSymbol);
@@ -590,6 +609,10 @@ public partial class PackageAnalyser
                             {
                                 contextSymbol.InterfaceClass.AddChild(memberAccess.MemberSymbol);
                             }
+                            else if (contextSymbol.Struct != null)
+                            {
+                                contextSymbol.Struct.AddChild(memberAccess.MemberSymbol);
+                            }
                             else if (contextSymbol.Super != null)
                             {
                                 contextSymbol.Super.AddChild(memberAccess.MemberSymbol);
@@ -620,6 +643,10 @@ public partial class PackageAnalyser
                             else if (contextSymbol.InterfaceClass != null)
                             {
                                 contextSymbol.InterfaceClass.AddChild(memberAccess.MemberSymbol);
+                            }
+                            else if (contextSymbol.Struct != null)
+                            {
+                                contextSymbol.Struct.AddChild(memberAccess.MemberSymbol);
                             }
                             else if (contextSymbol.Super != null)
                             {
@@ -692,60 +719,17 @@ public partial class PackageAnalyser
 
                 if (!contextSymbol.Flags.HasFlag(SymbolFlags.UnresolvedClass))
                 {
-                    // The context a known symbol. Might be a virtual call, or a missing base class.
-                    if (memberAccess.MemberExpression is EX_VirtualFunction virtualFunction)
+                    if (memberAccess.MemberSymbol.Parent != null)
                     {
-                        // Virtual calls are done by name, and are not necessarily imported
-                        // We assume the virtual function belongs to the base class
-                        if (memberAccess.MemberSymbol.Parent != null)
-                        {
-                            if (IsValidPotentialBaseClass(contextSymbol, memberAccess.MemberSymbol.Parent))
-                                potentialBaseClasses[contextSymbol.ResolvedType].Add(memberAccess.MemberSymbol.Parent);
-                        }
-                        else
-                        {
-                            foreach (var symbol in _symbols.Where(x => x.Type == SymbolType.Class && x.HasMember(memberAccess.MemberSymbol.Name)))
-                            {
-                                if (IsValidPotentialBaseClass(contextSymbol, symbol))
-                                    potentialBaseClasses[contextSymbol.ResolvedType].Add(symbol);
-                            }
-                        }
+                        if (IsValidPotentialBaseClass(contextSymbol, memberAccess.MemberSymbol.Parent))
+                            potentialBaseClasses[contextSymbol.ResolvedType].Add(memberAccess.MemberSymbol.Parent);
                     }
-                    else if (memberAccess.MemberExpression is EX_FinalFunction finalFunction)
+                    else
                     {
-                        // When an unexpected call to a final function happens, it's very likely
-                        // that the function is defined in the base class, but the base class itself
-                        // has not been properly assigned to the context class
-                        if (memberAccess.MemberSymbol.Parent != null)
+                        foreach (var symbol in _symbols.Where(x => x.Type == SymbolType.Class && x.HasMember(memberAccess.MemberSymbol.Name)))
                         {
-                            if (IsValidPotentialBaseClass(contextSymbol, memberAccess.MemberSymbol.Parent))
-                                potentialBaseClasses[contextSymbol.ResolvedType].Add(memberAccess.MemberSymbol.Parent);
-                        }
-                        else
-                        {
-                            foreach (var symbol in _symbols.Where(x => x.Type == SymbolType.Class && x.HasMember(memberAccess.MemberSymbol.Name)))
-                            {
-                                if (IsValidPotentialBaseClass(contextSymbol, symbol))
-                                    potentialBaseClasses[contextSymbol.ResolvedType].Add(symbol);
-                            }
-                        }
-                    }
-                    else if (memberAccess.MemberExpression is EX_InstanceVariable instanceVariable)
-                    {
-                        // If an instance member on the context has been accessed, but it doesn't exist in the class
-                        // it must be part of a base class that is not assigned properly
-                        if (memberAccess.MemberSymbol.Parent != null)
-                        {
-                            if (IsValidPotentialBaseClass(contextSymbol, memberAccess.MemberSymbol.Parent))
-                                potentialBaseClasses[contextSymbol.ResolvedType].Add(memberAccess.MemberSymbol.Parent);
-                        }
-                        else
-                        {
-                            foreach (var symbol in _symbols.Where(x => x.Type == SymbolType.Class && x.HasMember(memberAccess.MemberSymbol.Name)))
-                            {
-                                if (IsValidPotentialBaseClass(contextSymbol, symbol))
-                                    potentialBaseClasses[contextSymbol.ResolvedType].Add(symbol);
-                            }
+                            if (IsValidPotentialBaseClass(contextSymbol, symbol))
+                                potentialBaseClasses[contextSymbol.ResolvedType].Add(symbol);
                         }
                     }
                 }
@@ -766,10 +750,10 @@ public partial class PackageAnalyser
             // Repeat the algorithm so long as we can still find definitive matches (only 1 plausible base class)
             if (!potentialBaseClasses.Any(x => x.Value.Count == 1))
                 break;
-            foreach ((var classSymbol, var baseClasses) in potentialBaseClasses)
+            foreach ((var classSymbol, var baseClasses) in potentialBaseClasses
+                .Where(x => x.Value.Count == 1))
             {
-                if (baseClasses.Count == 1)
-                    classSymbol.AddSuperClass(baseClasses.First());
+                classSymbol.AddSuperClass(baseClasses.First());
             }
             potentialBaseClasses = DeterminePotentialBaseClasses(ctx);
         }

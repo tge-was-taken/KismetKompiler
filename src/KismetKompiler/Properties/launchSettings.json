@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i F:\\Development\\KismetKompiler\\Testdata\\P3R\\Battle\\System\\BP_BtlEnvironment.uasset -v 4.27 -f"
+      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\GUI\\BP_BtlGuard.uasset\" -v 4.27 -f"
     }
   }
 }

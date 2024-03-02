@@ -8,7 +8,7 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 {
     private readonly FunctionAnalysisContext _context;
     private Symbol _instance;
-    private Stack<(EX_Context Context, Symbol ContextSymbol)> _contextStack = new();
+    private Stack<(KismetExpression Context, Symbol ContextSymbol)> _contextStack = new();
     private Dictionary<KismetExpression, Symbol> _expressionSymbolCache = new();
 
     public MemberAccessTrackingVisitor(FunctionAnalysisContext context, Symbol instance)
@@ -35,7 +35,13 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
         }
     }
 
-    private Symbol GetContextForExpression(KismetExpression expr)
+    /// <summary>
+    /// Returns the symbol referenced by the expression.
+    /// </summary>
+    /// <param name="expr"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    private Symbol GetContextSymbolForExpression(KismetExpression expr)
     {
         if (expr is EX_InstanceVariable instanceVariable)
         {
@@ -69,17 +75,31 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
         {
             var context = GetProperty(null, localVariable.Variable)
                 ?? throw new NotImplementedException();
-            return context.PropertyClass 
-                ?? context.InterfaceClass
+            return context.ResolvedType 
+                ?? throw new NotImplementedException();
+        }
+        else if (expr is EX_LocalOutVariable localOutVariable)
+        {
+            var context = GetProperty(null, localOutVariable.Variable)
+                ?? throw new NotImplementedException();
+            return context.ResolvedType
                 ?? throw new NotImplementedException();
         }
         else if (expr is EX_Context context)
         {
             return _expressionSymbolCache[context];
         }
+        else if (expr is EX_StructMemberContext structMemberContext)
+        {
+            return GetContextSymbolForExpression(structMemberContext.StructExpression);
+        }
         else if (expr is EX_InterfaceContext interfaceContext)
         {
-            return GetContextForExpression(interfaceContext.InterfaceValue);
+            return GetContextSymbolForExpression(interfaceContext.InterfaceValue);
+        }
+        else if (expr is EX_SwitchValue switchValue)
+        {
+            return GetContextSymbolForExpression(switchValue.DefaultTerm);
         }
         else
         {
@@ -89,15 +109,10 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
     private Symbol GetContextForInterfaceContext(EX_InterfaceContext ctx)
     {
-        return GetContextForExpression(ctx.InterfaceValue);
+        return GetContextSymbolForExpression(ctx.InterfaceValue);
     }
 
-    private Symbol GetContextForContext(EX_Context ctx)
-    {
-        return GetContextForExpression(ctx.ObjectExpression);
-    }
-
-    private EX_Context? ActiveContext => _contextStack.Count == 0 ? null : _contextStack.Peek().Context;
+    private KismetExpression? ActiveContext => _contextStack.Count == 0 ? null : _contextStack.Peek().Context;
 
     private Symbol ActiveContextSymbol => _contextStack.Count == 0 ? _instance : _contextStack.Peek().ContextSymbol;
 
@@ -178,6 +193,27 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                         });
                     }
                     _expressionSymbolCache[instanceVariable] = sym;
+                }
+                break;
+
+            case EX_Let let:
+                {
+                    var member = EnsurePropertySymbolCreated(let.Value);
+                    if (let.Variable is EX_StructMemberContext structMemberContext)
+                    {
+                        var structContext = GetContextSymbolForExpression(let.Variable);
+                        if (!structContext.HasMember(member))
+                        {
+                            _context.UnexpectedMemberAccesses.Add(new MemberAccessContext()
+                            {
+                                ContextExpression = let.Variable,
+                                ContextSymbol = structContext,
+                                MemberExpression = let,
+                                MemberSymbol = member
+                            });
+                        }
+                    }
+                    _expressionSymbolCache[let] = member;
                 }
                 break;
 
@@ -390,10 +426,21 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                 }
                 break;
 
+            case EX_StructMemberContext structMemberContext:
+                {
+                    Visit(structMemberContext.StructExpression);
+                    var contextSymbol = GetContextSymbolForExpression(structMemberContext.StructExpression);
+                    _contextStack.Push((structMemberContext, contextSymbol));
+                    var memberSymbol = EnsurePropertySymbolCreated(structMemberContext.StructMemberExpression);
+                    _contextStack.Pop();
+                    _expressionSymbolCache[structMemberContext] = memberSymbol;
+                    return;
+                }
+
             case EX_Context context:
                 {
                     Visit(context.ObjectExpression);
-                    var contextSymbol = GetContextForContext(context);
+                    var contextSymbol = GetContextSymbolForExpression(context.ObjectExpression);
                     _contextStack.Push((context, contextSymbol));
                     Visit(context.ContextExpression);
                     _expressionSymbolCache[context] = _expressionSymbolCache[context.ContextExpression];
@@ -406,7 +453,8 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
 
         // Don't visit EX_Context because we visit it manually so we can handle the 
         // context stack
-        if (expression is not EX_Context)
+        if (expression is not EX_Context &&
+            expression is not EX_StructMemberContext)
             base.Visit(expression, ref codeOffset);
     }
 }

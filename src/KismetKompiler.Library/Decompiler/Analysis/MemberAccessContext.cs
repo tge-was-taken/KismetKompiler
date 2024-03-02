@@ -5,7 +5,7 @@ namespace KismetKompiler.Library.Decompiler.Analysis;
 
 public class MemberAccessContext
 {
-    public required EX_Context ContextExpression { get; init; }
+    public required KismetExpression ContextExpression { get; init; }
     public required Symbol ContextSymbol { get; init; }
     public required KismetExpression MemberExpression { get; init; }
     public required Symbol MemberSymbol { get; init; }

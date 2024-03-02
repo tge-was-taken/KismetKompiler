@@ -2201,6 +2201,11 @@ public partial class KismetScriptCompiler
             {
                 return GetSymbolName(callOperator.Arguments.First().Expression);
             }
+            else if (callOperator.Identifier.Text == "EX_SwitchValue")
+            {
+                var defaultTerm = callOperator.Arguments[2];
+                return GetSymbolName(defaultTerm.Expression);
+            }
             else
             {
                 throw new NotImplementedException();
@@ -2272,6 +2277,11 @@ public partial class KismetScriptCompiler
                 {
                     return GetSymbol<T>(callOperator.Arguments.First().Expression);
                 }
+            }
+            else if (callOperator.Identifier.Text == "EX_SwitchValue")
+            {
+                var defaultTerm = callOperator.Arguments[2];
+                return GetSymbol<T>(defaultTerm.Expression);
             }
             else
             {

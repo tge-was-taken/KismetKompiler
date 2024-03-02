@@ -137,12 +137,15 @@ public class Symbol
 
     }
 
+    /// <summary>
+    /// Gets the super class at the root of the class hierarchy.
+    /// </summary>
     public Symbol? RootSuperClass
     {
         get
         {
             var currentClass = Super;
-            while (currentClass != null)
+            while (currentClass?.Super != null)
                 currentClass = currentClass.Super;
             return currentClass;
         }
@@ -214,7 +217,7 @@ public class Symbol
     public bool IsInstance => !IsClass;
 
     public Symbol? ResolvedType
-        => IsClass ? this : PropertyClass ?? InterfaceClass ?? Class;
+        => IsClass ? this : PropertyClass ?? InterfaceClass ?? Struct ?? Class;
 
     public bool IsImport => Import != null;
     public bool IsExport => Export != null;
@@ -247,6 +250,9 @@ public class Symbol
             if (current.InterfaceClass != null)
                 stack.Push(current.InterfaceClass);
 
+            if (current.Struct != null)
+                stack.Push(current.Struct);
+
             if (current.Class != null)
                 stack.Push(current.Class);
 
@@ -268,6 +274,7 @@ public class Symbol
                 (Super?.HasMember(member) ?? false) ||
                 (PropertyClass?.HasMember(member) ?? false) ||
                 (InterfaceClass?.HasMember(member) ?? false) ||
+                (Struct?.HasMember(member) ?? false) ||
                 (Class?.HasMember(member) ?? false);
     }
 
@@ -285,23 +292,25 @@ public class Symbol
 
     public Symbol? GetMember(FPackageIndex index)
     {
-        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Class != this);
+        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Struct != this && Class != this);
 
         return Children.Where(x => x.ImportIndex?.Index == index.Index || x.ExportIndex?.Index == index.Index).SingleOrDefault()
             ?? Super?.GetMember(index)
             ?? PropertyClass?.GetMember(index)
             ?? InterfaceClass?.GetMember(index)
+            ?? Struct?.GetMember(index)
             ?? Class?.GetMember(index);
     }
 
     public Symbol? GetMember(string name)
     {
-        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Class != this);
+        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Struct != this && Class != this);
 
         return Children.Where(x => x.Name == name).SingleOrDefault()
             ?? Super?.GetMember(name)
             ?? PropertyClass?.GetMember(name)
             ?? InterfaceClass?.GetMember(name)
+            ?? Struct?.GetMember(name)
             ?? Class?.GetMember(name);
     }
 
@@ -350,6 +359,8 @@ public class Symbol
             return $"[{Flags}] {Class?.Name}<{PropertyClass?.Name}> {Name}";
         else if (InterfaceClass != null)
             return $"[{Flags}] {Class?.Name}<{InterfaceClass?.Name}> {Name}";
+        else if (Struct != null)
+            return $"[{Flags}] {Class?.Name}<{Struct?.Name}> {Name}";
         else
             return $"[{Flags}] {Class?.Name} {Name}";
     }
