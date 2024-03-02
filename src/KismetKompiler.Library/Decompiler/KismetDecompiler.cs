@@ -554,7 +554,10 @@ public partial class KismetDecompiler
             }
         }
 
-        var importSymbols = _analysisResult.RootSymbols.Where(x => x.Import != null).ToList();
+        var importSymbols = _analysisResult.RootSymbols
+            .Where(x => x.Import != null)
+            .OrderBy(x => x.ImportIndex!.Index)
+            .ToList();
         foreach (var symbol in importSymbols)
             WriteImport(symbol);
 

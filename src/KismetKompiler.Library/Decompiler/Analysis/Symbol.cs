@@ -1,4 +1,5 @@
 ﻿using KismetKompiler.Library.Compiler.Context;
+using System.Diagnostics;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.FieldTypes;
@@ -137,6 +138,45 @@ public class Symbol
 
     }
 
+    public Symbol? RootSuperClass
+    {
+        get
+        {
+            var currentClass = Super;
+            while (currentClass != null)
+                currentClass = currentClass.Super;
+            return currentClass;
+        }
+    }
+
+    public bool CheckSuperClassCircularReference(Symbol? newSuperClass = default)
+    {
+        var currentClass = this;
+        var seenClasses = new HashSet<Symbol>();
+        while (currentClass.Super != null)
+        {
+            if (!seenClasses.Add(currentClass))
+                throw new AnalysisException($"Referential cycle in superclass of {currentClass}");
+            currentClass = currentClass.Super;
+        }
+        if (newSuperClass != null)
+            if (!seenClasses.Add(newSuperClass))
+                throw new AnalysisException($"Referential cycle in superclass of {currentClass}");
+        return true;
+    }
+
+    /// <summary>
+    /// Adds a superclass at the root of the class hierarchy.
+    /// </summary>
+    /// <param name="superClass"></param>
+    /// <exception cref="AnalysisException"></exception>
+    public void AddSuperClass(Symbol superClass)
+    {
+        CheckSuperClassCircularReference(superClass);
+        var currentClass = RootSuperClass ?? this;
+        currentClass.Super = superClass;
+    }
+
     private IEnumerable<Symbol> GetAncestors(Func<Symbol, Symbol?> getter)
     {
         var ancestor = getter(this);
@@ -175,7 +215,10 @@ public class Symbol
     public bool IsInstance => !IsClass;
 
     public Symbol? ResolvedType
-        => IsClass ? this : PropertyClass ?? InterfaceClass ?? Class;           
+        => IsClass ? this : PropertyClass ?? InterfaceClass ?? Class;
+
+    public bool IsImport => Import != null;
+    public bool IsExport => Export != null;
 
     public bool HasMember(string name)
     {
@@ -184,6 +227,8 @@ public class Symbol
 
     public bool HasMember(Symbol member)
     {
+        Debug.Assert(ResolvedType?.CheckSuperClassCircularReference() ?? true);
+
         return Children.Contains(member) ||
                 (Super?.HasMember(member) ?? false) ||
                 (PropertyClass?.HasMember(member) ?? false) ||
@@ -205,6 +250,8 @@ public class Symbol
 
     public Symbol? GetMember(FPackageIndex index)
     {
+        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Class != this);
+
         return Children.Where(x => x.ImportIndex?.Index == index.Index || x.ExportIndex?.Index == index.Index).SingleOrDefault()
             ?? Super?.GetMember(index)
             ?? PropertyClass?.GetMember(index)
@@ -214,6 +261,8 @@ public class Symbol
 
     public Symbol? GetMember(string name)
     {
+        Debug.Assert(Super != this && PropertyClass != this && InterfaceClass != this && Class != this);
+
         return Children.Where(x => x.Name == name).SingleOrDefault()
             ?? Super?.GetMember(name)
             ?? PropertyClass?.GetMember(name)

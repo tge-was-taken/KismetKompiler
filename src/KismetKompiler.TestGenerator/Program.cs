@@ -17,7 +17,7 @@ foreach (var file in files)
     var methodName = $"{fileRelPathNormalized}";
 
     methods.AppendLine($@"
-[TestMethod]
+[TestMethod, Timeout(10000)]
 public void {methodName}()
 {{
     AssertBinaryEqualityAfterRecompilation(@""{Path.GetRelativePath(directoryFullPath, file)}"");

@@ -1828,97 +1828,179 @@ public partial class KismetScriptCompiler
 
     private CompiledExpressionContext CompileMemberExpression(MemberExpression memberExpression)
     {
-        PushContext(GetContextForMemberExpression(memberExpression));
-        try
+        var memberContext = GetContextForMemberExpression(memberExpression);
+
+        if (memberContext.Type == ContextType.This ||
+            memberContext.Type == ContextType.Base)
         {
-            Debug.Assert(Context != null);
-
-            TryGetPropertyPointer(memberExpression.Member, out var pointer);
-            pointer ??= RValue;
-
-            if (Context.Type == ContextType.This ||
-                Context.Type == ContextType.Base)
+            // These are handled through different opcodes rather than context
+            PushContext(memberContext);
+            try
             {
-                // These are handled through different opcodes rather than context
                 return CompileExpression(memberExpression.Member);
             }
-            else if (Context.Type == ContextType.SubContext)
+            finally
             {
-                // Special case for nested context expressions
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.SubContext)
+        {
+            // Special case for nested context expressions
+            var objectExpression = CompileExpression(memberExpression.Context).CompiledExpressions.Single();
+            PushContext(memberContext);
+            try
+            {
+                TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                pointer ??= RValue;
+
                 return Emit(memberExpression, new EX_Context()
                 {
-                    ObjectExpression = CompileExpression(memberExpression.Context).CompiledExpressions.Single(),
+                    ObjectExpression = objectExpression,
                     ContextExpression = CompileSubExpression(memberExpression.Member),
                     RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
                 });
             }
-            else if (Context.Type == ContextType.Interface)
+            finally
             {
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.Interface)
+        {
+            var interfaceValue = CompileSubExpression(memberExpression.Context);
+            PushContext(memberContext);
+            try
+            {
+                TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                pointer ??= RValue;
+
                 return Emit(memberExpression, new EX_Context()
                 {
                     ObjectExpression = Emit(memberExpression.Context, new EX_InterfaceContext()
                     {
-                        InterfaceValue = CompileSubExpression(memberExpression.Context)
+                        InterfaceValue = interfaceValue
                     }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
                     RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
-                }); ;
+                });
             }
-            else if (Context.Type == ContextType.Struct)
+            finally
+            {
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.Struct)
+        {
+            var structExpression = CompileSubExpression(memberExpression.Context);
+            PushContext(memberContext);
+            try
             {
                 return Emit(memberExpression, new EX_StructMemberContext()
                 {
-                    StructExpression = CompileSubExpression(memberExpression.Context),
+                    StructExpression = structExpression,
                     StructMemberExpression = GetPropertyPointer(memberExpression.Member)
                 });
             }
-            else if (Context.Type == ContextType.ObjectConst)
+            finally
             {
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.ObjectConst)
+        {
+            var packageIndex = GetPackageIndex(memberExpression.Context);
+            PushContext(memberContext);
+            try
+            {
+                TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                pointer ??= RValue;
+
                 return Emit(memberExpression, new EX_Context()
                 {
                     ObjectExpression = Emit(memberExpression.Context, new EX_ObjectConst()
                     {
-                        Value = GetPackageIndex(memberExpression.Context)
-                    }).CompiledExpressions.Single(),
+                        Value = packageIndex
+                }).CompiledExpressions.Single(),
                     ContextExpression = CompileSubExpression(memberExpression.Member),
                     RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
                 }); ;
             }
-            else if (Context.Type == ContextType.Enum)
+            finally
+            {
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.Enum)
+        {
+            PushContext(memberContext);
+            try
             {
                 return Emit(memberExpression, CompileSubExpression(memberExpression.Member));
             }
-            else if (Context.Type == ContextType.Class)
+            finally
             {
-                var classSymbol = (ClassSymbol)Context.Symbol;
-                if (classSymbol.IsStatic)
+                PopContext();
+            }
+        }
+        else if (memberContext.Type == ContextType.Class)
+        {
+            var classSymbol = (ClassSymbol)memberContext.Symbol;
+            if (classSymbol.IsStatic)
+            {
+                // No context expression for static classes
+                PushContext(memberContext);
+                try
                 {
-                    // No context for static classes
                     return CompileExpression(memberExpression.Member);
                 }
-                else
+                finally
                 {
-                    return Emit(memberExpression, new EX_Context()
-                    {
-                        ObjectExpression = CompileSubExpression(memberExpression.Context),
-                        ContextExpression = CompileSubExpression(memberExpression.Member),
-                        RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
-                    });
+                    PopContext();
                 }
             }
             else
             {
+                var objectExpression = CompileSubExpression(memberExpression.Context);
+                PushContext(memberContext);
+                try
+                {
+                    TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                    pointer ??= RValue;
+
+                    return Emit(memberExpression, new EX_Context()
+                    {
+                        ObjectExpression = objectExpression,
+                        ContextExpression = CompileSubExpression(memberExpression.Member),
+                        RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
+                    });
+                }
+                finally
+                {
+                    PopContext();
+                }
+            }
+        }
+        else
+        {
+            var objectExpression = CompileSubExpression(memberExpression.Context);
+            PushContext(memberContext);
+            try
+            {
+                TryGetPropertyPointer(memberExpression.Member, out var pointer);
+                pointer ??= RValue;
+
                 return Emit(memberExpression, new EX_Context()
                 {
-                    ObjectExpression = CompileSubExpression(memberExpression.Context),
+                    ObjectExpression = objectExpression,
                     ContextExpression = CompileSubExpression(memberExpression.Member),
                     RValuePointer = pointer ?? new() { Old = FPackageIndex.Null, New = FFieldPath.Null },
                 });
             }
-        }
-        finally
-        {
-            PopContext();
+            finally
+            {
+                PopContext();
+            }
         }
     }
 
