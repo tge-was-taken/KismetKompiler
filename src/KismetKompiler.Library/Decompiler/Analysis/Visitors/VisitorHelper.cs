@@ -22,6 +22,10 @@ public static class VisitorHelper
                 var symbol = context.Symbols.Where(x => x.Export == export).SingleOrDefault();
                 return symbol ?? throw new InvalidOperationException();
             }
+            else if (pointer.Old.IsNull())
+            {
+                return null;
+            }
             else
             {
                 throw new InvalidOperationException();

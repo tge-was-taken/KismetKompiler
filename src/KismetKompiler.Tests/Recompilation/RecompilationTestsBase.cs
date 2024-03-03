@@ -10,12 +10,16 @@ using UAssetAPI;
 using Newtonsoft.Json;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.Kismet;
+using UAssetAPI.UnrealTypes;
 
-namespace KismetKompiler.Tests;
+namespace KismetKompiler.Tests.Recompilation;
 
-public partial class RecompilationTests
+public abstract class RecompilationTestsBase
 {
-    private void AssertBinaryEqualityAfterRecompilation(string filePath)
+    protected abstract string RootPath { get; }
+    protected abstract EngineVersion EngineVersion { get; }
+
+    protected void Test(string filePath)
     {
         var fullFilePath = Path.Join(RootPath, filePath);
         var asset = new UAsset(fullFilePath, EngineVersion);
@@ -32,7 +36,7 @@ public partial class RecompilationTests
 
         var script = CompileScript(outStream, false);
         var tempAsset = new UAsset(fullFilePath, EngineVersion);
-        var newAsset = new UAssetLinker((UAsset)tempAsset)
+        var newAsset = new UAssetLinker(tempAsset)
             .LinkCompiledScript(script)
             .Build();
         if (!VerifyEquality(asset, newAsset))

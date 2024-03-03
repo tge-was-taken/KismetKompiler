@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\System\\BP_BtlHumanBase.uasset\" -v 4.27 -f"
+      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\DQXIS\\Battle\\BattleCommandAI\\BP_COMP_BCAI_Base.uasset\" -v 4.27 -f"
     }
   }
 }
