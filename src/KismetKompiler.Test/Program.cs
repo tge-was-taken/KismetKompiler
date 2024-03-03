@@ -82,7 +82,7 @@ Console.ReadKey();
 static void RunTest()
 {
     var ver = EngineVersion.VER_UE4_23;
-    var script = CompileClass(@"Test.kms");
+    var script = CompileClass(@"Test.kms", ver);
     var newAsset = new UAssetLinker()
         .LinkCompiledScript(script)
         .Build();
@@ -95,7 +95,7 @@ static void PackageCustomAI()
 {
     var ver = EngineVersion.VER_UE4_23;
     var asset = LoadAsset(@"E:\Projects\smtv_ai\pakchunk0-Switch\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.uasset", ver);
-    var script = CompileClass(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms");
+    var script = CompileClass(@"E:\Projects\smtv_ai\tools\UnrealPak\CustomAI\Project\Content\Blueprints\Battle\Logic\AI\Enemy\BtlAI_e139.kms", ver);
     var newAsset = new UAssetLinker(asset)
         .LinkCompiledScript(script)
         .Build();
@@ -121,7 +121,7 @@ static void DecompileOne(string path, EngineVersion ver, string? usmapPath = def
     }
 
     DecompileClass(asset, "old_out.c");
-    var script = CompileClass("old_out.c");
+    var script = CompileClass("old_out.c", ver);
     var newAsset = new UAssetLinker((UAsset)asset)
         .LinkCompiledScript(script)
         .Build();
@@ -163,7 +163,7 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
                 return;
             try
             {
-                var script = CompileClass(kmsPath);
+                var script = CompileClass(kmsPath, version);
                 DumpOldAndNew(path, asset, script);
                 Console.WriteLine($"Success");
             }
@@ -192,7 +192,7 @@ static void DecompileFolder(string folderPath, EngineVersion version, bool useZe
                 return;
             try
             {
-                var script = CompileClass(kmsPath);
+                var script = CompileClass(kmsPath, version);
                 DumpOldAndNew(path, asset, script);
                 Console.WriteLine($"Success: {path}");
             }
@@ -271,7 +271,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileClass(string inPath)
+static CompiledScriptContext CompileClass(string inPath, EngineVersion engineVersion)
 {
     try
     {
@@ -281,6 +281,7 @@ static CompiledScriptContext CompileClass(string inPath)
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler();
+        compiler.EngineVersion = engineVersion;
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;
     }

@@ -130,10 +130,21 @@ namespace KismetKompiler.Decompiler
                             var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
                             var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
 
-                            if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.{virtualFunctionName}()";
+
+                            if (virtualFunctionName.StartsWith("ExecuteUbergraph_") &&
+                                expr.Parameters.Length == 1 &&
+                                expr.Parameters[0] is EX_IntConst firstParamInt)
+                            {
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName);
+                                return $"{context}.{virtualFunctionName}({uberGraphFunctionLabel})";
+                            }
                             else
-                                return $"{context}.{virtualFunctionName}({parameters})";
+                            {
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"{context}.{virtualFunctionName}()";
+                                else
+                                    return $"{context}.{virtualFunctionName}({parameters})";
+                            }
                         }
                         else
                         {
@@ -380,24 +391,25 @@ namespace KismetKompiler.Decompiler
                             var callContext = context;
                             _context = null;
 
-                            var stackNode = GetFunctionName(expr.StackNode);
+                            var functionExport = (FunctionExport?)(expr.StackNode.IsExport() ? expr.StackNode.ToExport(_asset) : null);
+                            var functionName = GetFunctionName(expr.StackNode);
                             var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
-                            if (true)
+                            if (functionExport != null &&
+                               functionExport.IsUbergraphFunction() &&
+                               expr.Parameters.Length == 1 &&
+                               expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                stackNode = FormatIdentifier(stackNode);
-                                if (string.IsNullOrWhiteSpace(parameters))
-                                    return $"{context}.{stackNode}()";
-                                else
-                                    return $"{context}.{stackNode}({parameters})";
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
+                                return $"{context}.{functionName}({uberGraphFunctionLabel})";
                             }
                             else
                             {
-                                stackNode = FormatString(stackNode);
+                                functionName = FormatIdentifier(functionName);
                                 if (string.IsNullOrWhiteSpace(parameters))
-                                    return $"{context}.EX_FinalFunction({stackNode})";
+                                    return $"{context}.{functionName}()";
                                 else
-                                    return $"{context}.EX_FinalFunction({stackNode}, {parameters})";
+                                    return $"{context}.{functionName}({parameters})";
                             }
                         }
                         else
@@ -423,10 +435,21 @@ namespace KismetKompiler.Decompiler
                             var parameters = string.Join(", ", expr.Parameters.Select(x => FormatExpression(x, expr)));
 
                             var virtualFunctionName = FormatIdentifier(expr.VirtualFunctionName.ToString());
-                            if (string.IsNullOrWhiteSpace(parameters))
-                                return $"{context}.{virtualFunctionName}()";
+
+                            if (virtualFunctionName.StartsWith("ExecuteUbergraph_") &&
+                                expr.Parameters.Length == 1 &&
+                                expr.Parameters[0] is EX_IntConst firstParamInt)
+                            {
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName);
+                                return $"{context}.{virtualFunctionName}({uberGraphFunctionLabel})";
+                            }
                             else
-                                return $"{context}.{virtualFunctionName}({parameters})";
+                            {
+                                if (string.IsNullOrWhiteSpace(parameters))
+                                    return $"{context}.{virtualFunctionName}()";
+                                else
+                                    return $"{context}.{virtualFunctionName}({parameters})";
+                            }
 
                             //var virtualFunctionName = FormatString(expr.VirtualFunctionName.ToString());
                             //if (string.IsNullOrWhiteSpace(parameters))

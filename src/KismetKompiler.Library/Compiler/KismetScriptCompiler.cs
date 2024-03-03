@@ -40,6 +40,8 @@ public partial class KismetScriptCompiler
     private MemberContext? Context => _contextStack.Peek();
     private KismetPropertyPointer? RValue => _rvalueStack.Peek();
 
+    public EngineVersion EngineVersion { get; set; } = EngineVersion.VER_UE4_27;
+
     public bool StrictMode { get; set; }
 
     public KismetScriptCompiler()
@@ -495,6 +497,12 @@ public partial class KismetScriptCompiler
         }
     }
 
+    private static bool IsUbergraphFunction(ProcedureSymbol procedureSymbol)
+    {
+        return procedureSymbol.HasAnyFunctionFlags(EFunctionFlags.FUNC_UbergraphFunction)
+            || procedureSymbol.Name.StartsWith("ExecuteUbergraph_");
+    }
+
     /// <summary>
     /// Determines if a local variable has to be declared globally.
     /// </summary>
@@ -502,7 +510,9 @@ public partial class KismetScriptCompiler
     /// <returns></returns>
     private static bool ShouldGloballyDeclareProcecureLocalSymbol(Symbol item)
     {
-        var isUbergraphFunction = item.DeclaringProcedure?.HasAnyFunctionFlags(EFunctionFlags.FUNC_UbergraphFunction) ?? false;
+        var isUbergraphFunction =
+            item.DeclaringProcedure == null ? false :
+            IsUbergraphFunction(item.DeclaringProcedure);
         var isK2NodeVariable = item.Name.StartsWith("K2Node") && item.SymbolCategory == SymbolCategory.Variable;
         var isLabel = item.SymbolCategory == SymbolCategory.Label;
         var shouldDeclareSymbol = isUbergraphFunction && (isK2NodeVariable || isLabel);
@@ -1516,16 +1526,31 @@ public partial class KismetScriptCompiler
                     else
                     {
                         // See Engine/Source/Editor/KismetCompiler/Private/KismetCompilerVMBackend.cpp EmitFunctionCall
+                        var netFuncFlags = EFunctionFlags.FUNC_Net | EFunctionFlags.FUNC_NetReliable | EFunctionFlags.FUNC_NetServer | EFunctionFlags.FUNC_NetClient | EFunctionFlags.FUNC_NetMulticast;
                         var isParentContext = callContext?.Type == ContextType.Base;
                         var isFinalFunction = (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Final) || isParentContext);
-                        var netFuncFlags = EFunctionFlags.FUNC_Net | EFunctionFlags.FUNC_NetReliable | EFunctionFlags.FUNC_NetServer | EFunctionFlags.FUNC_NetClient | EFunctionFlags.FUNC_NetMulticast;
-                        var isMathCall = isFinalFunction
-                            && functionToCall.HasAllFunctionFlags(EFunctionFlags.FUNC_Static | EFunctionFlags.FUNC_Final | EFunctionFlags.FUNC_Native)
-                            && !functionToCall.HasAnyFunctionFlags(netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse)
-                            && !functionToCall.DeclaringClass!.IsInterface
-                            && !HasWildcardParams(functionToCall);
-                        var isLocalScriptFunction =
-                            !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Native | netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse);
+                        bool isMathCall, isLocalScriptFunction;
+                        if (EngineVersion < EngineVersion.VER_UE4_23)
+                        {
+                            isMathCall = isFinalFunction
+                                && functionToCall.HasAllFunctionFlags(EFunctionFlags.FUNC_Static | EFunctionFlags.FUNC_BlueprintPure | EFunctionFlags.FUNC_Final | EFunctionFlags.FUNC_Native)
+                                && !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic)
+                                && !functionToCall.DeclaringClass!.IsInterface
+                                && functionToCall.DeclaringClass?.Name == "KismetMathLibrary";
+
+                            isLocalScriptFunction = false;
+                        }
+                        else
+                        {
+                            isMathCall = isFinalFunction
+                                && functionToCall.HasAllFunctionFlags(EFunctionFlags.FUNC_Static | EFunctionFlags.FUNC_Final | EFunctionFlags.FUNC_Native)
+                                && !functionToCall.HasAnyFunctionFlags(netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse)
+                                && !functionToCall.DeclaringClass!.IsInterface
+                                && !HasWildcardParams(functionToCall);
+
+                            isLocalScriptFunction =
+                                !functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Native | netFuncFlags | EFunctionFlags.FUNC_BlueprintAuthorityOnly | EFunctionFlags.FUNC_BlueprintCosmetic | EFunctionFlags.FUNC_NetRequest | EFunctionFlags.FUNC_NetResponse);
+                        }
 
                         if (functionToCall.HasAnyFunctionFlags(EFunctionFlags.FUNC_Delegate))
                         {

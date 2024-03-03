@@ -141,7 +141,7 @@ static bool DecompileFile(string inputPath, EngineVersion ver, string? usmapPath
         File.Copy(outPath, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "out.kms"), true);
         DumpToJson(asset, "old.json");
 
-        var script = CompileScript(outPath, noStrict);
+        var script = CompileScript(outPath, noStrict, ver);
         var tempAsset = LoadAsset(assetPath, ver, usmapPath, globalPath);
         var newAsset = new UAssetLinker((UAsset)tempAsset)
             .LinkCompiledScript(script)
@@ -202,7 +202,7 @@ static void Compile(string? inputPath, string scriptPath, EngineVersion ver, str
     }
 
     Console.WriteLine($"Compiling {scriptPath}");
-    var script = CompileScript(scriptPath, noStrict);
+    var script = CompileScript(scriptPath, noStrict, ver);
 
     UAsset newAsset;
     if (assetFilePath != null)
@@ -247,7 +247,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileScript(string inPath, bool noStrict)
+static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineVersion engineVersion)
 {
     using var textStream = new StreamReader(inPath);
     var inputStream = new AntlrInputStream(textStream);
@@ -268,6 +268,7 @@ static CompiledScriptContext CompileScript(string inPath, bool noStrict)
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler();
+        compiler.EngineVersion = engineVersion;
         compiler.StrictMode = !noStrict;
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;

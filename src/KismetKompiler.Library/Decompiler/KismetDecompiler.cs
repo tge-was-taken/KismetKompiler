@@ -1063,16 +1063,27 @@ public partial class KismetDecompiler
 
     private bool IsUbergraphEntrypoint(int codeOffset)
     {
-        var entryPoints = _asset.Exports
+        var finalFunctionEntryPoints = _asset.Exports
             .Where(x => x is FunctionExport)
             .Cast<FunctionExport>()
             .SelectMany(x => x.ScriptBytecode)
-            .Where(x => x.Token == EExprToken.EX_LocalFinalFunction)
-            .Cast<EX_LocalFinalFunction>()
+            .Where(x => x.Token == EExprToken.EX_LocalFinalFunction || x.Token == EExprToken.EX_FinalFunction)
+            .Cast<EX_FinalFunction>()
             .Where(x => x.StackNode.IsExport() && _asset.GetFunctionExport(x.StackNode).IsUbergraphFunction())
             .Select(x => x.Parameters[0] as EX_IntConst)
             .Select(x => x.Value);
-        return entryPoints.Contains(codeOffset);
+
+        var virtualFunctionEntryPoints = _asset.Exports
+            .Where(x => x is FunctionExport)
+            .Cast<FunctionExport>()
+            .SelectMany(x => x.ScriptBytecode)
+            .Where(x => x.Token == EExprToken.EX_VirtualFunction || x.Token == EExprToken.EX_LocalVirtualFunction)
+            .Cast<EX_VirtualFunction>()
+            .Where(x => x.VirtualFunctionName.ToString().StartsWith("ExecuteUbergraph_"))
+            .Select(x => x.Parameters[0] as EX_IntConst)
+            .Select(x => x.Value);
+
+        return finalFunctionEntryPoints.Union(virtualFunctionEntryPoints).Contains(codeOffset);
     }
 
     private string EscapeFullName(string name)
