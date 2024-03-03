@@ -54,11 +54,11 @@ public partial class KismetScriptCompiler
         }
         else if (expression is LogicalAndOperator logicalAndOperator)
         {
-            return EmitMathLibraryCall(logicalAndOperator, "BooleanAND");
+            return EmitKismetMathLibraryCall(logicalAndOperator, "BooleanAND");
         }
         else if (expression is LogicalOrOperator logicalOrOperator)
         {
-            return EmitMathLibraryCall(logicalOrOperator, "BooleanOR");
+            return EmitKismetMathLibraryCall(logicalOrOperator, "BooleanOR");
         }
         else if (expression is AssignmentOperator assignmentOperator)
         {
@@ -166,15 +166,15 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Percent_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Percent_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Percent_IntInt");
+            return EmitKismetMathLibraryCall(op, "Percent_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Percent_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Percent_ByteByte");
         }
         else
         {
@@ -186,31 +186,31 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Divide_Vector2DFloat");
+            return EmitKismetMathLibraryCall(op, "Divide_Vector2DFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "Divide_VectorVector");
+            return EmitKismetMathLibraryCall(op, "Divide_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Divide_VectorInt");
+            return EmitKismetMathLibraryCall(op, "Divide_VectorInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Divide_VectorFloat");
+            return EmitKismetMathLibraryCall(op, "Divide_VectorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Divide_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Divide_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Divide_IntInt");
+            return EmitKismetMathLibraryCall(op, "Divide_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Divide_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Divide_ByteByte");
         }
         else
         {
@@ -246,7 +246,7 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Xor_IntInt");
+            return EmitKismetMathLibraryCall(op, "Xor_IntInt");
         }
         else
         {
@@ -258,7 +258,7 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Or_IntInt");
+            return EmitKismetMathLibraryCall(op, "Or_IntInt");
         }
         else
         {
@@ -270,7 +270,7 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "And_IntInt");
+            return EmitKismetMathLibraryCall(op, "And_IntInt");
         }
         else
         {
@@ -298,51 +298,51 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Vector2D)
         {
-            return EmitMathLibraryCall(op, "NotEqual_Vector2DVector2D");
+            return EmitKismetMathLibraryCall(op, "NotEqual_Vector2DVector2D");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Name && op.Right.ExpressionValueKind == ValueKind.Name)
         {
-            return EmitMathLibraryCall(op, "NotEqual_NameName");
+            return EmitKismetMathLibraryCall(op, "NotEqual_NameName");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Class && op.Right.ExpressionValueKind == ValueKind.Class)
         {
-            return EmitMathLibraryCall(op, "NotEqual_ClassClass");
+            return EmitKismetMathLibraryCall(op, "NotEqual_ClassClass");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Object && op.Right.ExpressionValueKind == ValueKind.Object)
         {
-            return EmitMathLibraryCall(op, "NotEqual_ObjectObject");
+            return EmitKismetMathLibraryCall(op, "NotEqual_ObjectObject");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "NotEqual_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "NotEqual_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "NotEqual_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "NotEqual_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Rotator && op.Right.ExpressionValueKind == ValueKind.Rotator)
         {
-            return EmitMathLibraryCall(op, "NotEqual_RotatorRotator");
+            return EmitKismetMathLibraryCall(op, "NotEqual_RotatorRotator");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "NotEqual_VectorVector");
+            return EmitKismetMathLibraryCall(op, "NotEqual_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "NotEqual_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "NotEqual_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "NotEqual_IntInt");
+            return EmitKismetMathLibraryCall(op, "NotEqual_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "NotEqual_ByteByte");
+            return EmitKismetMathLibraryCall(op, "NotEqual_ByteByte");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Bool && op.Right.ExpressionValueKind == ValueKind.Bool)
         {
-            return EmitMathLibraryCall(op, "NotEqual_BoolBool");
+            return EmitKismetMathLibraryCall(op, "NotEqual_BoolBool");
         }
         else
         {
@@ -354,55 +354,55 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Vector2D)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_Vector2DVector2D");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_Vector2DVector2D");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Transform && op.Right.ExpressionValueKind == ValueKind.Transform)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_TransformTransform");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_TransformTransform");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Name && op.Right.ExpressionValueKind == ValueKind.Name)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_NameName");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_NameName");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Class && op.Right.ExpressionValueKind == ValueKind.Class)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_ClassClass");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_ClassClass");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Object && op.Right.ExpressionValueKind == ValueKind.Object)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_ObjectObject");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_ObjectObject");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Rotator && op.Right.ExpressionValueKind == ValueKind.Rotator)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_RotatorRotator");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_RotatorRotator");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_VectorVector");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_IntInt");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_ByteByte");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_ByteByte");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Bool && op.Right.ExpressionValueKind == ValueKind.Bool)
         {
-            return EmitMathLibraryCall(op, "EqualEqual_BoolBool");
+            return EmitKismetMathLibraryCall(op, "EqualEqual_BoolBool");
         }
         else
         {
@@ -438,23 +438,23 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "LessEqual_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "LessEqual_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "LessEqual_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "LessEqual_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "LessEqual_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "LessEqual_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "LessEqual_IntInt");
+            return EmitKismetMathLibraryCall(op, "LessEqual_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "LessEqual_ByteByte");
+            return EmitKismetMathLibraryCall(op, "LessEqual_ByteByte");
         }
         else
         {
@@ -466,27 +466,27 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Less_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "Less_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "Less_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "Less_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Rotator)
         {
-            return EmitMathLibraryCall(op, "LessLess_VectorRotator");
+            return EmitKismetMathLibraryCall(op, "LessLess_VectorRotator");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Less_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Less_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Less_IntInt");
+            return EmitKismetMathLibraryCall(op, "Less_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Less_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Less_ByteByte");
         }
         else
         {
@@ -498,23 +498,23 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "GreaterEqual_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "GreaterEqual_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "GreaterEqual_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "GreaterEqual_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "GreaterEqual_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "GreaterEqual_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "GreaterEqual_IntInt");
+            return EmitKismetMathLibraryCall(op, "GreaterEqual_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "GreaterEqual_ByteByte");
+            return EmitKismetMathLibraryCall(op, "GreaterEqual_ByteByte");
         }
         else
         {
@@ -526,27 +526,27 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Greater_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "Greater_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.DateTime)
         {
-            return EmitMathLibraryCall(op, "Greater_DateTimeDateTime");
+            return EmitKismetMathLibraryCall(op, "Greater_DateTimeDateTime");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Greater_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Greater_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Greater_IntInt");
+            return EmitKismetMathLibraryCall(op, "Greater_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Greater_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Greater_ByteByte");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Rotator)
         {
-            return EmitMathLibraryCall(op, "GreaterGreater_VectorRotator");
+            return EmitKismetMathLibraryCall(op, "GreaterGreater_VectorRotator");
         }
         else
         {
@@ -584,59 +584,59 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Vector2D)
         {
-            return EmitMathLibraryCall(op, "Multiply_Vector2DVector2D");
+            return EmitKismetMathLibraryCall(op, "Multiply_Vector2DVector2D");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_Vector2DFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_Vector2DFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_TimespanFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_TimespanFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.LinearColor && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_LinearColorFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_LinearColorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.LinearColor && op.Right.ExpressionValueKind == ValueKind.LinearColor)
         {
-            return EmitMathLibraryCall(op, "Multiply_LinearColorLinearColor");
+            return EmitKismetMathLibraryCall(op, "Multiply_LinearColorLinearColor");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Rotator && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Multiply_RotatorInt");
+            return EmitKismetMathLibraryCall(op, "Multiply_RotatorInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Rotator && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_RotatorFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_RotatorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "Multiply_VectorVector");
+            return EmitKismetMathLibraryCall(op, "Multiply_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Multiply_VectorInt");
+            return EmitKismetMathLibraryCall(op, "Multiply_VectorInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_VectorFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_VectorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_IntFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_IntFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Multiply_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Multiply_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Multiply_IntInt");
+            return EmitKismetMathLibraryCall(op, "Multiply_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Multiply_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Multiply_ByteByte");
         }
         else
         {
@@ -710,43 +710,43 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Add_Vector2DFloat");
+            return EmitKismetMathLibraryCall(op, "Add_Vector2DFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Vector2D)
         {
-            return EmitMathLibraryCall(op, "Add_Vector2DVector2D");
+            return EmitKismetMathLibraryCall(op, "Add_Vector2DVector2D");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Add_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "Add_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Add_DateTimeTimespan");
+            return EmitKismetMathLibraryCall(op, "Add_DateTimeTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Add_VectorInt");
+            return EmitKismetMathLibraryCall(op, "Add_VectorInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Add_VectorFloat");
+            return EmitKismetMathLibraryCall(op, "Add_VectorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "Add_VectorVector");
+            return EmitKismetMathLibraryCall(op, "Add_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Add_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Add_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Add_IntInt");
+            return EmitKismetMathLibraryCall(op, "Add_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Add_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Add_ByteByte");
         }
         else
         {
@@ -758,43 +758,43 @@ public partial class KismetScriptCompiler
     {
         if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Subtract_Vector2DFloat");
+            return EmitKismetMathLibraryCall(op, "Subtract_Vector2DFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector2D && op.Right.ExpressionValueKind == ValueKind.Vector2D)
         {
-            return EmitMathLibraryCall(op, "Subtract_Vector2DVector2D");
+            return EmitKismetMathLibraryCall(op, "Subtract_Vector2DVector2D");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.TimeSpan && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Subtract_TimespanTimespan");
+            return EmitKismetMathLibraryCall(op, "Subtract_TimespanTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.DateTime && op.Right.ExpressionValueKind == ValueKind.TimeSpan)
         {
-            return EmitMathLibraryCall(op, "Subtract_DateTimeTimespan");
+            return EmitKismetMathLibraryCall(op, "Subtract_DateTimeTimespan");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Subtract_VectorInt");
+            return EmitKismetMathLibraryCall(op, "Subtract_VectorInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Subtract_VectorFloat");
+            return EmitKismetMathLibraryCall(op, "Subtract_VectorFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Vector && op.Right.ExpressionValueKind == ValueKind.Vector)
         {
-            return EmitMathLibraryCall(op, "Subtract_VectorVector");
+            return EmitKismetMathLibraryCall(op, "Subtract_VectorVector");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Float && op.Right.ExpressionValueKind == ValueKind.Float)
         {
-            return EmitMathLibraryCall(op, "Subtract_FloatFloat");
+            return EmitKismetMathLibraryCall(op, "Subtract_FloatFloat");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Int && op.Right.ExpressionValueKind == ValueKind.Int)
         {
-            return EmitMathLibraryCall(op, "Subtract_IntInt");
+            return EmitKismetMathLibraryCall(op, "Subtract_IntInt");
         }
         else if (op.Left.ExpressionValueKind == ValueKind.Byte && op.Right.ExpressionValueKind == ValueKind.Byte)
         {
-            return EmitMathLibraryCall(op, "Subtract_ByteByte");
+            return EmitKismetMathLibraryCall(op, "Subtract_ByteByte");
         }
         else
         {
@@ -978,7 +978,7 @@ public partial class KismetScriptCompiler
 
     private CompiledExpressionContext CompileLogicalNotOperator(LogicalNotOperator logicalNotOperator)
     {
-        return EmitMathLibraryCall(logicalNotOperator, "Not_PreBool");
+        return EmitKismetMathLibraryCall(logicalNotOperator, "Not_PreBool");
     }
 
     private CompiledExpressionContext CompilePostfixOperator(PostfixOperator postfixOperator)

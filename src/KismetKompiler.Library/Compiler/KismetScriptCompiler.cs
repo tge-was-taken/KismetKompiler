@@ -18,6 +18,9 @@ using KismetKompiler.Library.Utilities;
 
 namespace KismetKompiler.Library.Compiler;
 
+/// <summary>
+/// This class implements all the necessary logic for compiling a parsed compilation unit AST into an intermediary Kismet script.
+/// </summary>
 public partial class KismetScriptCompiler
 {
     private ObjectVersion _objectVersion = 0;
@@ -50,66 +53,114 @@ public partial class KismetScriptCompiler
         _rvalueStack.Push(null);
     }
 
+    /// <summary>
+    /// Pushes a new variable scope.
+    /// </summary>
+    /// <param name="declaringSymbol"></param>
     private void PushScope(Symbol? declaringSymbol)
         => _scopeStack.Push(new(_scopeStack.Peek(), declaringSymbol));
 
+    /// <summary>
+    /// Pops the variable scope.
+    /// </summary>
+    /// <returns></returns>
     private Scope PopScope()
         => _scopeStack.Pop();
 
+    /// <summary>
+    /// Pushes a new member context to the stack.
+    /// </summary>
+    /// <param name="type"></param>
+    /// <param name="symbol"></param>
     private void PushContext(ContextType type, Symbol symbol)
         => _contextStack.Push(new MemberContext() { Type = type, Symbol = symbol });
 
+    /// <summary>
+    /// Pushes a new member context to the stack.
+    /// </summary>
+    /// <param name="context"></param>
     private void PushContext(MemberContext context)
     => _contextStack.Push(context);
 
+    /// <summary>
+    /// Pops the current member context off the stack.
+    /// </summary>
+    /// <returns></returns>
     private MemberContext PopContext()
         => _contextStack.Pop();
 
+    /// <summary>
+    /// Pushes an RValue to the stack. 
+    /// </summary>
+    /// <param name="rvalue"></param>
     private void PushRValue(KismetPropertyPointer rvalue)
         => _rvalueStack.Push(rvalue);
 
+    /// <summary>
+    /// Pops an RValue off the stack.
+    /// </summary>
+    /// <returns></returns>
     private KismetPropertyPointer PopRValue()
         => _rvalueStack.Pop();
 
+    /// <summary>
+    /// Gets a symbol either from the current function variable scope, or from a class instance scope depending on the context
+    /// </summary>
+    /// <param name="name"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
     private Symbol? GetSymbol(string name, MemberContext? context = default)
     {
-        Symbol? GetSymbolInternal(string name)
-        {
-            var contextSymbol = context?.GetSymbol(name);
-            var scopeSymbol = CurrentScope.GetSymbol(name);
-            if (IsDefaultClassContext())
-            {
-                // Implicit this context has less priority
-                return scopeSymbol ?? contextSymbol;
-            }
-            else
-            {
-                return contextSymbol ?? scopeSymbol;
-            }
-        }
-
         context ??= Context;
-        var symbol = GetSymbolInternal(name);
-        return symbol;
-    }
-
-    private T? GetSymbol<T>(string name, MemberContext? context = default) where T : Symbol
-    {
-        context ??= Context;
-        var contextSymbol = context?.GetSymbol<T>(name);
-        var scopeSymbol = CurrentScope.GetSymbol<T>(name);
-        if (IsDefaultClassContext())
+        var memberContext = context?.GetSymbol(name);
+        var scopeSymbol = CurrentScope.GetSymbol(name);
+        if (IsImplicitThisContext())
         {
-            // Implicit this context has less priority
-            return scopeSymbol ?? contextSymbol;
+            // Symbols in the current scope have priority over symbols that
+            // are part of the implicit class instance scope (eg. local variables have priority over instance members).
+            return scopeSymbol ?? memberContext;
         }
         else
         {
-            return contextSymbol ?? scopeSymbol;
+            // If we're in an explicit class instance scope (eg. accessing class instance members through a property of a class type), this scope
+            // should take priority over local variables and such.
+            return memberContext ?? scopeSymbol;
         }
     }
 
-    private T GetSymbol<T>(Declaration declaration) where T : Symbol
+    /// <summary>
+    /// Gets a symbol either from the current function variable scope, or from a class instance scope depending on the context
+    /// </summary>
+    /// <param name="name"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    private T? GetSymbol<T>(string name, MemberContext? context = default) where T : Symbol
+    {
+        context ??= Context;
+        var memberContext = context?.GetSymbol<T>(name);
+        var scopeSymbol = CurrentScope.GetSymbol<T>(name);
+        if (IsImplicitThisContext())
+        {
+            // Symbols in the current scope have priority over symbols that
+            // are part of the implicit class instance scope (eg. local variables have priority over instance members).
+            return scopeSymbol ?? memberContext;
+        }
+        else
+        {
+            // If we're in an explicit class instance scope (eg. accessing class instance members through a property of a class type), this scope
+            // should take priority over local variables and such.
+            return memberContext ?? scopeSymbol;
+        }
+    }
+
+    /// <summary>
+    /// Gets the symbol associated with the given declaration, according to scoping rules.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="declaration"></param>
+    /// <returns></returns>
+    /// <exception cref="CompilationError"></exception>
+    private T GetRequiredSymbol<T>(Declaration declaration) where T : Symbol
     {
         var symbol = _functionContext?.Symbol.GetSymbol<T>(declaration);
         if (symbol == null)
@@ -117,63 +168,31 @@ public partial class KismetScriptCompiler
         if (symbol == null)
             symbol = CurrentScope.GetSymbol<T>(declaration);
 
-        return symbol ?? throw new UnknownSymbolError(declaration.Identifier);
+        return symbol ?? throw new CompilationError(declaration.Identifier, $"The name {declaration.Identifier.Text} does not exist in the current context");
     }
 
-    private bool IsDefaultClassContext()
+    /// <summary>
+    /// Returns if the current context is an implicit class instance member context (eg. this.foo can also be implicitly accessed as just foo)
+    /// </summary>
+    /// <returns></returns>
+    private bool IsImplicitThisContext()
     {
         return Context?.Type == ContextType.This &&
                     Context?.IsImplicit == true;
     }
 
-    private Symbol GetRequiredSymbol(string name, MemberContext? context = default)
-    {
-        if (!StrictMode)
-        {
-            var symbol = GetSymbol(name, context);
-
-            if (symbol == null)
-            {
-                symbol = CreateFakeSymbol(name, context);
-            }
-
-            return symbol;
-        }
-        else
-        {
-            return GetSymbol(name, context) ?? throw new UnknownSymbolError(name);
-        }
-    }
-
-    private Symbol CreateFakeSymbol(string name, MemberContext? context)
-    {
-        Symbol? symbol;
-        var candidates = CurrentScope
-                             .SelectMany(x => x.Members)
-                             .Where(x => x.Name == name);
-        symbol = candidates.FirstOrDefault();
-        if (symbol == null)
-        {
-            symbol = new UnknownSymbol()
-            {
-                DeclaringSymbol = context?.Symbol ?? CurrentScope.DeclaringSymbol,
-                IsExternal = false,
-                Name = name,
-            };
-        }
-
-        return symbol;
-    }
-
-    private T GetRequiredSymbol<T>(string name, MemberContext? context = default) where T : Symbol
-    {
-        return GetSymbol<T>(name, context) ?? throw new UnknownSymbolError(name);
-    }
-
+    /// <summary>
+    /// Declares a symbol in the current scope.
+    /// </summary>
+    /// <param name="symbol"></param>
     private void DeclareSymbol(Symbol symbol)
         => CurrentScope.DeclareSymbol(symbol);
 
-
+    /// <summary>
+    /// Compiles a compilation unit.
+    /// </summary>
+    /// <param name="compilationUnit"></param>
+    /// <returns></returns>
     public CompiledScriptContext CompileCompilationUnit(CompilationUnit compilationUnit)
     {
         _compilationUnit = compilationUnit;
@@ -181,13 +200,19 @@ public partial class KismetScriptCompiler
         var script = new CompiledScriptContext();
 
         PushScope(null);
-        BuildSymbolTree(script);
+        BuildSymbolTree(compilationUnit);
         CompileScript(compilationUnit, script);
         PopScope();
 
         return script;
     }
 
+    /// <summary>
+    /// Compiles the compilation unit into the specified compiled script context.
+    /// </summary>
+    /// <param name="compilationUnit"></param>
+    /// <param name="script"></param>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private void CompileScript(CompilationUnit compilationUnit, CompiledScriptContext script)
     {
         foreach (var declaration in compilationUnit.Declarations
@@ -205,10 +230,6 @@ public partial class KismetScriptCompiler
             {
                 script.Classes.Add(CompileClass(classDeclaration));
             }
-            else if (declaration is EnumDeclaration enumDeclaration)
-            {
-                //
-            }
             else
             {
                 throw new UnexpectedSyntaxError(declaration);
@@ -216,7 +237,13 @@ public partial class KismetScriptCompiler
         }
     }
 
-    private void BuildSymbolTree(CompiledScriptContext script)
+    /// <summary>
+    /// Builds a global symbol tree based on the compilation unit.
+    /// </summary>
+    /// <param name="compilationUnit"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
+    private void BuildSymbolTree(CompilationUnit compilationUnit)
     {
         void ScanCompoundStatement(CompoundStatement compoundStatement, Symbol parent, bool isExternal)
         {
@@ -245,7 +272,7 @@ public partial class KismetScriptCompiler
             }
             else
             {
-                // 
+                // Nothing to do.
             }
         }
 
@@ -281,7 +308,7 @@ public partial class KismetScriptCompiler
                     DeclaringSymbol = parent,
                     IsExternal = isExternal,
                     Flags = GetFunctionFlags(procedureDeclaration),
-                    CustomFlags = GetExtendedFunctionFlags(procedureDeclaration)             
+                    CustomFlags = GetCustomFunctionFlags(procedureDeclaration)             
                 };
                 if (procedureDeclaration.Body != null)
                 {
@@ -336,9 +363,9 @@ public partial class KismetScriptCompiler
 
         // Find imported packages, and group the declarations that are imported from it
         var packageImports = new List<(string PackagePath, List<Declaration> Declarations)>();
-        foreach (var decl in _compilationUnit.Declarations)
+        foreach (var decl in compilationUnit.Declarations)
         {
-            var importAttrib = decl.Attributes.FirstOrDefault(x => x.Identifier.Text == "Import");
+            var importAttrib = decl.Attributes.FirstOrDefault(x => IsPackageImportAttribute(x));
             if (importAttrib != null)
             {
                 if (importAttrib.Arguments.Count != 1)
@@ -354,6 +381,7 @@ public partial class KismetScriptCompiler
             }
         }
 
+        // Declare the global symbols present in the package imports
         foreach ((var packagePath, var declarations) in packageImports)
         {
             var packageSymbol = new PackageSymbol()
@@ -390,14 +418,14 @@ public partial class KismetScriptCompiler
                 DeclareSymbol(symbol);
         }
 
-        foreach (var declaration in _compilationUnit.Declarations
+        foreach (var declaration in compilationUnit.Declarations
             .Except(packageImports.SelectMany(x => x.Declarations)))
         {
             var declarationSymbol = CreateDeclarationSymbol(declaration, null, false);
             DeclareSymbol(declarationSymbol);
 
             // The Ubergraph function does not adhere to standard scoping rules
-            // As such, all symbols defined in it will be imported into the global scope
+            // As such, some symbols defined in it will be imported into the global scope
             void DeclareUbergraphFunctionGlobalSymbols(Symbol symbol)
             {
                 foreach (var item in symbol.Members)
@@ -426,13 +454,14 @@ public partial class KismetScriptCompiler
                     {
                         classSymbol.BaseSymbol = baseClassSymbol;
 
-                        // TODO: figure out a better solution
-                        // HACK: import members from an object named Default__ClassName into ClassName
-                        if (classSymbol.Name.StartsWith("Default__"))
-                        {
-                            foreach (var member in classSymbol.Members.ToList())
-                                classSymbol.BaseClass!.DeclareSymbol(member);
-                        }
+                        // FIXME: check if this fix is still needed
+                        //// TODO: figure out a better solution
+                        //// HACK: import members from an object named Default__ClassName into ClassName
+                        //if (classSymbol.Name.StartsWith("Default__"))
+                        //{
+                        //    foreach (var member in classSymbol.Members.ToList())
+                        //        classSymbol.BaseClass!.DeclareSymbol(member);
+                        //}
                     }
                     else
                     {
@@ -466,6 +495,11 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Determines if a local variable has to be declared globally.
+    /// </summary>
+    /// <param name="item"></param>
+    /// <returns></returns>
     private static bool ShouldGloballyDeclareProcecureLocalSymbol(Symbol item)
     {
         var isUbergraphFunction = item.DeclaringProcedure?.HasAnyFunctionFlags(EFunctionFlags.FUNC_UbergraphFunction) ?? false;
@@ -475,10 +509,17 @@ public partial class KismetScriptCompiler
         return shouldDeclareSymbol;
     }
 
+    /// <summary>
+    /// Compiles a class declaration.
+    /// </summary>
+    /// <param name="classDeclaration"></param>
+    /// <returns></returns>
+    /// <exception cref="CompilationError"></exception>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     public CompiledClassContext CompileClass(ClassDeclaration classDeclaration)
     {
-        var classSymbol = GetRequiredSymbol<ClassSymbol>(classDeclaration.Identifier.Text)!;
-        var compiledBaseClass = classSymbol?.BaseClass?.Declaration != null ?
+        var classSymbol = GetRequiredSymbol<ClassSymbol>(classDeclaration, classDeclaration.Identifier.Text);
+        var compiledBaseClass = classSymbol.BaseClass?.Declaration != null ?
             CompileClass(classSymbol.BaseClass.Declaration) : 
             null;
 
@@ -490,11 +531,11 @@ public partial class KismetScriptCompiler
         EClassFlags flags = 0;
         foreach (var attribute in classDeclaration.Attributes)
         {
-            if (attribute.Identifier.Text == "Import")
+            if (IsPackageImportAttribute(attribute))
                 continue;
 
             var classFlagText = $"CLASS_{attribute.Identifier.Text}";
-            if (!System.Enum.TryParse<EClassFlags>(classFlagText, true, out var flag))
+            if (!Enum.TryParse<EClassFlags>(classFlagText, true, out var flag))
                 throw new CompilationError(attribute, "Invalid class attribute");
             flags |= flag;
         }
@@ -562,15 +603,35 @@ public partial class KismetScriptCompiler
         };
     }
 
+    /// <summary>
+    /// Determines of the attribute is a package import attribute.
+    /// </summary>
+    /// <param name="attribute"></param>
+    /// <returns></returns>
+    private static bool IsPackageImportAttribute(AttributeDeclaration attribute)
+    {
+        return attribute.Identifier.Text == "Import";
+    }
+
+    /// <summary>
+    /// Compiles the given variable declaration into a property.
+    /// </summary>
+    /// <param name="variableDeclaration"></param>
+    /// <returns></returns>
     private CompiledVariableContext CompileProperty(VariableDeclaration variableDeclaration)
     {
-        var symbol = GetSymbol<VariableSymbol>(variableDeclaration);
+        var symbol = GetRequiredSymbol<VariableSymbol>(variableDeclaration);
         return new CompiledVariableContext(symbol)
         {
             Type = null, // TODO
         };
     }
 
+    /// <summary>
+    /// Derives the blueprint function flags from the given procedure declaration.
+    /// </summary>
+    /// <param name="procedureDeclaration"></param>
+    /// <returns></returns>
     private EFunctionFlags GetFunctionFlags(ProcedureDeclaration procedureDeclaration)
     {
         EFunctionFlags functionFlags = 0;
@@ -597,7 +658,13 @@ public partial class KismetScriptCompiler
         return functionFlags;
     }
 
-    private FunctionCustomFlags GetExtendedFunctionFlags(ProcedureDeclaration procedureDeclaration)
+    /// <summary>
+    /// Derives the custom blueprint function flags from the given procedure declaration.
+    /// The custom flags are made-up flags that make recompiling matching decompiled scripts easier.
+    /// </summary>
+    /// <param name="procedureDeclaration"></param>
+    /// <returns></returns>
+    private FunctionCustomFlags GetCustomFunctionFlags(ProcedureDeclaration procedureDeclaration)
     {
         FunctionCustomFlags functionFlags = 0;
         foreach (var attr in procedureDeclaration.Attributes)
@@ -610,9 +677,14 @@ public partial class KismetScriptCompiler
         return functionFlags;
     }
 
+    /// <summary>
+    /// Compiles a given procedure declaration.
+    /// </summary>
+    /// <param name="procedureDeclaration"></param>
+    /// <returns></returns>
     public CompiledFunctionContext CompileFunction(ProcedureDeclaration procedureDeclaration)
     {
-        var symbol = GetSymbol<ProcedureSymbol>(procedureDeclaration);
+        var symbol = GetRequiredSymbol<ProcedureSymbol>(procedureDeclaration);
         _functionContext = new()
         {
             Name = procedureDeclaration.Identifier.Text,
@@ -627,9 +699,11 @@ public partial class KismetScriptCompiler
             PushScope(_functionContext.Symbol);
             ForwardDeclareProcedureSymbols();
 
-            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => x.Attributes.Any(y => y.Identifier.Text == "Return" || y.Identifier.Text == "ReturnParm"));
+            var returnVar = _functionContext.Declaration.Parameters.FirstOrDefault(x => IsReturnParameter(x));
             if (returnVar != null)
-                _functionContext.ReturnVariable = GetRequiredSymbol<VariableSymbol>(returnVar.Identifier.Text);
+            {
+                _functionContext.ReturnVariable = GetRequiredSymbol<VariableSymbol>(returnVar, returnVar.Identifier.Text);
+            }
             else if (_functionContext.Declaration.ReturnType.ValueKind != ValueKind.Void)
             {
                 const string returnVariableName = "<>__ReturnValue";
@@ -666,6 +740,29 @@ public partial class KismetScriptCompiler
         return _functionContext.CompiledFunctionContext;
     }
 
+    /// <summary>
+    /// Determines of the parameter is a return parameter.
+    /// </summary>
+    /// <param name="p"></param>
+    /// <returns></returns>
+    private static bool IsReturnParameter(Parameter p)
+    {
+        return p.Attributes.Any(x => IsReturnParameterAttribute(x));
+    }
+
+    /// <summary>
+    /// Determines if the attribute indicates a return parameter.
+    /// </summary>
+    /// <param name="y"></param>
+    /// <returns></returns>
+    private static bool IsReturnParameterAttribute(AttributeDeclaration y)
+    {
+        return y.Identifier.Text == "Return" || y.Identifier.Text == "ReturnParm";
+    }
+
+    /// <summary>
+    /// Forward declares any necessary symbols in a function context necessary for top-down compilation (labels, etc.)
+    /// </summary>
     private void ForwardDeclareProcedureSymbols()
     {
         foreach (var param in _functionContext.Declaration.Parameters)
@@ -696,6 +793,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a compound (block) statement.
+    /// </summary>
+    /// <param name="compoundStatement"></param>
     private void CompileCompoundStatement(CompoundStatement compoundStatement)
     {
         PushScope(null);
@@ -710,6 +811,11 @@ public partial class KismetScriptCompiler
         PopScope();
     }
 
+    /// <summary>
+    /// Compiles a statement.
+    /// </summary>
+    /// <param name="statement"></param>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private void CompileStatement(Statement statement)
     {
         if (statement is Declaration declaration)
@@ -730,7 +836,7 @@ public partial class KismetScriptCompiler
         }
         else if (statement is IfStatement ifStatement)
         {
-            CompileIfStatement(statement, ifStatement);
+            CompileIfStatement(ifStatement);
         }
         else if (statement is WhileStatement whileStatement)
         {
@@ -758,6 +864,11 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a 'continue' statement in an iteration context.
+    /// </summary>
+    /// <param name="continueStatement"></param>
+    /// <exception cref="CompilationError"></exception>
     private void CompileContinueStatement(ContinueStatement continueStatement)
     {
         if (CurrentScope.ContinueLabel == null)
@@ -766,6 +877,11 @@ public partial class KismetScriptCompiler
         EmitPrimaryExpression(continueStatement, new EX_Jump(), new[] { CurrentScope.ContinueLabel });
     }
 
+    /// <summary>
+    /// Compiles a 'break' statement in an iteration context.
+    /// </summary>
+    /// <param name="breakStatement"></param>
+    /// <exception cref="CompilationError"></exception>
     private void CompileBreakStatement(BreakStatement breakStatement)
     {
         if (CurrentScope.BreakLabel == null)
@@ -781,6 +897,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a switch statement.
+    /// </summary>
+    /// <param name="switchStatement"></param>
     private void CompileSwitchStatement(SwitchStatement switchStatement)
     {
         PushScope(null);
@@ -859,6 +979,11 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a 'goto' statement.
+    /// </summary>
+    /// <param name="gotoStatement"></param>
+    /// <exception cref="CompilationError"></exception>
     private void CompileGotoStatement(GotoStatement gotoStatement)
     {
         if (gotoStatement.Label == null)
@@ -877,8 +1002,14 @@ public partial class KismetScriptCompiler
         }
     }
 
-    private void CompileIfStatement(Statement statement, IfStatement ifStatement)
+    /// <summary>
+    /// Compiles an if statement.
+    /// </summary>
+    /// <param name="statement"></param>
+    /// <param name="ifStatement"></param>
+    private void CompileIfStatement(IfStatement ifStatement)
     {
+        // Handle known decompilation patterns into their source instructions first.
         // Match 'if (!(K2Node_SwitchInteger_CmpSuccess)) goto _674;'
         if (ifStatement.Condition is LogicalNotOperator notOperator &&
             ifStatement.Body?.FirstOrDefault() is GotoStatement ifStatementBodyGotoStatement)
@@ -936,6 +1067,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a 'while' loop.
+    /// </summary>
+    /// <param name="whileStatement"></param>
     private void CompileWhileStatement(WhileStatement whileStatement)
     {
         PushScope(null);
@@ -998,6 +1133,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a 'for' loop.
+    /// </summary>
+    /// <param name="forStatement"></param>
     private void CompileForStatement(ForStatement forStatement)
     {
         var endLabel = CreateCompilerLabel("ForStatement_EndLabel");
@@ -1037,6 +1176,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a return statement.
+    /// </summary>
+    /// <param name="returnStatement"></param>
     private void CompileReturnStatement(ReturnStatement returnStatement)
     {
         var isLastStatement = _functionContext.Declaration.Body.Last() == returnStatement;
@@ -1067,6 +1210,11 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Creates a compiler label symbol for the current function.
+    /// </summary>
+    /// <param name="name"></param>
+    /// <returns></returns>
     private LabelSymbol CreateCompilerLabel(string name)
     {
         return new LabelSymbol(null)
@@ -1079,17 +1227,26 @@ public partial class KismetScriptCompiler
         };
     }
 
+    /// <summary>
+    /// Resolves the code offset for a label.
+    /// </summary>
+    /// <param name="labelInfo"></param>
     private void ResolveLabel(LabelSymbol labelInfo)
     {
         labelInfo.IsResolved = true;
         labelInfo.CodeOffset = _functionContext.CodeOffset;
     }
 
+    /// <summary>
+    /// Process a declaration, declaring the necessary symbols and emitting code for initializers.
+    /// </summary>
+    /// <param name="declaration"></param>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private void ProcessDeclaration(Declaration declaration)
     {
         if (declaration is LabelDeclaration labelDeclaration)
         {
-            var label = GetSymbol<LabelSymbol>(labelDeclaration);
+            var label = GetRequiredSymbol<LabelSymbol>(labelDeclaration);
             label.CodeOffset = _functionContext.CodeOffset;
             label.IsResolved = true;
 
@@ -1100,7 +1257,7 @@ public partial class KismetScriptCompiler
         }
         else if (declaration is VariableDeclaration variableDeclaration)
         {
-            var variableSymbol = GetSymbol<VariableSymbol>(variableDeclaration);
+            var variableSymbol = GetRequiredSymbol<VariableSymbol>(variableDeclaration);
             DeclareSymbol(variableSymbol);
 
             if (variableDeclaration.Initializer != null)
@@ -1123,6 +1280,9 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Ensures the EX_Return and EX_EndOfScript instructions are present at the end of the script bytecode, and creates them if they don't exist.
+    /// </summary>
     private void EnsureEndOfScriptPresent()
     {
         var beforeLastExpr = _functionContext.PrimaryExpressions
@@ -1139,7 +1299,7 @@ public partial class KismetScriptCompiler
                 {
                     ReturnExpression = Emit(null, new EX_LocalOutVariable()
                     {
-                        Variable = GetPropertyPointer(_functionContext.ReturnVariable.Name)
+                        Variable = GetPropertyPointer(_functionContext.ReturnVariable)
                     }).CompiledExpressions.Single(),
                 });
             }
@@ -1158,6 +1318,12 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Commits the compiled expression to the compiled function context.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="expressionState"></param>
+    /// <returns></returns>
     private CompiledExpressionContext EmitPrimaryExpression(SyntaxNode syntaxNode, CompiledExpressionContext expressionState)
     {
         _functionContext.AllExpressions.Add(expressionState);
@@ -1166,6 +1332,13 @@ public partial class KismetScriptCompiler
         return expressionState;
     }
 
+    /// <summary>
+    /// Commits the expression to the compiled function context.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="expression"></param>
+    /// <param name="referencedLabels"></param>
+    /// <returns></returns>
     private CompiledExpressionContext EmitPrimaryExpression(SyntaxNode syntaxNode, KismetExpression expression, IEnumerable<LabelSymbol>? referencedLabels = null)
     {
         var expressionState = Emit(syntaxNode, expression, referencedLabels);
@@ -1175,6 +1348,9 @@ public partial class KismetScriptCompiler
         return expressionState;
     }
 
+    /// <summary>
+    /// Performs any necessary code offset fixups after compilation.
+    /// </summary>
     private void DoFixups()
     {
         foreach (var expression in _functionContext.AllExpressions)
@@ -1219,6 +1395,10 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Finds and declares any out parameter variables for the given function call.
+    /// </summary>
+    /// <param name="callOperator"></param>
     private void ForwardDeclareCallOutParameters(CallOperator callOperator)
     {
         foreach (var outArgument in callOperator.Arguments
@@ -1244,6 +1424,14 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a function call.
+    /// </summary>
+    /// <param name="callOperator"></param>
+    /// <returns></returns>
+    /// <exception cref="CompilationError"></exception>
+    /// <exception cref="NotImplementedException"></exception>
+    /// <exception cref="InvalidOperationException"></exception>
     private CompiledExpressionContext CompileCallOperator(CallOperator callOperator)
     {
         ForwardDeclareCallOutParameters(callOperator);
@@ -1399,12 +1587,23 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Determines of the function has wildcard params.
+    /// </summary>
+    /// <param name="procedureSymbol"></param>
+    /// <returns></returns>
     private bool HasWildcardParams(ProcedureSymbol procedureSymbol)
     {
-        // TODO
+        // FIXME: used in the original source code for the compiler, but not sure how this actually works
         return false;
     }
 
+    /// <summary>
+    /// Compiles an expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private CompiledExpressionContext CompileExpression(Expression expression)
     {
         CompiledExpressionContext CompileExpressionInner()
@@ -1472,7 +1671,15 @@ public partial class KismetScriptCompiler
         return expressionContext;
     }
 
-    private CompiledExpressionContext EmitLibraryCall(Expression expression, string library, string name, IEnumerable<KismetExpression> arguments)
+    /// <summary>
+    /// Emits a EX_CallMath call (static native library function call)
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="library"></param>
+    /// <param name="name"></param>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitCallMath(Expression expression, string library, string name, IEnumerable<KismetExpression> arguments)
     {
         var librarySymbol = RootScope.GetSymbol<ClassSymbol>(library);
         if (librarySymbol == null)
@@ -1508,27 +1715,73 @@ public partial class KismetScriptCompiler
         });
     }
 
-    private CompiledExpressionContext EmitArrayLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
-        => EmitLibraryCall(expression, "KismetArrayLibrary", name, arguments);
+    /// <summary>
+    /// Emits a call to the KismetArrayLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetArrayLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitCallMath(expression, "KismetArrayLibrary", name, arguments);
 
-    private CompiledExpressionContext EmitStringLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
-        => EmitLibraryCall(expression, "KismetStringLibrary", name, arguments);
+    /// <summary>
+    /// Emits a call to the KismetStringLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetStringLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitCallMath(expression, "KismetStringLibrary", name, arguments);
 
-    private CompiledExpressionContext EmitMathLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
-        => EmitLibraryCall(expression, "KismetMathLibrary", name, arguments);
+    /// <summary>
+    /// Emits a call to the KismetMathLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetMathLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitCallMath(expression, "KismetMathLibrary", name, arguments);
 
-    private CompiledExpressionContext EmitMathLibraryCall(UnaryExpression expression, string name)
-        => EmitLibraryCall(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Operand) });
+    /// <summary>
+    /// Emits a call to the KismetMathLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetMathLibraryCall(UnaryExpression expression, string name)
+        => EmitCallMath(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Operand) });
 
-    private CompiledExpressionContext EmitMathLibraryCall(BinaryExpression expression, string name)
-        => EmitLibraryCall(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Left), CompileSubExpression(expression.Right) });
+    /// <summary>
+    /// Emits a call to the KismetMathLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetMathLibraryCall(BinaryExpression expression, string name)
+        => EmitCallMath(expression, "KismetMathLibrary", name, new[] { CompileSubExpression(expression.Left), CompileSubExpression(expression.Right) });
 
-    private CompiledExpressionContext EmitTextLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
-        => EmitLibraryCall(expression, "KismetTextLibrary", name, arguments);
+    /// <summary>
+    /// Emits a call to the KismetTextLibrary.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="name"></param>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    private CompiledExpressionContext EmitKismetTextLibraryCall(Expression expression, string name, IEnumerable<KismetExpression> arguments)
+        => EmitCallMath(expression, "KismetTextLibrary", name, arguments);
 
+    /// <summary>
+    /// Compiles an identifier expression.
+    /// </summary>
+    /// <param name="identifier"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private CompiledExpressionContext CompileIdentifierExpression(Identifier identifier)
     {
-        var symbol = GetRequiredSymbol(identifier.Text);
+        var symbol = GetRequiredSymbol(identifier, identifier.Text);
         if (symbol is VariableSymbol variableSymbol)
         {
             if (variableSymbol.VariableCategory == VariableCategory.This ||
@@ -1600,6 +1853,12 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a literal value expression.
+    /// </summary>
+    /// <param name="literal"></param>
+    /// <returns></returns>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private CompiledExpressionContext CompileLiteralExpression(Literal literal)
     {
         if (literal is StringLiteral stringLiteral)
@@ -1639,6 +1898,12 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Gets the symbol of the type associated with the variable.
+    /// </summary>
+    /// <param name="variableSymbol"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private Symbol GetVariableTypeSymbol(VariableSymbol variableSymbol)
     {
         if (variableSymbol.Declaration != null)
@@ -1671,6 +1936,12 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Gets the member context (owning class) for the given expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private MemberContext GetContextForExpression(Expression expression)
     {
         var contextSymbol = GetSymbol<Symbol>(expression);
@@ -1771,12 +2042,23 @@ public partial class KismetScriptCompiler
         return context;
     }
 
+    /// <summary>
+    /// Gets the member context (owning class) for the given member access expression.
+    /// </summary>
+    /// <param name="memberExpression"></param>
+    /// <returns></returns>
     private MemberContext GetContextForMemberExpression(MemberExpression memberExpression)
     {
         var contextSymbol = GetContextForExpression(memberExpression.Context);
         return contextSymbol;
     }
 
+    /// <summary>
+    /// Gets the identifier of the member being accessed in the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="isVirtual"></param>
+    /// <returns></returns>
     private (Identifier Identifier, bool IsLookup) GetMemberIdentifier(Expression expression, bool? isVirtual = null)
     {
         if (expression is StringLiteral stringLiteral)
@@ -1826,6 +2108,11 @@ public partial class KismetScriptCompiler
         return (null, false);
     }
 
+    /// <summary>
+    /// Compiles the member access expression.
+    /// </summary>
+    /// <param name="memberExpression"></param>
+    /// <returns></returns>
     private CompiledExpressionContext CompileMemberExpression(MemberExpression memberExpression)
     {
         var memberContext = GetContextForMemberExpression(memberExpression);
@@ -2004,15 +2291,22 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Gets the package index associated with the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private FPackageIndex GetPackageIndex(Expression expression, MemberContext? context = default)
     {
         if (expression is StringLiteral stringLiteral)
         {
-            return GetPackageIndex(stringLiteral.Value, context);
+            return GetPackageIndex(stringLiteral, stringLiteral.Value, context);
         }
         else if (expression is Identifier identifier)
         {
-            return GetPackageIndex(identifier.Text, context);
+            return GetPackageIndex(identifier, identifier.Text, context);
         }
         else if (expression is MemberExpression memberExpression)
         {
@@ -2044,35 +2338,58 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Gets the package index associated with the symbol.
+    /// </summary>
+    /// <param name="symbol"></param>
+    /// <returns></returns>
     private FPackageIndex? GetPackageIndex(Symbol symbol)
     {
         return new IntermediatePackageIndex(symbol);
     }
 
-    private FPackageIndex? GetPackageIndex(string name, MemberContext? context = default)
+    /// <summary>
+    /// Gets the package index for the given symbol name.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="name"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    private FPackageIndex? GetPackageIndex(SyntaxNode syntaxNode, string name, MemberContext? context = default)
     {
         // TODO fix
         if (name == "<null>")
-            return new FPackageIndex();
+            return FPackageIndex.Null;
 
-        var symbol = GetRequiredSymbol(name, context);
+        var symbol = GetRequiredSymbol(syntaxNode, name, context);
         return new IntermediatePackageIndex(symbol);
     }
 
+    /// <summary>
+    /// Gets the package index for the given argument.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <returns></returns>
     private FPackageIndex GetPackageIndex(Argument argument)
         => GetPackageIndex(argument.Expression);
 
+    /// <summary>
+    /// Tries to get the property pointer associated with the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="pointer"></param>
+    /// <returns></returns>
     private bool TryGetPropertyPointer(Expression expression, out KismetPropertyPointer pointer)
     {
         pointer = null;
 
         if (expression is StringLiteral stringLiteral)
         {
-            pointer = GetPropertyPointer(stringLiteral.Value);
+            pointer = GetPropertyPointer(stringLiteral, stringLiteral.Value);
         }
         else if (expression is Identifier identifier)
         {
-            pointer = GetPropertyPointer(identifier.Text);
+            pointer = GetPropertyPointer(identifier, identifier.Text);
         }
         else if (expression is CallOperator callOperator)
         {
@@ -2123,6 +2440,12 @@ public partial class KismetScriptCompiler
         return pointer != null;
     }
 
+    /// <summary>
+    /// Gets the property pointer associated with the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="UnexpectedSyntaxError"></exception>
     private KismetPropertyPointer GetPropertyPointer(Expression expression)
     {
         if (!TryGetPropertyPointer(expression, out var pointer))
@@ -2130,22 +2453,82 @@ public partial class KismetScriptCompiler
         return pointer;
     }
 
-    private KismetPropertyPointer GetPropertyPointer(string name)
+    /// <summary>
+    /// Gets a required symbol by name.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="name"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    /// <exception cref="CompilationError"></exception>
+    private Symbol GetRequiredSymbol(SyntaxNode syntaxNode, string name, MemberContext? context = default)
     {
-        var symbol = GetRequiredSymbol(name);
+        var symbol = GetSymbol(name, context) ?? throw new CompilationError(syntaxNode, $"The name {name} does not exist in the current context");
+        return symbol;
+    }
+
+    /// <summary>
+    /// Gets a required symbol by name.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="syntaxNode"></param>
+    /// <param name="name"></param>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    /// <exception cref="CompilationError"></exception>
+    private T GetRequiredSymbol<T>(SyntaxNode syntaxNode, string name, MemberContext? context = default) where T : Symbol
+    {
+        var symbol = GetSymbol(name, context) ?? throw new CompilationError(syntaxNode, $"The name {name} does not exist in the current context");
+        var castedSymbol = symbol as T ?? throw new CompilationError(syntaxNode, $"Expected a {typeof(T).Name}, got {symbol.GetType().Name}");
+        return castedSymbol;
+    }
+
+    /// <summary>
+    /// Gets a property pointer by name.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="name"></param>
+    /// <returns></returns>
+    private KismetPropertyPointer GetPropertyPointer(SyntaxNode syntaxNode, string name)
+    {
+        var symbol = GetRequiredSymbol(syntaxNode, name);
         return new IntermediatePropertyPointer(symbol);
     }
 
+    /// <summary>
+    /// Gets a property pointer by symbol.
+    /// </summary>
+    /// <param name="symbol"></param>
+    /// <returns></returns>
+    private KismetPropertyPointer GetPropertyPointer(Symbol symbol)
+        => new IntermediatePropertyPointer(symbol);
+
+    /// <summary>
+    /// Gets a property pointer by argument.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <returns></returns>
     private KismetPropertyPointer GetPropertyPointer(Argument argument)
     {
         return GetPropertyPointer(argument.Expression);
     }
 
+    /// <summary>
+    /// Compiles the expression directly into a KismetExpression.
+    /// </summary>
+    /// <param name="right"></param>
+    /// <returns></returns>
     private KismetExpression CompileSubExpression(Expression right)
     {
         return CompileExpression(right).CompiledExpressions.Single();
     }
 
+    /// <summary>
+    /// Derives the referenced symbol name from the given expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private string? GetSymbolName(Expression expression)
     {
         if (expression is TypeIdentifier typeIdentifier)
@@ -2217,6 +2600,13 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Gets a symbol of a specific type associated with the expression.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private Symbol? GetSymbol<T>(Expression expression) where T : Symbol
     {
         if (expression is TypeIdentifier typeIdentifier)
@@ -2294,6 +2684,14 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Emits a compiled kismet expression.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="expression"></param>
+    /// <param name="expression2"></param>
+    /// <param name="referencedLabels"></param>
+    /// <returns></returns>
     private CompiledExpressionContext Emit(SyntaxNode syntaxNode, KismetExpression expression, KismetExpression expression2, IEnumerable<LabelSymbol>? referencedLabels = null)
     {
         return new CompiledExpressionContext()
@@ -2305,6 +2703,13 @@ public partial class KismetScriptCompiler
         };
     }
 
+    /// <summary>
+    /// Emits a compiled kismet expression.
+    /// </summary>
+    /// <param name="syntaxNode"></param>
+    /// <param name="expression"></param>
+    /// <param name="referencedLabels"></param>
+    /// <returns></returns>
     private CompiledExpressionContext Emit(SyntaxNode syntaxNode, KismetExpression expression, IEnumerable<LabelSymbol>? referencedLabels = null)
     {
         return new CompiledExpressionContext()
@@ -2316,6 +2721,12 @@ public partial class KismetScriptCompiler
         };
     }
 
+    /// <summary>
+    /// Tries to get the label associated with the expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <param name="label"></param>
+    /// <returns></returns>
     private bool TryGetLabel(Expression expression, out LabelSymbol label)
     {
         if (expression is IntLiteral literal)
@@ -2344,6 +2755,12 @@ public partial class KismetScriptCompiler
         return false;
     }
 
+    /// <summary>
+    /// Gets a label symbol by expression.
+    /// </summary>
+    /// <param name="expression"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private LabelSymbol GetLabel(Expression expression)
     {
         if (!TryGetLabel(expression, out var label))
@@ -2351,17 +2768,32 @@ public partial class KismetScriptCompiler
         return label;
     }
 
+    /// <summary>
+    /// Gets a label symbol by argument.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <returns></returns>
     private LabelSymbol GetLabel(Argument argument)
     {
         return GetLabel(argument.Expression);
     }
 
+    /// <summary>
+    /// Gets a label symbol by name.
+    /// </summary>
+    /// <param name="name"></param>
+    /// <returns></returns>
     private LabelSymbol GetLabel(string name)
     {
         var label = GetSymbol<LabelSymbol>(name);
         return label;
     }
 
+    /// <summary>
+    /// Gets the code offset associated with the given argument.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <returns></returns>
     private uint? GetCodeOffset(Argument argument)
     {
         if (!TryGetCodeOffset(argument, out var codeOffset))
@@ -2370,6 +2802,13 @@ public partial class KismetScriptCompiler
         return codeOffset;
     }
 
+    /// <summary>
+    /// Tries to get the code offset associated with the given argument.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <param name="codeOffset"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
     private bool TryGetCodeOffset(Argument argument, out uint codeOffset)
     {
         if (argument.Expression is IntLiteral intLiteral)
@@ -2397,15 +2836,30 @@ public partial class KismetScriptCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the argument directly to a KismetExpression.
+    /// </summary>
+    /// <param name="argument"></param>
+    /// <returns></returns>
     private KismetExpression CompileSubExpression(Argument argument)
     {
         var expressionState = CompileExpression(argument.Expression);
         return expressionState.CompiledExpressions.Single();
     }
 
+    /// <summary>
+    /// Determines if the function name is the name of an intrinsic instruction function.
+    /// </summary>
+    /// <param name="name"></param>
+    /// <returns></returns>
     private bool IsIntrinsicFunction(string name)
         => typeof(EExprToken).GetEnumNames().Contains(name);
 
+    /// <summary>
+    /// Derives the expression token (opcode) from the function name.
+    /// </summary>
+    /// <param name="name"></param>
+    /// <returns></returns>
     private EExprToken GetInstrinsicFunctionToken(string name)
         => (EExprToken)System.Enum.Parse(typeof(EExprToken), name);
 }
