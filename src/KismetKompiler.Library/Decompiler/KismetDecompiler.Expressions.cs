@@ -4,6 +4,7 @@ using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.UnrealTypes;
 using KismetKompiler.Library.Utilities;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using KismetKompiler.Library.Decompiler.Analysis;
 
 namespace KismetKompiler.Decompiler
 {
@@ -135,7 +136,7 @@ namespace KismetKompiler.Decompiler
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName);
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName, _function.ObjectName.ToString());
                                 return $"{context}.{virtualFunctionName}({uberGraphFunctionLabel})";
                             }
                             else
@@ -182,7 +183,7 @@ namespace KismetKompiler.Decompiler
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionName, _function.ObjectName.ToString());
                                 return $"{context}.{functionName}({uberGraphFunctionLabel})";
                             }
                             else
@@ -221,7 +222,7 @@ namespace KismetKompiler.Decompiler
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionName, _function.ObjectName.ToString());
                                 return $"EX_LocalFinalFunction({functionName}, {uberGraphFunctionLabel})";
                             }
                             else
@@ -400,7 +401,7 @@ namespace KismetKompiler.Decompiler
                                expr.Parameters.Length == 1 &&
                                expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionExport.ObjectName.ToString());
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, functionName, _function.ObjectName.ToString());
                                 return $"{context}.{functionName}({uberGraphFunctionLabel})";
                             }
                             else
@@ -440,7 +441,7 @@ namespace KismetKompiler.Decompiler
                                 expr.Parameters.Length == 1 &&
                                 expr.Parameters[0] is EX_IntConst firstParamInt)
                             {
-                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName);
+                                var uberGraphFunctionLabel = FormatCodeOffset((uint)firstParamInt.Value, virtualFunctionName, _function.ObjectName.ToString());
                                 return $"{context}.{virtualFunctionName}({uberGraphFunctionLabel})";
                             }
                             else
@@ -566,7 +567,20 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_ObjectConst expr:
                     {
-                        return FormatIdentifier(_asset.GetName(expr.Value));
+                        var name = _asset.GetName(expr.Value);
+                        var sym = _analysisResult.AllSymbols
+                            .Where(x => x.Name == name && x.Type == SymbolType.Class)
+                            .FirstOrDefault();
+                        if (false && sym != null)
+                        {
+                            return $"typeof({FormatIdentifier(name)})";
+                        }
+                        else
+                        {
+                            return FormatIdentifier(name);
+                        }
+
+                        
                         //if (UseContext)
                         //{
                         //    // TODO: change this check to to verify if the name refers to a type rather than a variable

@@ -71,7 +71,7 @@ using System;
 namespace KismetKompiler.Tests.Recompilation;
             
 [TestClass]
-public sealed class {gameName}RecompilationTests : RecompilationTestsBase
+public sealed class {gameName} : RecompilationTestsBase
 {{
     protected override string RootPath => @""..\..\..\..\..\..\Testdata\{gameName}"";
     protected override UAssetAPI.UnrealTypes.EngineVersion EngineVersion => UAssetAPI.UnrealTypes.EngineVersion.{gameEngineVer};
@@ -80,5 +80,5 @@ public sealed class {gameName}RecompilationTests : RecompilationTestsBase
 }}
 ";
 
-    File.WriteAllText($@"..\..\..\..\KismetKompiler.Tests\Recompilation\{gameName}RecompilationTests.Generated.cs", sourceCode);
+    File.WriteAllText($@"..\..\..\..\KismetKompiler.Tests\Recompilation\{gameName}.Generated.cs", sourceCode);
 }

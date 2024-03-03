@@ -5,7 +5,7 @@ using System;
 namespace KismetKompiler.Tests.Recompilation;
             
 [TestClass]
-public sealed class P3RRecompilationTests : RecompilationTestsBase
+public sealed class P3R : RecompilationTestsBase
 {
     protected override string RootPath => @"..\..\..\..\..\..\Testdata\P3R";
     protected override UAssetAPI.UnrealTypes.EngineVersion EngineVersion => UAssetAPI.UnrealTypes.EngineVersion.VER_UE4_27;

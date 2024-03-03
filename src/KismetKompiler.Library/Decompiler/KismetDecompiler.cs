@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Security.AccessControl;
 using System.Text.RegularExpressions;
 using KismetKompiler.Library.Decompiler;
 using KismetKompiler.Library.Decompiler.Analysis;
@@ -11,8 +10,6 @@ using KismetKompiler.Library.Parser;
 using KismetKompiler.Library.Utilities;
 using UAssetAPI;
 using UAssetAPI.ExportTypes;
-using UAssetAPI.FieldTypes;
-using UAssetAPI.IO;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 using UAssetAPI.UnrealTypes;
@@ -66,6 +63,7 @@ public partial class KismetDecompiler
             //_writer.WriteLine($"// UsesEventDrivenLoader={_asset.UsesEventDrivenLoader}");
 
             //WriteImportsOld();
+            WriteBuiltins();
             WriteImports();
             WriteClass();
         }
@@ -79,6 +77,10 @@ public partial class KismetDecompiler
                 DecompileFunction(func);
             }
         }
+    }
+
+    private void WriteBuiltins()
+    {
     }
 
     private void WriteClass()
@@ -126,285 +128,6 @@ public partial class KismetDecompiler
 
         _writer.Pop();
         _writer.WriteLine($"}}");
-    }
-
-    private void WriteImportsOld()
-    {
-        _writer.WriteLine("// Imports");
-        List<Import> imports;
-        if (_asset is UAsset)
-            imports = ((UAsset)_asset).Imports;
-        else
-            imports = ((ZenAsset)_asset).Imports.Select(x => x.ToImport((ZenAsset)_asset)).ToList();
-
-        foreach (var import in imports.Where(x => x?.OuterIndex.Index == 0))
-        {
-            void ProcessImport(Import import)
-            {
-                var rawImportIndex = imports.IndexOf(import);
-                var importIndex = rawImportIndex != -1 ? -(imports.IndexOf(import) + 1) : -1;
-                var children = imports.Where(x => x?.OuterIndex.Index == importIndex);
-                var className = import.ClassName.ToString();
-                var objectName = import.ObjectName.ToString();
-
-                if (className == "ArrayProperty" && children.Any())
-                {
-                    if (children.Count() != 1)
-                        throw new NotImplementedException();
-
-                    _writer.Write($"Array<{GetDecompiledTypeName(children.First())}> {FormatIdentifier(objectName)}");
-                }
-                else if (className == "Package")
-                {
-                    var packageName = $"{FormatString(objectName.ToString())}";
-                    _writer.Write($"from {packageName} import");
-                }
-                else if (className == "Function")
-                {
-                    if (objectName == "Default__Function")
-                    {
-                        _writer.Write($"Function Default__Function");
-                    }
-                    else
-                    {
-                        var functionTokens = new[] { EExprToken.EX_FinalFunction, EExprToken.EX_LocalFinalFunction, EExprToken.EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction, EExprToken.EX_CallMath };
-                        var functionCalls = _asset.Exports
-                            .Where(x => x is FunctionExport)
-                            .Cast<FunctionExport>()
-                            .SelectMany(x => x.ScriptBytecode.Flatten())
-                            .Where(x => functionTokens.Contains(x.Token))
-                            .Select(x => new
-                            {
-                                Token = x.Token,
-                                StackNode = (x as EX_FinalFunction)?.StackNode,
-                                Name = (x switch
-                                {
-                                    EX_FinalFunction funcExpr => _asset.GetName(funcExpr.StackNode),
-                                    EX_VirtualFunction funcExpr => funcExpr.VirtualFunctionName.ToString(),
-                                })
-                            });
-
-                        var callInstructions = functionCalls
-                            .Where(x =>
-                                (x.StackNode != null && x.StackNode.IsImport() && x.StackNode.ToImport(_asset) == import) ||
-                                (x.StackNode == null && x.Name == import.ObjectName.ToString()))
-                            .ToList();
-                        if (callInstructions.Any(x => x.StackNode != null))
-                            callInstructions.RemoveAll(x => x.StackNode == null);
-
-                        var callInstructionTokens = callInstructions
-                            .Select(x => x.Token)
-                            .Distinct()
-                            .ToList();
-
-                        var functionModifiers = new List<string>() { "public" };
-                        var functionAttributes = new List<string>() { "Extern", "UnknownSignature" };
-                        if (callInstructionTokens.Count > 0)
-                        {
-                            var callInstruction = callInstructionTokens.First();
-                            if (callInstructionTokens.Count > 1)
-                            {
-                                if (callInstructionTokens.All(x => x == EExprToken.EX_CallMath || x == EExprToken.EX_FinalFunction))
-                                {
-                                    // TODO
-                                    callInstruction = EExprToken.EX_CallMath;
-                                }
-                                else
-                                {
-                                    throw new NotImplementedException();
-                                }
-                            }
-
-                            var functionModifier = callInstruction switch
-                            {
-                                EExprToken.EX_FinalFunction => "sealed",
-                                EExprToken.EX_LocalFinalFunction => "sealed",
-
-                                EExprToken.EX_VirtualFunction => "virtual",
-                                EExprToken.EX_LocalVirtualFunction => "virtual",
-
-                                EExprToken.EX_CallMath => "static sealed",
-                            };
-                            functionModifiers.Add(functionModifier);
-                            var functionAttribute = callInstruction switch
-                            {
-                                EExprToken.EX_FinalFunction => "FinalFunction",
-                                EExprToken.EX_LocalFinalFunction => "LocalFinalFunction",
-                                
-                                EExprToken.EX_VirtualFunction => "VirtualFunction",
-                                EExprToken.EX_LocalVirtualFunction => "LocalVirtualFunction",
-
-                                EExprToken.EX_CallMath => "MathFunction",
-                                _ => ""
-                            };
-                            if (!string.IsNullOrWhiteSpace(functionAttribute))
-                                functionAttributes.Add(functionAttribute);
-                        }
-
-                        var functionAttributeText = string.Join(", ", functionAttributes);
-                        if (!string.IsNullOrWhiteSpace(functionAttributeText))
-                            functionAttributeText = $"[{functionAttributeText}] ";
-
-                        var functionModifierText = string.Join(" ", functionModifiers);
-                        if (!string.IsNullOrWhiteSpace(functionModifierText))
-                            functionModifierText = $"{functionModifierText} ";
-
-                        _writer.Write($"{functionAttributeText}{functionModifierText}void {FormatIdentifier(import.ObjectName.ToString())}()");
-                    }
-                }
-                else if (_asset.ImportInheritsType(import, "Class"))
-                {
-                    if (className == "Class")
-                    {
-                        // Try to detect the base class based on the members accessed
-                        // TODO: replace this with an evaluation phase where the code is evaluated
-                        // and context is used to deduce which base class each type has
-
-                        // Find properties of the imported type
-                        var targetProperties = _asset.Exports
-                            .Where(x => x is PropertyExport)
-                            .Cast<PropertyExport>()
-                            .Where(x =>
-                                (x.Property as UObjectProperty)?.PropertyClass.Index == importIndex)
-                            .ToList();
-
-                        // Look for context expressions on these properties
-                        bool IsTargetProperty(KismetPropertyPointer ptr)
-                        {
-                            if (ptr.Old != null)
-                            {
-                                return ptr.Old.IsExport() && targetProperties.Contains(ptr.Old.ToExport(_asset) as PropertyExport);
-                            }
-                            else
-                            {
-                                return ptr.New.ResolvedOwner.IsExport() && targetProperties.Contains(ptr.New.ResolvedOwner.ToExport(_asset) as PropertyExport);
-                            }
-                        }
-
-                        Import GetImportFromProperty(KismetPropertyPointer ptr)
-                        {
-                            if (ptr.Old != null)
-                            {
-                                return ptr.Old.ToImport(_asset);
-                            }
-                            else
-                            {
-                                return ptr.New.ResolvedOwner.ToImport(_asset);
-                            }
-                        }
-
-
-                        var baseClassImport = _asset.Exports
-                            .Where(x => x is FunctionExport)
-                            .Cast<FunctionExport>()
-                            .SelectMany(x => x.ScriptBytecode)
-                            .Flatten()
-                            .Where(x =>
-                                // Find a context expression
-                                x is EX_Context context &&
-
-                                // ..where the target property is accessed through local variable
-                                context.ObjectExpression is EX_LocalVariable local &&
-                                IsTargetProperty(local.Variable) &&
-
-                                // ..and the member being accessed is an instance variable
-                                // given that the import does not have any children, this must be the base class
-                                context.ContextExpression is EX_InstanceVariable)
-                            .Select(x => GetImportFromProperty(((EX_InstanceVariable)((EX_Context)x).ContextExpression).Variable))
-                            .Select(x => x.OuterIndex.ToImport(_asset))
-                            .Distinct()
-                            .SingleOrDefault();
-
-                        if (baseClassImport != null)
-                        {
-                            _writer.Write($"class {FormatIdentifier(objectName)} : {FormatIdentifier(baseClassImport.ObjectName.ToString())}");
-                        }
-                        else
-                        {
-                            _writer.Write($"class {FormatIdentifier(objectName)}");
-                        }
-                    }
-                    else
-                    {
-                        if (children.Any())
-                        {
-                            _writer.Write($"class {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))}");
-                        }
-                        else
-                        {
-                            _writer.Write($"{(GetDecompiledTypeName(import))} {FormatIdentifier(objectName)}");
-                        }
-                    }
-                }
-                else if (_asset.ImportInheritsType(import, "Struct"))
-                {
-                    if (className == "Struct")
-                    {
-                        _writer.Write($"struct {FormatIdentifier(objectName)}");
-                    }
-                    else
-                    {
-                        if (children.Any())
-                        {
-                            _writer.Write($"struct {FormatIdentifier(objectName)} : {(GetDecompiledTypeName(import))}");
-                        }
-                        else
-                        {
-                            _writer.Write($"{(GetDecompiledTypeName(import))} {FormatIdentifier(objectName)}");
-                        }
-                    }
-                }
-                else
-                {
-                    _writer.Write($"{(GetDecompiledTypeName(import))} {FormatIdentifier(import.ObjectName.ToString())}");
-                }
-
-                if (children.Any())
-                {
-                    _writer.WriteLine(" {");
-                    _writer.Push();
-                    foreach (var subImport in children)
-                    {
-                        ProcessImport(subImport);
-                    }
-                    _writer.Pop();
-                    _writer.WriteLine("}");
-                }
-                else
-                {
-                    _writer.WriteLine(";");
-
-                    if (objectName.EndsWith("_GEN_VARIABLE"))
-                    {
-                        // TODO: verify that this is correct
-                        // Verified to be necessary for matching compilation
-                        // Similar patterns are seen in the Unreal source code as well
-                        var temp = new Import()
-                        {
-                            bImportOptional = import.bImportOptional,
-                            ClassName = import.ClassName,
-                            ClassPackage = import.ClassPackage,
-                            ObjectName = FName.DefineDummy(_asset, import.ObjectName.ToString().Replace("_GEN_VARIABLE", "")),
-                            OuterIndex = import.OuterIndex
-                        };
-                        ProcessImport(temp);
-                    }
-                }
-            }
-            var name = _asset.GetFullName(import);
-            var parentName = _asset.GetFullName(import.OuterIndex);
-            var parentNameEscaped = parentName.Replace("/", ".").TrimStart('.');
-            if (parentNameEscaped == "<null>")
-                parentNameEscaped = "";
-            else
-                parentNameEscaped = $"{parentNameEscaped}";
-
-            var fullClassName = _asset.GetFullName(import.ClassName);
-
-            ProcessImport(import);
-        }
-
-        _writer.WriteLine();
     }
 
     private void WriteImports()
@@ -577,10 +300,7 @@ public partial class KismetDecompiler
         root = ExecutePass<CreateIfBlocksPass>(root);
         root = ExecutePass<CreateWhileBlocksPass>(root);
 
-        if (!_verbose)
-            WriteFunction(function, root);
-        else
-            WriteFunctionVerbose(function, root);
+        WriteFunction(function, root);
 
         _writer.Flush();
 
@@ -643,7 +363,8 @@ public partial class KismetDecompiler
         {
             _writer.WriteLine($"[{functionAttributeText}]");
         }
-        var functionDeclaration = $"void {FormatIdentifier(function.ObjectName.ToString())}({functionParameterText}) {{";
+        var functionName = function.ObjectName.ToString();
+        var functionDeclaration = $"void {FormatIdentifier(functionName)}({functionParameterText}) {{";
         var functionModifierText = string.Join(" ", functionModifiers);
         if (!string.IsNullOrWhiteSpace(functionModifierText))
         {
@@ -668,11 +389,13 @@ public partial class KismetDecompiler
             {
                 if (block is IfBlockNode ifBlock)
                 {
-                    var isBlockStart = block.ReferencedBy.Count > 0 ||
-                        (isUbergraphFunction && IsUbergraphEntrypoint(block.CodeStartOffset));
+                    var isBlockStart = block.ReferencedBy.Count > 0 || (isUbergraphFunction && IsUbergraphEntrypoint(block.CodeStartOffset));
+                    string? callingFunctionName = default;
+                    if (isBlockStart)
+                        callingFunctionName = GetUbergraphEntryFunction(block.CodeStartOffset)?.ObjectName?.ToString();
 
                     if (isBlockStart)
-                        _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset)}:");
+                        _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset, functionName, callingFunctionName)}:");
 
                     var cond = FormatExpression(ifBlock.Condition, null);
                     _writer.WriteLine($"if ({cond}) {{");
@@ -684,11 +407,13 @@ public partial class KismetDecompiler
                 }
                 else if (block is JumpBlockNode whileBlock)
                 {
-                    var isBlockStart = block.ReferencedBy.Count > 0 ||
-                        (isUbergraphFunction && IsUbergraphEntrypoint(block.CodeStartOffset));
+                    var isBlockStart = block.ReferencedBy.Count > 0 || (isUbergraphFunction && IsUbergraphEntrypoint(block.CodeStartOffset));
+                    string? callingFunctionName = default;
+                    if (isBlockStart)
+                        callingFunctionName = GetUbergraphEntryFunction(block.CodeStartOffset)?.ObjectName?.ToString();
 
                     if (isBlockStart)
-                        _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset)}:");
+                        _writer.WriteLine($"{FormatCodeOffset((uint)block.CodeStartOffset, functionName, callingFunctionName)}:");
 
                     _writer.WriteLine($"while (true) {{");
                     _writer.Push();
@@ -762,21 +487,23 @@ public partial class KismetDecompiler
     private void WriteExpression(Node node, bool isUbergraphFunction, string expr)
     {
         string line = "";
-        var isBlockStart = node.ReferencedBy.Count > 0 ||
-            (isUbergraphFunction && IsUbergraphEntrypoint(node.CodeStartOffset));
+        var isBlockStart = node.ReferencedBy.Count > 0 || (isUbergraphFunction && IsUbergraphEntrypoint(node.CodeStartOffset));
+        string? callingFunctionName = default;
+        if (isBlockStart)
+            callingFunctionName = GetUbergraphEntryFunction(node.CodeStartOffset)?.ObjectName?.ToString();
 
         if (string.IsNullOrWhiteSpace(expr))
         {
             if (isBlockStart)
             {
-                line = $"{FormatCodeOffset((uint)node.CodeStartOffset)}:";
+                line = $"{FormatCodeOffset((uint)node.CodeStartOffset, _function.ObjectName.ToString(), callingFunctionName)}:";
             }
         }
         else
         {
             if (isBlockStart)
             {
-                line = $"{FormatCodeOffset((uint)node.CodeStartOffset)}: {expr}";
+                line = $"{FormatCodeOffset((uint)node.CodeStartOffset, _function.ObjectName.ToString(), callingFunctionName)}: {expr}";
             }
             else
             {
@@ -807,51 +534,6 @@ public partial class KismetDecompiler
 
     private void WriteExpression(Node node, bool isUbergraphFunction)
         => WriteExpression(node, isUbergraphFunction, FormatExpression(node.Source, null));
-
-    private void WriteFunctionVerbose(FunctionExport function, Node root)
-    {
-        var isUbergraphFunction = function.IsUbergraphFunction();
-        _writer.WriteLine($"void {function.ObjectName}() {{");
-        var result = string.Empty;
-        var nextBlockIndex = 1;
-        foreach (Node block in root.Children)
-        {
-            Debug.Assert(block.Source == null);
-            _writer.WriteLine($"    // Block {nextBlockIndex++}");
-            foreach (var node in block.Children)
-            {
-                string line = "";
-                if (node.ReferencedBy.Count > 0 ||
-                    (isUbergraphFunction && IsUbergraphEntrypoint(node.CodeStartOffset)))
-                {
-                    line = $"    _{node.CodeStartOffset}: {FormatExpression(node.Source, null)}";
-                }
-                else
-                {
-                    line = $"    {FormatExpression(node.Source, null)}";
-                }
-                if (line.Contains(" //"))
-                {
-                    var parts = line.Split(" //");
-                    if (!string.IsNullOrWhiteSpace(parts[0]))
-                        line = string.Join("; //", parts);
-                }
-                else if (line.Contains(" /*"))
-                {
-                    var parts = line.Split(" /*");
-                    if (!string.IsNullOrWhiteSpace(parts[0]))
-                        line = string.Join("; /*", parts);
-                }
-                else
-                {
-                    line += ";";
-                }
-                _writer.WriteLine(line);
-            }
-            _writer.WriteLine();
-        }
-        _writer.WriteLine("}\n");
-    }
 
     public IEnumerable<EClassFlags> GetClassFlags(ClassExport classExport)
     {
@@ -1061,6 +743,35 @@ public partial class KismetDecompiler
         return result;
     }
 
+    private FunctionExport? GetUbergraphEntryFunction(int codeOffset)
+    {
+        var finalFunctionEntryPoints = _asset.Exports
+            .Where(x => x is FunctionExport)
+            .Cast<FunctionExport>()
+            .Where(x =>
+                x.ScriptBytecode
+                .Where(x => x is EX_FinalFunction)
+                .Cast<EX_FinalFunction>()
+                .Where(x => x.StackNode.IsExport() && _asset.GetFunctionExport(x.StackNode).IsUbergraphFunction())
+                .Where(x => x.Parameters.Any() && (x.Parameters[0] as EX_IntConst)?.Value == codeOffset)
+                .Any()
+            );
+
+        var virtualFunctionEntryPoints = _asset.Exports
+            .Where(x => x is FunctionExport)
+            .Cast<FunctionExport>()
+            .Where(x =>
+                x.ScriptBytecode
+                .Where(x => x is EX_VirtualFunction)
+                .Cast<EX_VirtualFunction>()
+                .Where(x => x.VirtualFunctionName.ToString().StartsWith("ExecuteUbergraph_"))
+                .Where(x => x.Parameters.Any() && (x.Parameters[0] as EX_IntConst)?.Value == codeOffset)
+                .Any()
+            );
+
+        return finalFunctionEntryPoints.Union(virtualFunctionEntryPoints).SingleOrDefault();
+    }
+
     private bool IsUbergraphEntrypoint(int codeOffset)
     {
         var finalFunctionEntryPoints = _asset.Exports
@@ -1104,7 +815,18 @@ public partial class KismetDecompiler
             _asset.GetName(index);
     }
 
-    private string FormatCodeOffset(uint codeOffset, string? functionName = null) => FormatIdentifier($"{(functionName ?? _function.ObjectName.ToString())}_{codeOffset}");
+    private string FormatCodeOffset(uint codeOffset, string? functionName = null, string? callingFunctionName = null)
+    {
+        if (callingFunctionName != null &&
+            callingFunctionName != functionName)
+        {
+            return FormatIdentifier($"{(functionName ?? _function.ObjectName.ToString())}_{codeOffset}_{callingFunctionName}");
+        }
+        else
+        {
+            return FormatIdentifier($"{(functionName ?? _function.ObjectName.ToString())}_{codeOffset}");
+        }
+    }
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z_\\d]*$")]
     private static partial Regex IdentifierRegex();

@@ -34,7 +34,7 @@ public abstract class RecompilationTestsBase
         }
         outStream.Position = 0;
 
-        var script = CompileScript(outStream, false);
+        var script = CompileScript(outStream, false, EngineVersion);
         var tempAsset = new UAsset(fullFilePath, EngineVersion);
         var newAsset = new UAssetLinker(tempAsset)
             .LinkCompiledScript(script)
@@ -104,7 +104,7 @@ public abstract class RecompilationTestsBase
     }
 
 
-    static CompiledScriptContext CompileScript(Stream inStream, bool noStrict)
+    static CompiledScriptContext CompileScript(Stream inStream, bool noStrict, EngineVersion engineVersion)
     {
         using var textStream = new StreamReader(inStream);
         var inputStream = new AntlrInputStream(textStream);
@@ -123,6 +123,7 @@ public abstract class RecompilationTestsBase
         var typeResolver = new TypeResolver();
         typeResolver.ResolveTypes(compilationUnit);
         var compiler = new KismetScriptCompiler();
+        compiler.EngineVersion = engineVersion;
         compiler.StrictMode = !noStrict;
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;

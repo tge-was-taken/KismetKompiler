@@ -21,12 +21,17 @@ public partial class PackageAnalyser
         _symbols = new();
         AnalyseImports();
         AnalyseExports();
+        AnalysePropertyTypes();
         AnalyseFunctions();
         return new PackageAnalysisResult()
         {
             AllSymbols = _symbols.AllSymbols.ToList(),
             RootSymbols = _symbols.RootSymbols.ToList()
         };
+    }
+
+    private void AnalysePropertyTypes()
+    {
     }
 
     private SymbolType GetSymbolType(Symbol symbol)
@@ -768,8 +773,6 @@ public partial class PackageAnalyser
 
         return potentialBaseClasses;
     }
-
-
 
     private void ResolveClassHierarchy(FunctionAnalysisContext ctx)
     {

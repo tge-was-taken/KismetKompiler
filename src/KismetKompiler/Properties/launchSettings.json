@@ -2,7 +2,7 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\DQXIS\\Action\\ActionExec\\BP_ActionExec_Bunsin.uasset\" -v 4.18 -f"
+      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Characters\\BP_CharaDirLight.uasset\" -v 4.27 -f"
     }
   }
 }
