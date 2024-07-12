@@ -15,6 +15,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KismetKompiler.Test", "Kism
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Utilities", "Utilities", "{1C71D085-3889-4ACF-BB64-A355488DB131}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KismetKompiler.SourceGenerators.VisitorGenerator", "KismetKompiler.SourceGenerators.VisitorGenerator\KismetKompiler.SourceGenerators.VisitorGenerator.csproj", "{B638586F-0CB5-4F61-AA36-851720CDBA0E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug Verbose|Any CPU = Debug Verbose|Any CPU
@@ -46,24 +48,19 @@ Global
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{74370A51-8581-40FB-B360-7998518FD0BC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0853DC16-B778-44E9-A72B-2E2F16F8B3B1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{79BA3120-CAD3-444D-AFF2-71687ACD0FBD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Debug Verbose|Any CPU.ActiveCfg = Debug|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Debug Verbose|Any CPU.Build.0 = Debug|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{178417EC-1177-413E-BE85-C83AECD64279} = {AE0A8EF9-FF8E-4ACF-B611-B6E6D317E188}
+		{B638586F-0CB5-4F61-AA36-851720CDBA0E} = {1C71D085-3889-4ACF-BB64-A355488DB131}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {259D949E-8ED3-4E9A-9FED-F0D37FD5752C}

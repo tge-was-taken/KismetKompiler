@@ -4,9 +4,16 @@ using CommandLine;
 using KismetKompiler.Decompiler;
 using KismetKompiler.Library.Compiler;
 using KismetKompiler.Library.Compiler.Processing;
+using KismetKompiler.Library.Decompiler;
+using KismetKompiler.Library.Linker;
 using KismetKompiler.Library.Packaging;
 using KismetKompiler.Library.Parser;
+using KismetKompiler.Library.Syntax;
+using KismetKompiler.Library.Syntax.Statements.Declarations;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using Newtonsoft.Json;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Runtime.ConstrainedExecution;
@@ -27,13 +34,13 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 if (args.Length == 0)
     args = new[] { "--help" };
 
-CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args)
+CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkOptions>(args)
     .WithParsed<CompileOptions>(o =>
     {
-        var version = ParseVersion(o.Version);
+        var version = ParseVersion(o.VersionString);
         try
         {
-            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict);
+            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict, o.GlobalFilePath);
             Console.WriteLine($"Done.");
         }
         catch (ApplicationException ex)
@@ -43,7 +50,7 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args
     })
     .WithParsed<DecompileOptions>(o =>
      {
-         var version = ParseVersion(o.Version);
+         var version = ParseVersion(o.VersionString);
          try
          {
              Decompile(o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoVerification, o.NoStrict, o.GlobalFilePath);
@@ -53,7 +60,322 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions>(args
          {
              Console.WriteLine(ex.Message);
          }
-     });
+     })
+    //.WithParsed<SdkOptions>(o =>
+    //{
+    //    try
+    //    {
+    //        CreateSdk(o);
+    //        Console.WriteLine($"Done.");
+    //    }
+    //    catch (ApplicationException ex)
+    //    {
+    //        Console.WriteLine(ex.Message);
+    //    }
+    //});
+    ;
+
+static string PropertyTypeToType(EPropertyType type)
+{
+    switch (type)
+    {
+        case EPropertyType.MulticastDelegateProperty:
+            return "MulticastDelegate";
+
+        case EPropertyType.Int16Property:
+            return "short";
+
+        case EPropertyType.IntProperty:
+            return "int";
+
+        case EPropertyType.UInt16Property:
+            return "ushort";
+
+        case EPropertyType.UInt32Property:
+            return "uint";
+
+        case EPropertyType.Int8Property:
+            return "sbyte";
+
+        case EPropertyType.NameProperty:
+            return "Name";
+
+        case EPropertyType.StrProperty:
+            return "string";
+
+        case EPropertyType.MapProperty:
+            return "Map";
+
+        case EPropertyType.WeakObjectProperty:
+            return "WeakObject";
+
+        case EPropertyType.ArrayProperty:
+            return "Array";
+
+        default:
+            return type.ToString().Replace("Property", "").ToLower();
+    }
+}
+
+static TypeIdentifier GetPropertyTypeIdentifierFromClass(UsmapSchema schema)
+{
+    return new(schema.Name);
+}
+
+//static void CreateSdk(SdkOptions options)
+//{
+//    var version = ParseVersion(options.VersionString);
+//    var usmap = new Usmap(options.UsmapFilePath);
+//    var source = new CompilationUnit();
+//    var schemas = usmap.SchemasByName.Values.ToList();
+//    foreach (var enumType in usmap.EnumMap.Values)
+//    {
+//        var enumDecl = new EnumDeclaration()
+//        {
+//            Identifier = new(enumType.Name)
+//        };
+//        foreach ((var key, var value) in enumType.Values.OrderBy(x => x.Key))
+//        {
+//            enumDecl.Values.Add(new EnumValueDeclaration()
+//            {
+//                Value = new IntLiteral((int)key),
+//                Identifier = new(value),
+//            });
+//        }
+//        source.Declarations.Add(enumDecl);
+//    }
+//    foreach (var schema in usmap.Schemas)
+//    {
+//        var classDecl = new ClassDeclaration()
+//        {
+//            Identifier = new(schema.Name),
+//            Modifiers = ClassModifiers.Public,
+//        };
+//        if (schema.SuperType != null)
+//            classDecl.InheritedTypeIdentifiers.Add(new(schema.SuperType));
+
+//        UsmapProperty lastProp = null;
+//        var skipCount = 0;
+//        foreach ((var propIndex, var prop) in schema.Properties)
+//        {
+//            if (skipCount > 0)
+//            {
+//                skipCount--;
+//                continue;
+//            }
+
+//            if (prop.ArraySize > 1)
+//            {
+//                skipCount = prop.ArraySize;
+//                if (prop.PropertyData.Type == EPropertyType.ArrayProperty)
+//                {
+//                    var arrayType = prop.PropertyData as UsmapArrayData;
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Size = prop.ArraySize,
+//                        Type = new(PropertyTypeToType(arrayType.InnerType.Type)),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.ObjectProperty)
+//                {
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Size = prop.ArraySize,
+//                        Identifier = new(prop.Name),
+//                        Type = GetPropertyTypeIdentifierFromClass(usmap.Schemas[prop.SchemaIndex]),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.StructProperty)
+//                {
+//                    var structType = prop.PropertyData as UsmapStructData;
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Size = prop.ArraySize,
+//                        Identifier = new(prop.Name),
+//                        Type = new(structType.StructType),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.EnumProperty)
+//                {
+//                    var enumType = prop.PropertyData as UsmapEnumData;
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Size = prop.ArraySize,
+//                        Identifier = new(prop.Name),
+//                        Type = new(enumType.Name),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else
+//                {
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Size = prop.ArraySize,
+//                        Identifier = new(prop.Name),
+//                        Type = new(PropertyTypeToType(prop.PropertyData.Type)),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//            }
+//            else
+//            {
+//                if (prop.PropertyData.Type == EPropertyType.ArrayProperty)
+//                {
+//                    var arrayType = prop.PropertyData as UsmapArrayData;
+//                    var varDecl = new ArrayVariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(PropertyTypeToType(arrayType.InnerType.Type)),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.ObjectProperty)
+//                {
+//                    var varDecl = new VariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = GetPropertyTypeIdentifierFromClass(usmap.Schemas[prop.SchemaIndex]),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.StructProperty)
+//                {
+//                    var structType = prop.PropertyData as UsmapStructData;
+//                    var varDecl = new VariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(structType.StructType),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.EnumProperty)
+//                {
+//                    var enumType = prop.PropertyData as UsmapEnumData;
+//                    var varDecl = new VariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(enumType.Name),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//                else
+//                {
+//                    var varDecl = new VariableDeclaration()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(PropertyTypeToType(prop.PropertyData.Type)),
+//                        Modifiers = VariableModifier.Public
+//                    };
+//                    classDecl.Declarations.Add(varDecl);
+//                }
+//            }
+
+//        }
+
+//        if (schema.Name == "BtlCoreComponent")
+//            Debugger.Break();
+
+//        foreach ((var funcIndex, var func) in schema.Functions)
+//        {
+//            var modifiers = (ProcedureModifier)0;
+//            if (func.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Final))
+//                modifiers |= ProcedureModifier.Sealed;
+//            if (func.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Static))
+//                modifiers |= ProcedureModifier.Static;
+//            if (func.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Private))
+//                modifiers |= ProcedureModifier.Private;
+//            if (func.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Protected))
+//                modifiers |= ProcedureModifier.Protected;
+//            if (func.FunctionFlags.HasFlag(EFunctionFlags.FUNC_Public))
+//                modifiers |= ProcedureModifier.Public;
+
+//            var returnProp = func.Properties.Values.Where(x => x.PropertyData.Flags.HasFlag(EPropertyFlags.CPF_ReturnParm)).FirstOrDefault();
+
+//            var funcDecl = new ProcedureDeclaration()
+//            {
+//                Identifier = new(func.Name),
+//                ReturnType = new(ValueKind.Void),
+//                Modifiers = modifiers
+//            };
+//            if (returnProp != null)
+//            {
+//                funcDecl.ReturnType = new() { ValueKind = ValueKind.Type, Text = PropertyTypeToType(returnProp.PropertyData.Type) };
+//            }
+
+//            foreach ((var propIdx, var prop) in func.Properties)
+//            {
+//                if (prop.PropertyData.Flags.HasFlag(EPropertyFlags.CPF_ReturnParm))
+//                    continue;
+
+//                if (prop.PropertyData.Type == EPropertyType.ArrayProperty)
+//                {
+//                    var arrayType = prop.PropertyData as UsmapArrayData;
+//                    var varDecl = new Parameter()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(PropertyTypeToType(arrayType.InnerType.Type)),
+//                    };
+//                    funcDecl.Parameters.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.ObjectProperty)
+//                {
+//                    var varDecl = new Parameter()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = GetPropertyTypeIdentifierFromClass(usmap.Schemas[prop.SchemaIndex]),
+//                    };
+//                    funcDecl.Parameters.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.StructProperty)
+//                {
+//                    var structType = prop.PropertyData as UsmapStructData;
+//                    var varDecl = new Parameter()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(structType.StructType),
+//                    };
+//                    funcDecl.Parameters.Add(varDecl);
+//                }
+//                else if (prop.PropertyData.Type == EPropertyType.EnumProperty)
+//                {
+//                    var enumType = prop.PropertyData as UsmapEnumData;
+//                    var varDecl = new Parameter()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(enumType.Name),
+//                    };
+//                    funcDecl.Parameters.Add(varDecl);
+//                }
+//                else
+//                {
+//                    var varDecl = new Parameter()
+//                    {
+//                        Identifier = new(prop.Name),
+//                        Type = new(PropertyTypeToType(prop.PropertyData.Type)),
+//                    };
+//                    funcDecl.Parameters.Add(varDecl);
+//                }
+//            }
+//            classDecl.Declarations.Add(funcDecl);
+//        }
+//        source.Declarations.Add(classDecl);
+//    }
+//    var writer = new CompilationUnitWriter();
+//    writer.Write(source, Path.GetFileNameWithoutExtension(options.UsmapFilePath) + ".kms");
+//}
 
 static string NormalizeAssetPath(string? path)
 {
@@ -98,7 +420,7 @@ static ZenAsset LoadZenAsset(string path, EngineVersion ver, string? usmapPath =
 static UnrealPackage LoadAsset(string path, EngineVersion ver, string? usmapPath = default, string? globalPath = default)
 {
     UnrealPackage asset;
-    if (!string.IsNullOrEmpty(usmapPath))
+    if (!string.IsNullOrEmpty(globalPath))
     {
         asset = LoadZenAsset(path, ver, usmapPath, globalPath);
     }
@@ -204,14 +526,23 @@ static void Compile(string? inputPath, string scriptPath, EngineVersion ver, str
     Console.WriteLine($"Compiling {scriptPath}");
     var script = CompileScript(scriptPath, noStrict, ver);
 
-    UAsset newAsset;
+    UnrealPackage newAsset;
     if (assetFilePath != null)
     {
         Console.WriteLine($"Merging with {assetFilePath}");
         var asset = LoadAsset(assetFilePath, ver, usmapPath, globalPath);
-        newAsset = new UAssetLinker((UAsset)asset)
-            .LinkCompiledScript(script)
-            .Build();
+        if (asset is ZenAsset zenAsset)
+        {
+            newAsset = new ZenAssetLinker(zenAsset)
+              //.LinkCompiledScript(script)
+              .Build();
+        }
+        else
+        {
+            newAsset = new UAssetLinker((UAsset)asset)
+              .LinkCompiledScript(script)
+              .Build();
+        }
     }
     else
     {
@@ -377,14 +708,14 @@ static void PrintDiff(string text1, string text2)
 class OptionsBase
 {
     [Option('v', "version", Required = false, HelpText = "Unreal Engine version (eg. 4.23)")]
-    public string Version { get; set; } = "4.23";
+    public string VersionString { get; set; } = "4.23";
 
     [Option('f', "overwrite", Required = false, HelpText = "Overwrite existing files")]
     public bool Overwrite { get; set; } = false;
     [Option("usmap", Required = false, HelpText = "Path to a .usmap file")]
-    public string UsmapFilePath { get; set; }
+    public string? UsmapFilePath { get; set; }
     [Option("global", Required = false, HelpText = "Path to a global.ucas/utoc file")]
-    public string GlobalFilePath { get; set; }
+    public string? GlobalFilePath { get; set; }
 }
 
 [Verb("compile", HelpText = "Compile a script into a new or existing blueprint asset")]
@@ -417,4 +748,14 @@ class DecompileOptions : OptionsBase
 
     [Option("no-strict", Required = false, HelpText = "Allow the compiler to be less strict when evaluating scoping rules as a workaround for unknown symbol errors.")]
     public bool NoStrict { get; set; } = false;
+}
+
+[Verb("sdk", HelpText = "Create an SDK")]
+class SdkOptions : OptionsBase
+{
+    [Option('d', "directory", Required = false, HelpText = "Path to a folder containing .uasset files")]
+    public string? InputPath { get; set; }
+
+    [Option('o', "output", Required = false, HelpText = "Path to the output .kms file.")]
+    public string? OutputPath { get; set; }
 }

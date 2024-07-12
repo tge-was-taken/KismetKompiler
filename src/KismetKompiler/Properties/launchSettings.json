@@ -2,7 +2,10 @@
   "profiles": {
     "KismetKompiler": {
       "commandName": "Project",
-      "commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Characters\\BP_CharaDirLight.uasset\" -v 4.27 -f"
+      //"commandLineArgs": "decompile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\Calculations\\BP_BtlCalc.uasset\" -v 4.27 -f"
+      //"commandLineArgs": "sdk --usmap \"F:\\Software\\Games\\PC\\SteamLibrary\\steamapps\\common\\P3R\\P3R\\Binaries\\Win64\\Mappings.usmap\" -v 4.27 -f"
+      //"commandLineArgs": "compile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\Calculations\\BP_BtlCalc.kms\" -o \"F:\\Software\\ReloadedII\\Mods\\p3rpc.compilertest\\UnrealEssentials\\P3R\\Content\\Xrd777\\Blueprints\\Battle\\Calculations\\BP_BtlCalc.uasset\" -v 4.27 -f --asset \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\Calculations\\BP_BtlCalc.uasset\""
+      "commandLineArgs": "compile -i \"..\\..\\..\\..\\..\\..\\Testdata\\P3R\\Battle\\Calculations\\BP_BtlCalc.kms\" -o \"F:\\Software\\ReloadedII\\Mods\\p3rpc.compilertest\\UnrealEssentials\\P3R\\Content\\Xrd777\\Blueprints\\Battle\\Calculations\\BP_BtlCalc.uasset\" -v 4.27 -f --asset \"F:\\Software\\FModel\\Output\\Exports\\P3R\\Content\\Xrd777\\Blueprints\\Battle\\Calculations\\BP_BtlCalc.uasset\" --global \"F:\\Software\\Games\\PC\\SteamLibrary\\steamapps\\common\\P3R\\P3R\\Content\\Paks\\global.utoc\" --usmap \"F:\\Software\\Games\\PC\\SteamLibrary\\steamapps\\common\\P3R\\P3R\\Binaries\\Win64\\Mappings.usmap\""
     }
   }
 }

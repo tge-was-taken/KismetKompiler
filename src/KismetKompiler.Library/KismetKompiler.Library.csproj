@@ -1,10 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Antlr4 Remove="Abstractions\**" />
+    <Compile Remove="Abstractions\**" />
+    <EmbeddedResource Remove="Abstractions\**" />
+    <None Remove="Abstractions\**" />
+  </ItemGroup>
+
+	<PropertyGroup>
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Antlr4" Version="4.6.6">
@@ -24,10 +35,6 @@
       <DefaultCustomToolNamespace>$([MSBuild]::ValueOrDefault('$(RootNamespace).%(DefaultCustomToolNamespace)', '').TrimEnd('.'))</DefaultCustomToolNamespace>
       <CustomToolNamespace>$([MSBuild]::ValueOrDefault(%(CustomToolNamespace), %(DefaultCustomToolNamespace)))</CustomToolNamespace>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Abstractions\" />
   </ItemGroup>
 
 </Project>
