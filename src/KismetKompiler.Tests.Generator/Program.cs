@@ -13,6 +13,7 @@ foreach (var gameDir in gameDirectories)
     {
         "p3r" => UAssetAPI.UnrealTypes.EngineVersion.VER_UE4_27,
         "dqxis" => UAssetAPI.UnrealTypes.EngineVersion.VER_UE4_18,
+        "smtvv" => UAssetAPI.UnrealTypes.EngineVersion.VER_UE4_27,
     };
     var files = Directory.GetFiles(gameDir, "*.uasset", SearchOption.AllDirectories);
 
