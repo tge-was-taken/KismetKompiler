@@ -61,66 +61,67 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkO
              Console.WriteLine(ex.Message);
          }
      })
-    //.WithParsed<SdkOptions>(o =>
-    //{
-    //    try
-    //    {
-    //        CreateSdk(o);
-    //        Console.WriteLine($"Done.");
-    //    }
-    //    catch (ApplicationException ex)
-    //    {
-    //        Console.WriteLine(ex.Message);
-    //    }
-    //});
-    ;
-
-static string PropertyTypeToType(EPropertyType type)
-{
-    switch (type)
+    .WithParsed<SdkOptions>(o =>
     {
-        case EPropertyType.MulticastDelegateProperty:
-            return "MulticastDelegate";
+        try
+        {
+            throw new NotImplementedException();
+            // CreateSdk(o);
+            Console.WriteLine($"Done.");
+        }
+        catch (ApplicationException ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    });
+;
 
-        case EPropertyType.Int16Property:
-            return "short";
+//static string PropertyTypeToType(EPropertyType type)
+//{
+//    switch (type)
+//    {
+//        case EPropertyType.MulticastDelegateProperty:
+//            return "MulticastDelegate";
 
-        case EPropertyType.IntProperty:
-            return "int";
+//        case EPropertyType.Int16Property:
+//            return "short";
 
-        case EPropertyType.UInt16Property:
-            return "ushort";
+//        case EPropertyType.IntProperty:
+//            return "int";
 
-        case EPropertyType.UInt32Property:
-            return "uint";
+//        case EPropertyType.UInt16Property:
+//            return "ushort";
 
-        case EPropertyType.Int8Property:
-            return "sbyte";
+//        case EPropertyType.UInt32Property:
+//            return "uint";
 
-        case EPropertyType.NameProperty:
-            return "Name";
+//        case EPropertyType.Int8Property:
+//            return "sbyte";
 
-        case EPropertyType.StrProperty:
-            return "string";
+//        case EPropertyType.NameProperty:
+//            return "Name";
 
-        case EPropertyType.MapProperty:
-            return "Map";
+//        case EPropertyType.StrProperty:
+//            return "string";
 
-        case EPropertyType.WeakObjectProperty:
-            return "WeakObject";
+//        case EPropertyType.MapProperty:
+//            return "Map";
 
-        case EPropertyType.ArrayProperty:
-            return "Array";
+//        case EPropertyType.WeakObjectProperty:
+//            return "WeakObject";
 
-        default:
-            return type.ToString().Replace("Property", "").ToLower();
-    }
-}
+//        case EPropertyType.ArrayProperty:
+//            return "Array";
 
-static TypeIdentifier GetPropertyTypeIdentifierFromClass(UsmapSchema schema)
-{
-    return new(schema.Name);
-}
+//        default:
+//            return type.ToString().Replace("Property", "").ToLower();
+//    }
+//}
+
+//static TypeIdentifier GetPropertyTypeIdentifierFromClass(UsmapSchema schema)
+//{
+//    return new(schema.Name);
+//}
 
 //static void CreateSdk(SdkOptions options)
 //{
